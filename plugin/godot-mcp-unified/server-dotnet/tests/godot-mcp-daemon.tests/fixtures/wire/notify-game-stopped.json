@@ -1,0 +1,61 @@
+{
+  "schema": "wire-fixture/1",
+  "id": "notify-game-stopped",
+  "title": "广播信封无 params 变体:playtest 结束时 {notification:'game_stopped'}(无 params 键)",
+  "contract": ["C5"],
+  "provenance": {
+    "kind": "derived",
+    "sources": [
+      "addons/godot_mcp_toolkit/core/playtest_end_detector.gd#broadcast_notification('game_stopped')",
+      "addons/godot_mcp_toolkit/transport/notifier.gd#broadcast(空 params 不携带 params 键)"
+    ],
+    "engineBasis": "形状随契约稳定(4.2–4.7)"
+  },
+  "auth": {
+    "ack": {
+      "authed": true,
+      "godot_version": "4.5.1",
+      "version": "1.0.0",
+      "headless": false
+    }
+  },
+  "onConnect": [
+    {
+      "afterMs": 30,
+      "send": {
+        "notification": "game_stopped"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "name": "鉴权后一次 echo 往返",
+      "call": {
+        "method": "echo",
+        "params": {},
+        "timeoutMs": 3000
+      },
+      "script": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": "$request_id",
+            "result": {}
+          }
+        }
+      ],
+      "expect": {
+        "resolves": {}
+      }
+    },
+    {
+      "sleepMs": 120
+    }
+  ],
+  "expectNotifications": [
+    {
+      "type": "game_stopped",
+      "params": null
+    }
+  ]
+}

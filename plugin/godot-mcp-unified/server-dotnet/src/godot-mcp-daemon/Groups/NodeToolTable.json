@@ -1,0 +1,5283 @@
+{
+  "schemaVersion": "node-tool-table/1",
+  "source": "server/src ALL_TOOL_DEFS + discover_tools;zod→JSON Schema=MCP TS SDK compat(draft-7, io:input)",
+  "groups": [
+    {
+      "name": "runtime_advanced",
+      "description": "在确定性游玩测试中控制 AnimationPlayer，并逐帧推进游戏时间。",
+      "tools": [
+        "animation_player_control",
+        "runtime_time_control"
+      ]
+    },
+    {
+      "name": "signals",
+      "description": "在编辑器或运行时检查、连接、断开和发出信号。",
+      "tools": [
+        "signal_list",
+        "signal_manage",
+        "signal_emit"
+      ]
+    },
+    {
+      "name": "animation_authoring",
+      "description": "检查和制作关键帧，编辑轨道，配置 AnimationTree 状态机。",
+      "tools": [
+        "animation_keyframe",
+        "animation_get_keys",
+        "animationtree_edit",
+        "animationtree_list"
+      ]
+    },
+    {
+      "name": "input_map",
+      "description": "列出、创建和编辑输入动作，以及键盘和手柄绑定。",
+      "tools": [
+        "input_map_edit"
+      ]
+    },
+    {
+      "name": "resource_io",
+      "description": "创建项目目录，加载或写入 Godot 资源（.tres/.res）。",
+      "tools": [
+        "folder_create",
+        "resource_load",
+        "resource_write"
+      ]
+    },
+    {
+      "name": "asset_ops",
+      "description": "列出资产、查询依赖，并将二进制文件导入项目。",
+      "tools": [
+        "asset_query",
+        "asset_import"
+      ]
+    },
+    {
+      "name": "cleanup",
+      "description": "安全删除项目路径，或关闭已打开的场景标签页。",
+      "tools": [
+        "project_delete",
+        "scene_close"
+      ]
+    },
+    {
+      "name": "user_data",
+      "description": "读取、写入、删除和列出 user:// 存档文件。",
+      "tools": [
+        "user_data_read",
+        "save_write",
+        "save_delete"
+      ]
+    },
+    {
+      "name": "scene_advanced",
+      "description": "比较场景差异，从打包场景批量实例化节点。",
+      "tools": [
+        "scene_diff",
+        "scene_instantiate"
+      ]
+    },
+    {
+      "name": "editor_advanced",
+      "description": "刷新外部修改的文件，等待编辑器完成导入并进入空闲状态。",
+      "tools": [
+        "editor_sync"
+      ]
+    },
+    {
+      "name": "tilemap",
+      "description": "读取和绘制 TileMap/TileMapLayer 单元格，支持单元格查询、批量填充和区域操作。",
+      "tools": [
+        "tilemap_read_cells",
+        "tilemap_set_cells"
+      ]
+    },
+    {
+      "name": "tileset",
+      "description": "创建 TileSet 资源，添加图集源，配置层，管理替代图块。",
+      "tools": [
+        "tileset_create",
+        "tileset_add_source",
+        "tileset_remove_source",
+        "tileset_add_alternative",
+        "tileset_remove_alternative",
+        "tileset_setup_layers"
+      ]
+    },
+    {
+      "name": "tileset_edit",
+      "description": "编辑逐图块属性，包括物理、地形、导航、视觉和自定义数据。",
+      "tools": [
+        "tileset_edit"
+      ]
+    },
+    {
+      "name": "theme",
+      "description": "编辑界面主题覆盖，包括样式框、字体、颜色和常量。",
+      "tools": [
+        "theme_edit"
+      ]
+    },
+    {
+      "name": "layer_naming",
+      "description": "获取和设置物理层、渲染层及导航层的名称。",
+      "tools": [
+        "layer_names_set",
+        "layer_names_get"
+      ]
+    },
+    {
+      "name": "path_editing",
+      "description": "编辑 Path2D 曲线，根据精灵纹理生成碰撞形状。",
+      "tools": [
+        "path2d_edit_curve",
+        "collision_from_texture"
+      ]
+    },
+    {
+      "name": "3d_tools",
+      "description": "创建 3D 基本形状、灯光、摄像机和环境配置。",
+      "tools": [
+        "scene_create_3d"
+      ]
+    },
+    {
+      "name": "procedural",
+      "description": "编辑用于程序化生成的渐变、曲线和 FastNoiseLite 资源。",
+      "tools": [
+        "procedural_edit_gradient",
+        "procedural_edit_curve",
+        "procedural_edit_noise"
+      ]
+    },
+    {
+      "name": "scene_inheritance",
+      "description": "从基础场景创建继承场景（变体）。",
+      "tools": [
+        "scene_create_inherited"
+      ]
+    },
+    {
+      "name": "audio",
+      "description": "列出和配置音频总线、效果及音量。",
+      "tools": [
+        "audiobus_edit",
+        "audiobus_list"
+      ]
+    },
+    {
+      "name": "spriteframes",
+      "description": "列出、创建和编辑 SpriteFrames 动画，从精灵表导入帧。",
+      "tools": [
+        "spriteframes_create",
+        "spriteframes_edit"
+      ]
+    },
+    {
+      "name": "particles",
+      "description": "创建和配置用于视觉效果的 GPU 粒子系统。",
+      "tools": [
+        "particles_create"
+      ]
+    },
+    {
+      "name": "navigation",
+      "description": "配置导航区域、网格和避障。",
+      "tools": [
+        "navigation_edit"
+      ]
+    },
+    {
+      "name": "lsp_code_analysis",
+      "description": "通过语言服务器获取 GDScript 诊断、符号和悬停信息，并检查整个项目的编译情况。",
+      "tools": [
+        "lsp_diagnostics",
+        "lsp_symbols",
+        "lsp_hover"
+      ]
+    },
+    {
+      "name": "lsp_code_navigation",
+      "description": "通过语言服务器进行代码补全、跳转到定义和查找引用。",
+      "tools": [
+        "lsp_completion",
+        "lsp_navigate"
+      ]
+    },
+    {
+      "name": "debugger",
+      "description": "检查调试器状态，管理断点，控制执行流程。",
+      "tools": [
+        "debug_inspect",
+        "debug_set_breakpoint",
+        "debug_continue"
+      ]
+    },
+    {
+      "name": "classdb",
+      "description": "搜索和检查 Godot 类层级，包括属性、方法、信号和继承关系。",
+      "tools": [
+        "classdb_query"
+      ]
+    },
+    {
+      "name": "project_config",
+      "description": "修改项目设置，管理自动加载单例。",
+      "tools": [
+        "project_set_setting",
+        "autoload_manage"
+      ]
+    },
+    {
+      "name": "node_advanced",
+      "description": "管理节点组，应用 Control 布局预设。",
+      "tools": [
+        "node_groups",
+        "control_set_layout"
+      ]
+    },
+    {
+      "name": "scene_spatial",
+      "description": "测量场景中的位置、边界、重叠、间距和包含关系。",
+      "tools": [
+        "scene_spatial_map"
+      ]
+    },
+    {
+      "name": "unsafe",
+      "description": "显式执行任意表达式或当前编辑场景的方法；需要设置 GODOT_MCP_UNSAFE=1。",
+      "tools": [
+        "execute_code",
+        "node_call_method"
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "group": "animation_authoring",
+      "name": "animation_keyframe",
+      "description": "在现有动画的轨道上添加或删除关键帧。animation 必须已存在；action='add' 只会自动创建轨道。在相同时刻重复添加时保持幂等。",
+      "method": "animation.keyframe",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "add",
+              "remove"
+            ]
+          },
+          "player_path": {
+            "type": "string"
+          },
+          "animation_name": {
+            "type": "string"
+          },
+          "track_path": {
+            "type": "string"
+          },
+          "time": {
+            "type": "number"
+          },
+          "value": {
+            "description": "action='add' 时必填。"
+          },
+          "track_type": {
+            "description": "轨道类型；目前仅支持 'value'。",
+            "type": "string",
+            "enum": [
+              "value"
+            ]
+          }
+        },
+        "required": [
+          "action",
+          "player_path",
+          "animation_name",
+          "track_path",
+          "time"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "使用 animation_get_keys 核对关键帧，使用 animationtree_edit 配置 AnimationTree。"
+    },
+    {
+      "group": "animation_authoring",
+      "name": "animation_get_keys",
+      "description": "列出 AnimationPlayer 轨道上的关键帧：{ time, value, transition }。仅供读取，不会自动创建轨道。",
+      "method": "animation.get_keys",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "player_path": {
+            "type": "string"
+          },
+          "animation_name": {
+            "type": "string"
+          },
+          "track_path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "player_path",
+          "animation_name",
+          "track_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "animation_authoring",
+      "name": "animationtree_edit",
+      "description": "配置 AnimationTree 状态机：设置根节点、添加或删除节点与过渡，或设置属性。",
+      "method": "animationtree.edit",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "node_path": {
+            "type": "string",
+            "description": "当前编辑场景中 AnimationTree 节点的路径。"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "set_root",
+              "add_node",
+              "remove_node",
+              "add_transition",
+              "remove_transition",
+              "set_property"
+            ],
+            "description": "要对 AnimationTree 执行的操作。"
+          },
+          "root_type": {
+            "description": "用于 set_root：要创建的根节点类型。",
+            "type": "string",
+            "enum": [
+              "AnimationNodeStateMachine",
+              "AnimationNodeBlendTree"
+            ]
+          },
+          "node_name": {
+            "description": "用于 add_node/remove_node：状态机节点名称。",
+            "type": "string"
+          },
+          "node_type": {
+            "description": "用于 add_node：AnimationNode 子类，例如 AnimationNodeAnimation、AnimationNodeBlendSpace2D。",
+            "type": "string"
+          },
+          "animation_name": {
+            "description": "用于添加 AnimationNodeAnimation 节点：要播放的动画。",
+            "type": "string"
+          },
+          "position": {
+            "description": "用于 add_node：图中的位置 { x, y }。",
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ]
+          },
+          "from": {
+            "description": "用于过渡：源节点名称。",
+            "type": "string"
+          },
+          "to": {
+            "description": "用于过渡：目标节点名称。",
+            "type": "string"
+          },
+          "switch_mode": {
+            "description": "用于 add_transition：过渡触发时机。",
+            "type": "string",
+            "enum": [
+              "immediate",
+              "sync",
+              "at_end"
+            ]
+          },
+          "advance_condition": {
+            "description": "用于 add_transition：条件推进所用的条件名称。",
+            "type": "string"
+          },
+          "advance_mode": {
+            "description": "用于 add_transition：推进模式（禁用=0、启用=1、自动=2）。",
+            "type": "string",
+            "enum": [
+              "disabled",
+              "enabled",
+              "auto"
+            ]
+          },
+          "target_node": {
+            "description": "用于 set_property：状态机中的节点名称。",
+            "type": "string"
+          },
+          "property": {
+            "description": "用于 set_property：要设置的属性名称。",
+            "type": "string"
+          },
+          "value": {
+            "description": "用于 set_property：要赋予的值。"
+          }
+        },
+        "required": [
+          "node_path",
+          "action"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "destructiveHint": true
+      }
+    },
+    {
+      "group": "animation_authoring",
+      "name": "animationtree_list",
+      "description": "列出 AnimationTree 状态机的结构：根类型、节点和过渡。仅供读取，不会修改状态机。",
+      "method": "animationtree.list",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "node_path": {
+            "type": "string",
+            "description": "当前编辑场景中 AnimationTree 节点的路径。"
+          }
+        },
+        "required": [
+          "node_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "asset_ops",
+      "name": "asset_query",
+      "description": "列出已索引的项目资产，检查单个资产的正向依赖或反向依赖（谁引用我，mode='dependents'），或在 uid:// 与 res:// 路径之间互转（mode='uid_to_path'/'path_to_uid'）。返回数量有上限；has_more 为 true 时可缩小筛选范围或提高 limit。",
+      "method": "asset.query",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "list",
+              "dependencies",
+              "dependents",
+              "uid_to_path",
+              "path_to_uid"
+            ]
+          },
+          "path_prefix": {
+            "type": "string"
+          },
+          "name_glob": {
+            "type": "string"
+          },
+          "class_filter": {
+            "type": "string"
+          },
+          "extension_filter": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "file_path": {
+            "description": "mode='dependencies'、'dependents' 或 'path_to_uid' 时必填。",
+            "type": "string"
+          },
+          "uid": {
+            "description": "mode='uid_to_path' 时必填。形如 'uid://<小写字母数字>'。",
+            "type": "string"
+          },
+          "include_transitive": {
+            "description": "仅用于依赖查询模式（dependencies/dependents）。",
+            "type": "boolean"
+          },
+          "refresh": {
+            "description": "仅 mode='dependents'：为 true 时强制重建反向依赖索引。",
+            "type": "boolean"
+          },
+          "limit": {
+            "description": "最多返回的条目数。",
+            "type": "number"
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "successHint": "如果外部修改后编辑器索引尚未更新，请运行 editor_sync 后重新查询。"
+    },
+    {
+      "group": "asset_ops",
+      "name": "asset_import",
+      "description": "把二进制资产（图像、音频、字体、3D）导入 res://。source_path（绝对路径或 res:// 路径）与 base64_data 必须且只能提供一个。触发 EditorFileSystem 扫描。if_exists 可取 return、fail 或 replace。",
+      "method": "asset.import",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "source_path": {
+            "type": "string"
+          },
+          "base64_data": {
+            "type": "string"
+          },
+          "dest_path": {
+            "type": "string"
+          },
+          "if_exists": {
+            "type": "string",
+            "enum": [
+              "return",
+              "fail",
+              "replace"
+            ]
+          },
+          "wait_for_scan_ms": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "dest_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "使用 resource_load 验证导入结果，使用 asset_query(mode='list') 检查编辑器索引。"
+    },
+    {
+      "group": "audio",
+      "name": "audiobus_edit",
+      "description": "管理音频总线：添加或删除总线，设置音量、发送目标、独奏、静音，添加或删除效果。bus_name 优先于 bus_index。效果类型可使用完整类名（AudioEffectReverb）或后缀（Reverb）。",
+      "method": "audiobus.edit",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "add_bus",
+              "remove_bus",
+              "set_bus",
+              "add_effect",
+              "remove_effect"
+            ],
+            "description": "总线操作。"
+          },
+          "bus_name": {
+            "description": "总线名称。",
+            "type": "string"
+          },
+          "bus_index": {
+            "description": "总线索引，可代替名称。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "send_to": {
+            "description": "父总线名称，默认 Master。",
+            "type": "string"
+          },
+          "volume_db": {
+            "description": "音量，单位 dB。",
+            "type": "number"
+          },
+          "solo": {
+            "description": "是否独奏此总线。",
+            "type": "boolean"
+          },
+          "mute": {
+            "description": "是否静音此总线。",
+            "type": "boolean"
+          },
+          "effect": {
+            "description": "要添加或删除的效果。",
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "description": "效果类，例如 Reverb、Delay、Compressor、Chorus、EQ。"
+              },
+              "index": {
+                "description": "效果槽位索引。",
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "enabled": {
+                "description": "启用或禁用效果。",
+                "type": "boolean"
+              },
+              "properties": {
+                "description": "效果专用属性。",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "type"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "successHint": "效果类型应使用完整类名，例如 AudioEffectReverb。"
+    },
+    {
+      "group": "audio",
+      "name": "audiobus_list",
+      "description": "列出全部音频总线的音量、发送目标、独奏、静音状态及各总线效果。返回总线布局的只读快照。",
+      "method": "audiobus.list",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "classdb",
+      "name": "classdb_query",
+      "description": "搜索 Godot 引擎类或用户类，或检查单个类的继承关系、属性、方法、信号和常量。",
+      "method": "classdb.query",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "search",
+              "info"
+            ]
+          },
+          "class_name": {
+            "description": "mode='info' 时必填。",
+            "type": "string"
+          },
+          "include_inherited": {
+            "description": "详情模式：是否包含继承的成员。",
+            "type": "boolean"
+          },
+          "sections": {
+            "description": "详情模式返回的分区，默认全部。",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "properties",
+                "methods",
+                "signals",
+                "constants"
+              ]
+            }
+          },
+          "base_class": {
+            "description": "仅保留此类的子类。",
+            "type": "string"
+          },
+          "pattern": {
+            "description": "按类名进行不区分大小写的子串匹配。",
+            "type": "string"
+          },
+          "instantiable_only": {
+            "description": "排除抽象类，默认 true。",
+            "type": "boolean"
+          },
+          "include_global": {
+            "description": "包含用户定义的 class_name 类，默认 true。",
+            "type": "boolean"
+          },
+          "offset": {
+            "description": "跳过前 N 项，默认 0；将 next_offset 作为下次的 offset，直到 has_more 为 false。",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "description": "每页条目数，默认值由各工具决定；超过上限时会截到上限，并设置 limit_clamped。",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "path_editing",
+      "name": "collision_from_texture",
+      "description": "根据 Sprite2D 纹理的透明度自动生成 CollisionPolygon2D。使用 BitMap 描摹不透明区域，适用于平台游戏地形、角色碰撞区域和不规则形状。",
+      "method": "node.collision_from_sprite",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "sprite_path": {
+            "type": "string",
+            "description": "带纹理的 Sprite2D/TextureRect 节点路径。"
+          },
+          "parent_path": {
+            "description": "新 CollisionPolygon2D 的父节点，默认使用精灵的父节点。",
+            "type": "string"
+          },
+          "target_name": {
+            "description": "CollisionPolygon2D 的名称，默认 {sprite}_collision。",
+            "type": "string"
+          },
+          "simplification": {
+            "description": "多边形简化容差，范围 0.0–10.0，默认 2.0；值越大，点越少。",
+            "type": "number"
+          }
+        },
+        "required": [
+          "sprite_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "使用 node_set_property 将生成的多边形赋给 CollisionPolygon2D。"
+    },
+    {
+      "group": "debugger",
+      "name": "debug_inspect",
+      "description": "读取调试器会话状态，或列出 GDScript 断点。",
+      "method": "debug.inspect",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "state",
+              "breakpoints"
+            ]
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "debugger",
+      "name": "debug_set_breakpoint",
+      "description": "在脚本编辑器中为指定文件和行设置或清除断点。仅支持 GDScript（.gd）文件。",
+      "method": "debug.set_breakpoint",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": ".gd 文件的 res:// 路径，例如 res://scripts/player.gd。"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "行号，从 1 开始。"
+          },
+          "enabled": {
+            "description": "true 表示设置，false 表示清除，默认 true。",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "file_path",
+          "line"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "debugger",
+      "name": "debug_continue",
+      "description": "调试器因断点暂停时恢复执行。未处于断点暂停状态时失败。",
+      "method": "debug.continue",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "scene_advanced",
+      "name": "scene_diff",
+      "description": "将先前的场景树快照与另一份快照比较；省略 after 时与当前编辑场景比较。返回 { changed, diff, added, removed }。",
+      "method": "scene.diff",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "before": {},
+          "after": {}
+        },
+        "required": [
+          "before"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "editor_save_scene",
+      "description": "保存当前编辑场景。可选的 file_path 用于另存为。",
+      "method": "editor.save_scene",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string"
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "group": "editor_advanced",
+      "name": "editor_sync",
+      "description": "刷新在外部修改的项目文件，并等待 EditorFileSystem 完成扫描和导入。省略 file_paths 时扫描整个项目。",
+      "method": "editor.sync",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_paths": {
+            "description": "要更新的 res:// 路径；省略时执行完整扫描。",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "timeout_ms": {
+            "description": "等待空闲的超时时间，默认 10 秒。",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30000
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "name": "scene_open",
+      "description": "打开场景（.tscn / .scn）并将其设为当前编辑场景。仅支持 res://；文件不存在时返回 NOT_FOUND。",
+      "method": "scene.open",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "successHint": "使用 scene_get_tree 查看结构，使用 scene_query 查询特定节点。"
+    },
+    {
+      "group": "cleanup",
+      "name": "scene_close",
+      "description": "按 file_path 关闭已打开的场景标签页。会丢弃未保存的修改，请先使用 editor_save_scene 保存。关闭最后一个标签页时自动创建空场景。场景未打开时返回 NOT_FOUND。需要 Godot 4.5+。",
+      "method": "scene.close",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "godotMinVersion": "4.5"
+    },
+    {
+      "name": "project_get_settings",
+      "description": "列出 ProjectSettings 的键和值，可按 prefix 筛选。匹配 /password|token|secret|key/i 的键会被移除（基础过滤）。",
+      "method": "project.get_settings",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "prefix": {
+            "type": "string"
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "project_config",
+      "name": "project_set_setting",
+      "description": "写入一个 ProjectSettings 键并通过 ProjectSettings.save 持久保存。拒绝 mcp_toolkit/*、mcp/* 和 editor/* 前缀。返回 previous_value；此更新操作不返回 status。",
+      "method": "project.set_setting",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "setting": {
+            "type": "string",
+            "description": "ProjectSettings 键，例如 'application/config/name'。"
+          },
+          "value": {}
+        },
+        "required": [
+          "setting",
+          "value"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "group": "cleanup",
+      "name": "project_delete",
+      "description": "通过各类型对应的安全路径，删除一个 res:// 文件、目录、场景、脚本或资源。file/resource 删除前做反向引用检查，被引用时拒绝（force=true 覆盖）。dry_run 只返回推断的计划，不执行删除。",
+      "method": "project.delete",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "默认 auto 根据路径推断类型；无扩展名或名称含点的目录请使用 folder。",
+            "type": "string",
+            "enum": [
+              "auto",
+              "file",
+              "folder",
+              "scene",
+              "script",
+              "resource"
+            ]
+          },
+          "recursive": {
+            "description": "仅用于删除目录，默认 false。",
+            "type": "boolean"
+          },
+          "dry_run": {
+            "description": "返回选定的删除路径，不执行修改。",
+            "type": "boolean"
+          },
+          "force": {
+            "description": "仅 kind=file/resource：跳过删除前的反向引用检查（被引用资源默认拒绝删除）。",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "resource_io",
+      "name": "folder_create",
+      "description": "在 res:// 路径创建目录，递归自动创建父目录。保持幂等：新建时 status 为 created，已存在时为 returned。",
+      "method": "folder.create",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "group": "input_map",
+      "name": "input_map_edit",
+      "description": "添加或删除 InputMap 动作，或绑定、解绑一个键盘、鼠标或手柄事件。",
+      "method": "input_map.edit",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "add_action",
+              "remove_action",
+              "bind",
+              "unbind"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "deadzone": {
+            "type": "number"
+          },
+          "event": {
+            "description": "执行 bind/unbind 时必填。",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "action",
+          "name"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "group": "layer_naming",
+      "name": "layer_names_set",
+      "description": "设置物理层或渲染层名称。category 可取 2d_physics、2d_render、3d_physics、3d_render。layers 示例：{1:'Ground', 2:'Player', …}，键范围为 1–32。",
+      "method": "project.set_layer_names",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "2d_physics",
+              "2d_render",
+              "3d_physics",
+              "3d_render"
+            ]
+          },
+          "layers": {
+            "description": "要命名的层编号，范围 1–32。",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "category",
+          "layers"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "使用 node_set_property 配合 LayerMask 类型标签设置节点的层掩码。"
+    },
+    {
+      "group": "layer_naming",
+      "name": "layer_names_get",
+      "description": "读取已命名的物理层或渲染层，仅返回名称非空的层。",
+      "method": "project.get_layer_names",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "2d_physics",
+              "2d_render",
+              "3d_physics",
+              "3d_render"
+            ]
+          }
+        },
+        "required": [
+          "category"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "lsp_code_analysis",
+      "name": "lsp_diagnostics",
+      "description": "对单个文件或整个项目执行详细的 GDScript 诊断。项目范围检查开销较大，可能需要数十秒。",
+      "method": "lsp.diagnostics",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "scope": {
+            "description": "默认 file，即单文件范围。",
+            "type": "string",
+            "enum": [
+              "file",
+              "project"
+            ]
+          },
+          "file_path": {
+            "description": "文件范围检查时必填。使用 res:// 下的 .gd/.gdshader 路径；不支持 .cs。",
+            "type": "string"
+          },
+          "include_addons": {
+            "description": "项目范围：是否同时扫描 res://addons/。",
+            "type": "boolean"
+          },
+          "include_warnings": {
+            "description": "项目范围：是否包含非错误级别的诊断。",
+            "type": "boolean"
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "successHint": "快速验证单个文件请使用 script_check，检查运行时错误请使用 log_read。"
+    },
+    {
+      "group": "lsp_code_analysis",
+      "name": "lsp_symbols",
+      "description": "列出 .gd/.gdshader 文件中的全部符号（函数、变量、类、信号）。返回结构树，比读取完整源码开销更低。",
+      "method": "lsp.symbols",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Godot 资源路径，必须以 res:// 开头，例如 res://scripts/player.gd。仅支持 .gd 和 .gdshader，不支持 .cs。"
+          }
+        },
+        "required": [
+          "file_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "lsp_code_analysis",
+      "name": "lsp_hover",
+      "description": "获取指定位置符号的类型签名和文档。用于有针对性的类型检查，不宜用于批量探索。",
+      "method": "lsp.hover",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Godot 资源路径，必须以 res:// 开头，例如 res://scripts/player.gd。仅支持 .gd 和 .gdshader，不支持 .cs。"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "行号，从 0 开始。"
+          },
+          "column": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "列号，从 0 开始。"
+          }
+        },
+        "required": [
+          "file_path",
+          "line",
+          "column"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "lsp_code_navigation",
+      "name": "lsp_completion",
+      "description": "获取指定位置的代码补全。针对性查询可设 limit=5 以节省词元。仅在需要了解可用 API 时调用。",
+      "method": "lsp.completion",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Godot 资源路径，必须以 res:// 开头，例如 res://scripts/player.gd。仅支持 .gd 和 .gdshader，不支持 .cs。"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "行号，从 0 开始。"
+          },
+          "column": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "列号，从 0 开始。"
+          },
+          "limit": {
+            "default": 10,
+            "description": "最多返回的条目数，默认 10。",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "required": [
+          "file_path",
+          "line",
+          "column"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "lsp_code_navigation",
+      "name": "lsp_navigate",
+      "description": "从一个源码位置查找符号定义或项目中的全部引用。",
+      "method": "lsp.navigate",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "definition",
+              "references"
+            ]
+          },
+          "file_path": {
+            "type": "string",
+            "description": "Godot 资源路径，必须以 res:// 开头，例如 res://scripts/player.gd。仅支持 .gd 和 .gdshader，不支持 .cs。"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "行号，从 0 开始。"
+          },
+          "column": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "列号，从 0 开始。"
+          }
+        },
+        "required": [
+          "mode",
+          "file_path",
+          "line",
+          "column"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "navigation",
+      "name": "navigation_edit",
+      "description": "编辑 NavigationRegion2D 的多边形轮廓：设置全部轮廓，添加或删除单个轮廓，清空轮廓，或烘焙导航网格。用于配置 AI 寻路。",
+      "method": "navigation.edit_polygon",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "node_path": {
+            "type": "string",
+            "description": "NavigationRegion2D 节点路径。"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "set",
+              "add_outline",
+              "remove_outline",
+              "clear",
+              "bake"
+            ],
+            "description": "多边形操作。"
+          },
+          "outlines": {
+            "description": "用于 set：轮廓数组，每个轮廓是由 {x,y} 点组成的数组。",
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ]
+              }
+            }
+          },
+          "outline": {
+            "description": "用于 add_outline：单个轮廓，由 {x,y} 点组成的数组。",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ]
+            }
+          },
+          "index": {
+            "description": "用于 remove_outline：轮廓索引。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "node_path",
+          "action"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "successHint": "定义多边形后，以 action='bake' 调用以生成导航网格。"
+    },
+    {
+      "name": "node_inspect",
+      "description": "检查当前编辑场景中的节点。传入 property 时读取单个属性值；否则按 mask 和 visibility 返回经过筛选的属性视图。",
+      "method": "node.inspect",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "node_path": {
+            "type": "string"
+          },
+          "property": {
+            "description": "要读取的单个属性。使用 ':' 访问子资源；省略时返回属性列表视图。",
+            "type": "string"
+          },
+          "mask": {
+            "description": "省略 property 时使用的属性列表视图。默认 common；all 的结果可能较大。",
+            "type": "string",
+            "enum": [
+              "common",
+              "all",
+              "groups",
+              "script"
+            ]
+          },
+          "visibility": {
+            "default": "all",
+            "description": "mask='script' 时使用的可见性筛选条件。",
+            "type": "string",
+            "enum": [
+              "public",
+              "private",
+              "all"
+            ]
+          }
+        },
+        "required": [
+          "node_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "successHint": "查看整棵场景树的概况请使用 scene_get_tree 或 scene_query。"
+    },
+    {
+      "name": "node_set_property",
+      "description": "设置当前编辑场景中的一个或多个节点属性；channel='runtime' 时设置运行中游戏的单个属性。支持带类型的 Godot 值。",
+      "method": "node.set_property",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "node_path": {
+            "description": "单项模式：目标节点路径。",
+            "type": "string"
+          },
+          "property": {
+            "description": "单项模式：属性名称。支持含 '/' 的复合路径；使用 ':' 访问子资源，例如 'material:shader_parameter/value'。",
+            "type": "string"
+          },
+          "value": {},
+          "make_unique": {
+            "description": "设为 true 且复合路径指向外部（.tres）子资源时，先自动创建内嵌副本，再设置属性。相当于检查器的“设为唯一”。仅在复合路径涉及外部资源时需要。",
+            "type": "boolean"
+          },
+          "batch": {
+            "description": "批量模式：{node_path, property, value, make_unique?} 数组。单属性操作时省略；提供此数组后忽略顶层 node_path/property/value。",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "node_path": {
+                  "type": "string"
+                },
+                "property": {
+                  "type": "string"
+                },
+                "value": {},
+                "make_unique": {
+                  "description": "此条目的 make_unique：自动将外部子资源复制为内嵌副本。",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "node_path",
+                "property",
+                "value"
+              ]
+            }
+          },
+          "channel": {
+            "description": "editor（默认）修改当前编辑场景，支持批量操作和 make_unique；runtime 修改运行中的游戏，仅接受单组 node_path/property/value。",
+            "type": "string",
+            "enum": [
+              "editor",
+              "runtime"
+            ]
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "编辑器通道的修改请使用 editor_save_scene 保存；运行时通道的修改只在本次游玩会话中有效。"
+    },
+    {
+      "name": "node_set_script",
+      "description": "为节点附加脚本（.gd/.cs），返回脚本公开的 @export 属性。script_path 为空字符串时解除脚本绑定。",
+      "method": "node.set_script",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "node_path": {
+            "type": "string"
+          },
+          "script_path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_path",
+          "script_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "使用工作区文件工具编辑脚本，运行 editor_sync，然后使用 node_inspect 检查导出属性值。"
+    },
+    {
+      "group": "node_advanced",
+      "name": "control_set_layout",
+      "description": "一次调用为 Control 节点设置锚点预设及可选边距。使用 set_anchors_and_offsets_preset()，返回 final_rect。",
+      "method": "control.set_layout",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "node_path": {
+            "type": "string"
+          },
+          "preset": {
+            "type": "string",
+            "description": "布局预设：PRESET_TOP_LEFT、PRESET_TOP_RIGHT、PRESET_BOTTOM_LEFT、PRESET_BOTTOM_RIGHT、PRESET_CENTER_LEFT、PRESET_CENTER_TOP、PRESET_CENTER_RIGHT、PRESET_CENTER_BOTTOM、PRESET_CENTER、PRESET_LEFT_WIDE、PRESET_TOP_WIDE、PRESET_RIGHT_WIDE、PRESET_BOTTOM_WIDE、PRESET_VCENTER_WIDE、PRESET_HCENTER_WIDE、PRESET_FULL_RECT。"
+          },
+          "resize_mode": {
+            "description": "keep_size（默认）保留尺寸；set_to_anchors 将尺寸调整为锚点区域。",
+            "type": "string",
+            "enum": [
+              "keep_size",
+              "set_to_anchors"
+            ]
+          },
+          "margins": {
+            "description": "应用预设后叠加的偏移量，单位为像素。",
+            "type": "object",
+            "properties": {
+              "left": {
+                "type": "number"
+              },
+              "right": {
+                "type": "number"
+              },
+              "top": {
+                "type": "number"
+              },
+              "bottom": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "required": [
+          "node_path",
+          "preset"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "边距在预设之后应用。若节点是 Container 的子节点，其布局会被父节点覆盖。"
+    },
+    {
+      "group": "unsafe",
+      "name": "node_call_method",
+      "description": "在当前编辑场景的节点上调用方法并传入参数。仅用于编辑器；运行时节点请使用 execute_code。",
+      "method": "node.call_method",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "node_path": {
+            "type": "string"
+          },
+          "method_name": {
+            "type": "string"
+          },
+          "args": {
+            "type": "array",
+            "items": {}
+          }
+        },
+        "required": [
+          "node_path",
+          "method_name"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      }
+    },
+    {
+      "name": "node_manage",
+      "description": "对当前编辑场景树执行节点结构操作。\n\naction='rename'：重命名，必须提供 new_name。\naction='reparent'：更换父节点，必须提供 new_parent_path；keep_global_transform 可选，默认 true。\naction='reorder'：调整顺序，必须提供 new_index（从 0 开始的同级索引）。\naction='duplicate'：复制，new_name、parent_path、properties 均可选；properties 用于覆盖属性，例如 {position:{x,y}}。",
+      "method": "node.manage",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "rename",
+              "reparent",
+              "reorder",
+              "duplicate"
+            ]
+          },
+          "node_path": {
+            "type": "string"
+          },
+          "new_name": {
+            "description": "rename 时必填；duplicate 时可选。",
+            "type": "string"
+          },
+          "new_parent_path": {
+            "description": "reparent 时必填。",
+            "type": "string"
+          },
+          "keep_global_transform": {
+            "description": "用于 reparent：是否保留全局变换，默认 true。",
+            "type": "boolean"
+          },
+          "new_index": {
+            "description": "用于 reorder：同级索引，从 0 开始。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "parent_path": {
+            "description": "用于 duplicate：目标父节点，默认与原节点相同。",
+            "type": "string"
+          },
+          "properties": {
+            "description": "用于 duplicate：副本的属性覆盖值，例如 {position:{x:100,y:200}}。",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "action",
+          "node_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "重命名、更换父节点或调整顺序后，使用 $Path、get_node() 路径或 %UniqueNames 引用受影响节点的脚本可能失效。请检查移动节点及其相邻节点的脚本。"
+    },
+    {
+      "group": "node_advanced",
+      "name": "node_groups",
+      "description": "管理节点所属的组。组是 Godot 中标记和查询游戏对象的常用方式，例如 'coins'、'enemies'。\n\n单项模式：node_path + group，add/remove/list 必须提供 node_path。批量模式：entries 是 {node_path, group} 数组，每项携带各自路径，忽略顶层 node_path/group。\n\naction='add'：加入组，必须提供 group。action='remove'：移出组，必须提供 group。action='list'：返回全部组，仅支持单项模式。",
+      "method": "node.groups",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "add",
+              "remove",
+              "list"
+            ]
+          },
+          "node_path": {
+            "description": "单项模式：目标节点路径。单项 add/remove/list 时必填；批量模式下省略，改用 entries。",
+            "type": "string"
+          },
+          "group": {
+            "description": "组名称，单项 add/remove 时必填。",
+            "type": "string"
+          },
+          "persistent": {
+            "description": "用于 add：是否保存到 .tscn，默认 true。",
+            "type": "boolean"
+          },
+          "entries": {
+            "description": "批量模式，仅支持 add/remove：{node_path, group} 数组。提供时批量处理全部条目，忽略顶层 node_path 和 group 参数。",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "group": "project_config",
+      "name": "autoload_manage",
+      "description": "管理项目的自动加载单例，例如 GameManager、AudioManager。写入 project.godot，下次启动游戏时生效。\n\naction='register'：注册，必须提供 name + script_path。action='unregister'：注销，必须提供 name。action='list'：返回全部单例。",
+      "method": "autoload.manage",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "register",
+              "unregister",
+              "list"
+            ]
+          },
+          "name": {
+            "description": "自动加载名称，例如 'GameManager'。register/unregister 时必填。",
+            "type": "string"
+          },
+          "script_path": {
+            "description": "脚本路径，例如 'res://scripts/game_manager.gd'。register 时必填。",
+            "type": "string"
+          },
+          "enabled": {
+            "description": "用于 register：是否在启动时自动初始化，默认 true。",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "name": "capture_screenshot",
+      "description": "使用统一的响应格式捕获运行中的游戏或编辑器视口。运行时捕获需要活动的游玩测试。内联图像超过传输缓冲上限时自动适配：先降低 image_detail 级别（响应的 image_detail/hint 披露实际级别），仍放不下则保存全分辨率 PNG 到磁盘并返回 path（不会报 RESPONSE_TOO_LARGE）。",
+      "method": "capture.screenshot",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "runtime",
+              "editor"
+            ],
+            "description": "要捕获的窗口或视口。"
+          },
+          "node_path": {
+            "description": "仅用于编辑器目标：聚焦并框选一个节点。",
+            "type": "string"
+          },
+          "save_path": {
+            "description": "disk/both 的保存位置。运行时接受 user://screenshots/；编辑器还接受 res://。",
+            "type": "string"
+          },
+          "image_response_mode": {
+            "description": "inline 内嵌图片；disk 返回保存路径；both 同时返回两者。",
+            "type": "string",
+            "enum": [
+              "inline",
+              "disk",
+              "both"
+            ]
+          },
+          "image_detail": {
+            "description": "内嵌图片的分辨率；保存的文件始终保留完整分辨率。",
+            "type": "string",
+            "enum": [
+              "full",
+              "mid",
+              "low"
+            ]
+          },
+          "force_foreground": {
+            "description": "捕获前还原并聚焦选定的目标窗口，默认 false。",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "target"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "runtime_inspect_node",
+      "description": "检查运行中游戏的节点，在有大小限制的单次响应中返回引擎/检查器状态、脚本变量或两者。",
+      "method": "runtime.inspect_node",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "node_path": {
+            "type": "string",
+            "description": "运行时节点的绝对路径，例如 /root/Main/Player。"
+          },
+          "include": {
+            "description": "要返回的分区，默认同时包含引擎属性和脚本变量。",
+            "minItems": 1,
+            "maxItems": 2,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "engine",
+                "script"
+              ]
+            }
+          },
+          "visibility": {
+            "default": "all",
+            "description": "脚本变量的可见性筛选条件。",
+            "type": "string",
+            "enum": [
+              "public",
+              "private",
+              "all"
+            ]
+          }
+        },
+        "required": [
+          "node_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "log_read",
+      "description": "读取编辑器或游戏输出。auto 优先读取活动的运行时，无法读取时回退到编辑器侧的崩溃或会话缓存。",
+      "method": "log.read",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "channel": {
+            "description": "默认 auto，自动选择通道。",
+            "type": "string",
+            "enum": [
+              "auto",
+              "editor",
+              "runtime"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "buffer",
+              "file"
+            ]
+          },
+          "level_filter": {
+            "description": "仅用于编辑器通道。",
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning",
+                  "error"
+                ]
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "info",
+                    "warning",
+                    "error"
+                  ]
+                }
+              }
+            ]
+          },
+          "since_id": {
+            "description": "编辑器通道的增量读取游标。",
+            "type": "number"
+          },
+          "text_filter": {
+            "description": "不区分大小写的子串；is_regex=true 时按正则表达式匹配。",
+            "type": "string"
+          },
+          "is_regex": {
+            "type": "boolean"
+          },
+          "clear_buffer": {
+            "description": "仅用于编辑器通道：读取前清空。",
+            "type": "boolean"
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "particles",
+      "name": "particles_create",
+      "description": "创建 GPU 粒子系统（2D/3D），支持预设：fire（火焰）、smoke（烟雾）、sparks（火花）、rain（雨）、snow（雪）、explosion（爆炸）、magic（魔法）、dust（尘埃）。可内嵌 color_ramp/scale_curve/alpha_curve，一次调用完成通常需要七步以上的配置。",
+      "method": "particles.create",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "parent_path": {
+            "type": "string",
+            "description": "父节点路径。"
+          },
+          "name": {
+            "description": "节点名称。",
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "2d",
+              "3d"
+            ],
+            "description": "节点类型：GPUParticles2D 或 GPUParticles3D。"
+          },
+          "preset": {
+            "description": "效果预设，可通过显式参数覆盖。",
+            "type": "string",
+            "enum": [
+              "fire",
+              "smoke",
+              "sparks",
+              "rain",
+              "snow",
+              "explosion",
+              "magic",
+              "dust"
+            ]
+          },
+          "amount": {
+            "description": "粒子数量。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "lifetime": {
+            "description": "粒子生命周期，单位为秒。",
+            "type": "number"
+          },
+          "one_shot": {
+            "description": "是否单次爆发后停止。",
+            "type": "boolean"
+          },
+          "explosiveness": {
+            "description": "爆发系数，范围 0–1。",
+            "type": "number"
+          },
+          "speed_scale": {
+            "description": "模拟速度。",
+            "type": "number"
+          },
+          "local_coords": {
+            "description": "是否在局部空间发射。",
+            "type": "boolean"
+          },
+          "texture_path": {
+            "description": "2D 粒子纹理，使用 res:// 路径。",
+            "type": "string"
+          },
+          "mesh": {
+            "description": "3D 绘制通道使用的网格。",
+            "type": "string",
+            "enum": [
+              "quad",
+              "box",
+              "sphere"
+            ]
+          },
+          "emission_shape": {
+            "description": "发射形状。",
+            "type": "string",
+            "enum": [
+              "point",
+              "sphere",
+              "sphere_surface",
+              "box",
+              "ring"
+            ]
+          },
+          "emission_sphere_radius": {
+            "type": "number"
+          },
+          "emission_box_extents": {
+            "description": "盒形发射区域各轴的半尺寸。",
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "z"
+            ]
+          },
+          "direction": {
+            "description": "发射方向。",
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "z"
+            ]
+          },
+          "spread": {
+            "description": "扩散角度，单位为度，范围 0–180。",
+            "type": "number"
+          },
+          "initial_velocity": {
+            "description": "初速度，可为固定值或 {min,max}。",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "min": {
+                    "type": "number"
+                  },
+                  "max": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "min",
+                  "max"
+                ]
+              }
+            ]
+          },
+          "gravity": {
+            "description": "重力向量。",
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "z"
+            ]
+          },
+          "damping": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "min": {
+                    "type": "number"
+                  },
+                  "max": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "min",
+                  "max"
+                ]
+              }
+            ]
+          },
+          "orbit_velocity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "min": {
+                    "type": "number"
+                  },
+                  "max": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "min",
+                  "max"
+                ]
+              }
+            ]
+          },
+          "scale_range": {
+            "description": "粒子缩放。",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "min": {
+                    "type": "number"
+                  },
+                  "max": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "min",
+                  "max"
+                ]
+              }
+            ]
+          },
+          "angle": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "min": {
+                    "type": "number"
+                  },
+                  "max": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "min",
+                  "max"
+                ]
+              }
+            ]
+          },
+          "angular_velocity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "min": {
+                    "type": "number"
+                  },
+                  "max": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "min",
+                  "max"
+                ]
+              }
+            ]
+          },
+          "color": {
+            "description": "粒子的固定颜色。",
+            "type": "object",
+            "properties": {
+              "r": {
+                "type": "number"
+              },
+              "g": {
+                "type": "number"
+              },
+              "b": {
+                "type": "number"
+              },
+              "a": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "r",
+              "g",
+              "b"
+            ]
+          },
+          "hue_variation": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "min": {
+                    "type": "number"
+                  },
+                  "max": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "min",
+                  "max"
+                ]
+              }
+            ]
+          },
+          "color_ramp": {
+            "description": "随生命周期变化的颜色渐变。",
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Gradient .tres 资源的路径。"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "points": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "offset": {
+                          "type": "number"
+                        },
+                        "color": {
+                          "type": "object",
+                          "properties": {
+                            "r": {
+                              "type": "number"
+                            },
+                            "g": {
+                              "type": "number"
+                            },
+                            "b": {
+                              "type": "number"
+                            },
+                            "a": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "r",
+                            "g",
+                            "b"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "offset",
+                        "color"
+                      ]
+                    }
+                  },
+                  "interpolation": {
+                    "type": "string",
+                    "enum": [
+                      "linear",
+                      "cubic",
+                      "constant"
+                    ]
+                  }
+                },
+                "required": [
+                  "points"
+                ]
+              }
+            ]
+          },
+          "alpha_curve": {
+            "description": "随生命周期变化的透明度曲线。",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "points": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "points"
+                ]
+              }
+            ]
+          },
+          "scale_curve": {
+            "description": "随生命周期变化的缩放曲线。",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "points": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "points"
+                ]
+              }
+            ]
+          },
+          "turbulence_enabled": {
+            "type": "boolean"
+          },
+          "turbulence_noise_strength": {
+            "type": "number"
+          },
+          "particle_flag_align_y": {
+            "type": "boolean"
+          },
+          "position": {
+            "description": "节点位置。",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ]
+              }
+            ]
+          }
+        },
+        "required": [
+          "parent_path",
+          "type"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "使用 procedural_edit_curve 自定义速度或发射曲线，使用 procedural_edit_gradient 自定义随生命周期变化的颜色。"
+    },
+    {
+      "group": "path_editing",
+      "name": "path2d_edit_curve",
+      "description": "编辑 Path2D 节点的 Curve2D：设置、添加或删除带贝塞尔控制柄的点。适用于巡逻路线、移动平台、弹道曲线和摄像机轨道。",
+      "method": "path2d.edit_curve",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "node_path": {
+            "type": "string",
+            "description": "场景树中 Path2D 节点的路径。"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "set",
+              "add",
+              "remove",
+              "clear"
+            ],
+            "description": "set 替换全部点，add 追加或插入，remove 按索引删除，clear 清空全部点。"
+          },
+          "points": {
+            "description": "曲线点，可包含贝塞尔控制柄。",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "position": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ]
+                },
+                "in_handle": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ]
+                },
+                "out_handle": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ]
+                }
+              },
+              "required": [
+                "position"
+              ]
+            }
+          },
+          "index": {
+            "description": "add 时的插入位置，或要删除的点索引。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "node_path",
+          "action"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "name": "game_start",
+      "description": "启动游玩测试。默认等待运行时就绪；wait_for_runtime:false 会启动后立即返回。scene_path 可取 'main'、'current'（默认）或 res:// 路径。if_running:'return' 启用幂等模式。",
+      "method": "game.start",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "scene_path": {
+            "type": "string"
+          },
+          "wait_for_runtime": {
+            "description": "默认 true，等待运行时连接或超时，使返回后可立即调用运行时工具。传入 wait_for_runtime:false 可启动后立即返回。",
+            "type": "boolean"
+          },
+          "runtime_poll": {
+            "description": "配合 if_running:'return' 使用，重新检查已在运行的游戏是否已连接运行时。默认 false。",
+            "type": "boolean"
+          },
+          "if_running": {
+            "type": "string",
+            "enum": [
+              "return",
+              "fail"
+            ]
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "name": "game_stop",
+      "description": "停止当前正在运行的场景。保持幂等：没有场景运行时返回 was_running:false。无需参数。",
+      "method": "game.stop",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "procedural",
+      "name": "procedural_edit_gradient",
+      "description": "创建或编辑 Gradient 资源（.tres）。按偏移位置设置颜色点，添加或删除点。适用于粒子、天空和视觉效果。",
+      "method": "procedural.edit_gradient",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": ".tres 文件路径，例如 'res://materials/sky_gradient.tres'。"
+          },
+          "action": {
+            "description": "set 替换全部点，add_point 添加一个点，remove_point 按索引删除；默认 set。",
+            "type": "string",
+            "enum": [
+              "set",
+              "add_point",
+              "remove_point"
+            ]
+          },
+          "points": {
+            "description": "渐变颜色点。",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "offset": {
+                  "type": "number",
+                  "description": "位置，范围 0.0–1.0。"
+                },
+                "color": {
+                  "description": "颜色，格式为 {r,g,b,a?}。",
+                  "type": "object",
+                  "properties": {
+                    "r": {
+                      "type": "number"
+                    },
+                    "g": {
+                      "type": "number"
+                    },
+                    "b": {
+                      "type": "number"
+                    },
+                    "a": {
+                      "type": "number"
+                    }
+                  }
+                }
+              },
+              "required": [
+                "offset",
+                "color"
+              ]
+            }
+          },
+          "index": {
+            "description": "点索引，用于 remove_point。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "interpolation_mode": {
+            "description": "颜色点之间的插值方式。",
+            "type": "string",
+            "enum": [
+              "linear",
+              "cubic",
+              "constant"
+            ]
+          }
+        },
+        "required": [
+          "file_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "group": "procedural",
+      "name": "procedural_edit_curve",
+      "description": "创建或编辑 Curve 资源（.tres）。设置带切线的控制点，用于缓动、衰减和值映射。",
+      "method": "procedural.edit_curve",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": ".tres 文件路径。"
+          },
+          "action": {
+            "description": "set 替换全部点，add_point 添加一个点，remove_point 删除一个点，clear 清空全部点；默认 set。",
+            "type": "string",
+            "enum": [
+              "set",
+              "add_point",
+              "remove_point",
+              "clear"
+            ]
+          },
+          "points": {
+            "description": "曲线控制点。",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "position": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ],
+                  "description": "x 为输入，范围 0–1；y 为输出值。"
+                },
+                "left_tangent": {
+                  "type": "number"
+                },
+                "right_tangent": {
+                  "type": "number"
+                },
+                "left_mode": {
+                  "type": "string",
+                  "enum": [
+                    "free",
+                    "linear"
+                  ]
+                },
+                "right_mode": {
+                  "type": "string",
+                  "enum": [
+                    "free",
+                    "linear"
+                  ]
+                }
+              },
+              "required": [
+                "position"
+              ]
+            }
+          },
+          "index": {
+            "description": "点索引，用于 remove_point。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "min_value": {
+            "description": "曲线 Y 值的下限。",
+            "type": "number"
+          },
+          "max_value": {
+            "description": "曲线 Y 值的上限。",
+            "type": "number"
+          }
+        },
+        "required": [
+          "file_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "group": "procedural",
+      "name": "procedural_edit_noise",
+      "description": "创建或编辑 FastNoiseLite 资源（.tres）。配置噪声类型、分形、细胞噪声和定义域扭曲，用于程序化生成。",
+      "method": "procedural.edit_noise",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": ".tres 文件路径。"
+          },
+          "noise_type": {
+            "description": "噪声算法。",
+            "type": "string",
+            "enum": [
+              "simplex",
+              "simplex_smooth",
+              "cellular",
+              "perlin",
+              "value",
+              "value_cubic"
+            ]
+          },
+          "seed": {
+            "description": "随机种子。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "frequency": {
+            "description": "基础频率，默认 0.01。",
+            "type": "number"
+          },
+          "octaves": {
+            "description": "分形倍频层数，范围 1–10。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "lacunarity": {
+            "description": "倍频层之间的频率倍率。",
+            "type": "number"
+          },
+          "gain": {
+            "description": "倍频层之间的振幅倍率。",
+            "type": "number"
+          },
+          "fractal_type": {
+            "description": "分形类型。",
+            "type": "string",
+            "enum": [
+              "none",
+              "fbm",
+              "ridged",
+              "ping_pong"
+            ]
+          },
+          "cellular_distance_function": {
+            "type": "string",
+            "enum": [
+              "euclidean",
+              "euclidean_squared",
+              "manhattan",
+              "hybrid"
+            ]
+          },
+          "cellular_return_type": {
+            "type": "string",
+            "enum": [
+              "cell_value",
+              "distance",
+              "distance2",
+              "distance2_add",
+              "distance2_sub",
+              "distance2_mul",
+              "distance2_div"
+            ]
+          },
+          "domain_warp_enabled": {
+            "type": "boolean"
+          },
+          "domain_warp_amplitude": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "file_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "group": "resource_io",
+      "name": "resource_load",
+      "description": "加载 res:// 资源并返回 { class, path, properties, metadata }。移除 image、mesh_arrays 等大型字段；Texture2D 的尺寸放在 metadata 中。",
+      "method": "resource.load",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "resource_io",
+      "name": "resource_write",
+      "description": "写入或创建 .tres/.res 资源。文件存在时更新属性；文件不存在时，必须提供 type（类名）才能创建。TileSet 请使用 tileset_create，以同时处理图集和物理配置。",
+      "method": "resource.write",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string"
+          },
+          "properties": {
+            "description": "属性值。字典中的子资源使用 {type:'NewResource', class:'ClassName', properties:{...}}。",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "type": {
+            "description": "资源类名，创建新资源时必填。",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "使用 resource_load 验证，使用 node_set_property 配合 Resource 类型标签将资源赋给节点。"
+    },
+    {
+      "name": "input_simulate",
+      "description": "向运行中的游戏注入输入。events 可为单个 {event_type, event_data?, delay_before_ms?, delay_after_ms?}，也可为事件序列数组；连续操作优先在一次调用中传入多个事件。event_type 可取 key、mouse_button、mouse_motion、action、click、click_node、send_text。click 通过 push_input 依次按下、等待 50 毫秒、释放，不改变操作系统焦点或鼠标位置，可安全并行。click_node 接受 {node_path}，调用 grab_focus 并在 BaseButton 上发出 pressed 信号，无需猜测坐标。send_text 通过 push_input 逐字符合成按键事件，将字符串输入已聚焦的文本框，或 event_data.node_path 指定的 Control；会触发直接设置 .text 时跳过的真实 text_changed/text_submitted 信号。send_text 的 event_data：text 必填，node_path 可选（先聚焦该 Control），submit 可选（追加回车）。返回 focus_target、focus_source、text_changed、text_after（隐去密码字段）、chars_sent 和提示。\n\n鼠标坐标模式：\n- position: {x, y}：原始视口/屏幕坐标（默认），适用于按钮、菜单等界面元素。\n- world_position: {x, y}：游戏世界坐标，通过画布变换自动换算，包含摄像机偏移与缩放，适用于点击游戏内的指定位置。\n\n鼠标事件通过 push_input（position + global_position）执行 CanvasLayer/GUI 命中检测，不改变操作系统焦点或鼠标位置，可安全并行。返回每个事件的诊断信息。",
+      "method": "input.simulate",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "events": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "event_type": {
+                    "type": "string",
+                    "enum": [
+                      "key",
+                      "mouse_button",
+                      "mouse_motion",
+                      "action",
+                      "click",
+                      "click_node",
+                      "send_text"
+                    ]
+                  },
+                  "event_data": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  },
+                  "delay_before_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "delay_after_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "event_type"
+                ]
+              },
+              {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "event_type": {
+                      "type": "string",
+                      "enum": [
+                        "key",
+                        "mouse_button",
+                        "mouse_motion",
+                        "action",
+                        "click",
+                        "click_node",
+                        "send_text"
+                      ]
+                    },
+                    "event_data": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "delay_before_ms": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "delay_after_ms": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "event_type"
+                  ]
+                }
+              }
+            ]
+          },
+          "summary": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "events"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "group": "runtime_advanced",
+      "name": "runtime_time_control",
+      "description": "控制运行中游戏的时间，用于确定性游玩测试：freeze 冻结、thaw 解冻、status 查看状态、step 精确推进帧数，或用 step_until 在限定帧数内推进至条件成立。",
+      "method": "runtime.time_control",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "freeze",
+              "thaw",
+              "status",
+              "step",
+              "step_until"
+            ]
+          },
+          "frames": {
+            "description": "step 要精确推进的处理帧数。",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600
+          },
+          "duration_ms": {
+            "description": "近似游戏时长，会换算为物理帧预算；精确测试请优先使用 frames。",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50000
+          },
+          "until": {
+            "description": "step_until 使用的 GDScript 表达式。可用变量：tree（SceneTree）和 root（当前场景）。",
+            "type": "string",
+            "maxLength": 2048
+          },
+          "max_frames": {
+            "description": "step_until 的安全帧数上限，默认 600。",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600
+          },
+          "report": {
+            "description": "在停止帧求值并以结构化读数返回的表达式。",
+            "maxItems": 16,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 2048
+            }
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "runtime": true
+    },
+    {
+      "group": "runtime_advanced",
+      "name": "animation_player_control",
+      "description": "控制运行中游戏的 AnimationPlayer。operation 可取 play、pause、stop、seek。animation_name 用于 play，time 用于 seek，均为可选参数。返回操作后的状态。",
+      "method": "animation_player.control",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "node_path": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "play",
+              "pause",
+              "stop",
+              "seek"
+            ]
+          },
+          "animation_name": {
+            "type": "string"
+          },
+          "time": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "node_path",
+          "operation"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "runtime": true
+    },
+    {
+      "group": "unsafe",
+      "name": "execute_code",
+      "description": "危险操作：执行 GDScript 表达式。仅支持表达式，不支持 var/return/if/for 语句或使用 = 赋值。\n\nchannel='runtime'（默认）在运行中的游戏内执行，channel='editor' 在编辑器进程内执行。\n\n设置属性：get_node('/root/Main/Player').set('speed', 400)\n调用方法：get_node('/root/Main/Player').call('take_damage', 25)\n读取值：get_node('/root/Main/Player').position\n\n修改单个属性请优先使用 node_set_property(channel:'runtime')，更安全且无需表达式语法。复杂多步操作或带特定参数的方法调用可使用 execute_code。C# 项目的托管方法可在运行时调用（channel:'runtime'）。\n\n限制：Expression 无法访问引擎单例（EditorInterface、Engine、OS、Input），也无法调用 load()/preload()。在方法返回值上继续访问属性（get_node('X').position）可能因 Variant 类型擦除而失败；请使用 scope_path 将节点绑定为 self，或改用 .get('property')，例如 get_node('X').get('position')。",
+      "method": "execute.code",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "scope_path": {
+            "type": "string"
+          },
+          "channel": {
+            "description": "'runtime'（默认）在运行中的游戏内求值，需要先调用 game_start，否则返回 GAME_NOT_RUNNING；'editor' 在编辑器进程内求值，无需运行游戏，适用于读取或操作编辑器状态的表达式。",
+            "type": "string",
+            "enum": [
+              "editor",
+              "runtime"
+            ]
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "user_data",
+      "name": "user_data_read",
+      "description": "读取 user:// 文件的有界片段，或列出一个 user:// 目录。自动模式将以 / 结尾的路径视为目录。",
+      "method": "user_data.read",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "user:// 文件或目录路径。"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "file",
+              "directory"
+            ]
+          },
+          "offset": {
+            "description": "起始字节偏移，默认 0；传回 next_offset 以继续分页读取。",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "max_bytes": {
+            "description": "本次读取的字节数，默认 64 KB；上限可配置，默认 256 KB。",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 4194304
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "user_data",
+      "name": "save_write",
+      "description": "写入 user:// 文件，不保证幂等。自动创建父目录，拒绝访问插件内部路径。",
+      "method": "save.write",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      }
+    },
+    {
+      "group": "user_data",
+      "name": "save_delete",
+      "description": "删除 user:// 文件。文件不存在时返回 NOT_FOUND，拒绝访问插件内部路径。",
+      "method": "save.delete",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "scene_get_tree",
+      "description": "以嵌套 JSON { name, class, path, children } 返回当前编辑场景的节点树。根节点路径为 \".\"，返回的路径可直接传给其他编辑器命令。",
+      "method": "scene.get_tree",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "max_depth": {
+            "description": "树深度，默认 2；使用 -1 获取完整树。",
+            "type": "number"
+          },
+          "include_properties": {
+            "description": "是否为每个节点内嵌属性快照，默认 false。",
+            "type": "boolean"
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "successHint": "按条件搜索节点请使用 scene_query，查看特定节点详情请使用 node_inspect。"
+    },
+    {
+      "name": "scene_create_node",
+      "description": "在父节点下创建 class_name 指定类型的节点，支持引擎类和用户定义的 class_name 类。保持幂等：名称冲突时返回 'returned'，新建时返回 'created'。\n\n示例：class_name: \"CharacterBody2D\", parent_path: \".\", node_name: \"Player\"",
+      "method": "scene.create_node",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "class_name": {
+            "type": "string"
+          },
+          "parent_path": {
+            "type": "string"
+          },
+          "node_name": {
+            "type": "string"
+          },
+          "layout_mode": {
+            "description": "Control 节点的布局模式：0 为自由布局，1 为锚点布局。父节点为 Container 时自动设为 1。",
+            "type": "number"
+          },
+          "unique_name": {
+            "description": "标记为场景唯一节点，以便在脚本中通过 %Name 访问。若与已有唯一节点重名，会给出警告。",
+            "type": "boolean"
+          },
+          "properties": {
+            "description": "创建后立即设置的属性值，类型转换规则与 node_set_property 相同。部分属性设置失败时仍保留节点，请检查 properties_failed。字典遍历顺序不保证固定。",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "class_name",
+          "parent_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "successHint": "使用 node_set_property 配置属性，使用 node_set_script 附加脚本，使用 editor_save_scene 保存。"
+    },
+    {
+      "name": "scene_delete_node",
+      "description": "删除 node_path（NodePath）指定的节点。拒绝删除当前编辑场景的根节点。",
+      "method": "scene.delete_node",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "node_path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "scene_create",
+      "description": "在 file_path 创建 .tscn。根节点位于 '.'，默认名称为不含扩展名的文件名，root_type 默认为 Node。保持幂等，状态为 created、returned 或 replaced。if_exists 可取 return、fail、replace。创建后使用 scene_open 打开编辑。",
+      "method": "scene.create",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string"
+          },
+          "root_type": {
+            "type": "string"
+          },
+          "root_name": {
+            "description": "覆盖根节点名称，默认使用不含扩展名的文件名。",
+            "type": "string"
+          },
+          "if_exists": {
+            "type": "string",
+            "enum": [
+              "return",
+              "fail",
+              "replace"
+            ]
+          }
+        },
+        "required": [
+          "file_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "使用 scene_open 打开并设为当前场景，再使用 scene_create_node 添加节点。"
+    },
+    {
+      "group": "scene_advanced",
+      "name": "scene_instantiate",
+      "description": "将 scene_path 指定的 PackedScene 实例化到 parent_path 下。单项模式遇到名称冲突时直接返回。批量模式通过 instances 数组创建多个带变换的副本。\n\n单项示例：scene_path: \"res://coin.tscn\", parent_path: \".\", as_name: \"Coin\"\n批量示例：scene_path: \"res://coin.tscn\", parent_path: \".\", instances: [{name:\"Coin1\",position:{x:100,y:200},properties:{coin_value:5}}, ...]",
+      "method": "scene.instantiate",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "parent_path": {
+            "type": "string"
+          },
+          "scene_path": {
+            "type": "string"
+          },
+          "as_name": {
+            "description": "单项模式：实例名称。",
+            "type": "string"
+          },
+          "transform": {
+            "description": "单项模式：属性覆盖值。",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "instances": {
+            "description": "批量模式：{name?, position?, rotation?, scale?, properties?} 数组。properties 用于实例化后覆盖任意属性，例如 {key_type: 'Gold'}。提供此数组时批量创建多个实例，并忽略 as_name 和 transform。",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "parent_path",
+          "scene_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "successHint": "使用 node_set_property 配置实例属性，使用 editor_save_scene 保存。"
+    },
+    {
+      "group": "scene_inheritance",
+      "name": "scene_create_inherited",
+      "description": "从基础场景创建继承场景（.tscn），即 Godot 的预制体变体模式。写入最小 TSCN 文本，兼容 Godot 4.2–4.7。",
+      "method": "scene.create_inherited",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "输出 .tscn 路径，例如 'res://scenes/slime_enemy.tscn'。"
+          },
+          "base_scene": {
+            "type": "string",
+            "description": "基础场景路径，例如 'res://scenes/enemy.tscn'。"
+          },
+          "root_name": {
+            "description": "覆盖根节点名称，默认使用基础场景的根节点名称。",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path",
+          "base_scene"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "使用 scene_create_node / node_set_property 添加覆盖，使用 editor_save_scene 保存。"
+    },
+    {
+      "name": "scene_query",
+      "description": "按类、组、名称通配符和属性条件搜索场景树，返回匹配节点，比 scene_get_tree 后手动筛选更快。分页字段：returned、total_matches、has_more。has_more 为 true 时，通过 next_offset 继续读取，直到 has_more 为 false。仅在各次调用之间数据源未发生变化时，分页结果才保持稳定。结果按确定的深度优先顺序返回，nodes 同时返回 offset/limit。limit 范围为 1–200，默认 50，超过 200 时限制为 200。分页读取之间若场景树发生变化（添加、删除或重排节点），结果可能遗漏或重复，请从 offset=0 重新查询。",
+      "method": "scene.query",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "class_filter": {
+            "description": "类名筛选，包含继承关系，例如 'CollisionShape2D'、'Control'。",
+            "type": "string"
+          },
+          "group_filter": {
+            "description": "按节点所属的组筛选。",
+            "type": "string"
+          },
+          "name_pattern": {
+            "description": "节点名称的通配符模式，例如 'Enemy*'、'*Collision*'。",
+            "type": "string"
+          },
+          "property_filters": {
+            "description": "属性值条件，多个条件按逻辑与组合。",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "property": {
+                  "type": "string",
+                  "description": "属性名称。"
+                },
+                "value": {
+                  "description": "期望值。"
+                },
+                "operator": {
+                  "description": "比较运算符，默认 eq。",
+                  "type": "string",
+                  "enum": [
+                    "eq",
+                    "ne",
+                    "gt",
+                    "lt"
+                  ]
+                }
+              },
+              "required": [
+                "property",
+                "value"
+              ]
+            }
+          },
+          "root_path": {
+            "description": "子树根路径，默认使用场景根节点。",
+            "type": "string"
+          },
+          "max_depth": {
+            "description": "最大遍历深度；-1 表示不限制，默认 -1。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "include_properties": {
+            "description": "结果中要包含的属性名称。",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "offset": {
+            "description": "跳过前 N 项，默认 0；将 next_offset 作为下次的 offset，直到 has_more 为 false。",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "description": "每页条目数，默认值由各工具决定；超过上限时会截到上限，并设置 limit_clamped。",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "successHint": "查看完整树结构请使用 scene_get_tree，读取特定属性请使用 node_inspect。"
+    },
+    {
+      "name": "script_check",
+      "description": "离线验证 GDScript，返回通过/失败状态及诊断。Godot 4.5+ 的错误诊断包含真实行号（从 1 开始）；4.2–4.4 省略行号。列号请通过 lsp_diagnostics 获取。无需运行编辑器。",
+      "method": "script.check",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": ".gd 文件的 res:// 路径。"
+          }
+        },
+        "required": [
+          "file_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "successHint": "使用 lsp_diagnostics(scope='file') 获取列号，使用 scope='project' 检查跨文件影响。运行时或导入错误请使用 log_read 查看。"
+    },
+    {
+      "group": "signals",
+      "name": "signal_list",
+      "description": "列出节点信号。include_connections=true 时附带连接目标（{target_path, method_name, flags}）。flags & 2 表示 CONNECT_PERSIST，即保存到 .tscn。",
+      "method": "signal.list",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "node_path": {
+            "type": "string"
+          },
+          "include_connections": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "node_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "signals",
+      "name": "signal_manage",
+      "description": "连接或断开信号。操作在编辑器中进行，使用 CONNECT_PERSIST 保存到 .tscn，保存和加载后仍有效。连接操作保持幂等，重复连接时 status 为 'returned'。",
+      "method": "signal.manage",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "connect",
+              "disconnect"
+            ]
+          },
+          "node_path": {
+            "type": "string"
+          },
+          "signal_name": {
+            "type": "string"
+          },
+          "target_path": {
+            "type": "string"
+          },
+          "method_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "node_path",
+          "signal_name",
+          "target_path",
+          "method_name"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "group": "signals",
+      "name": "signal_emit",
+      "description": "在节点上发出 signal_name 指定的信号，可提供 args。channel='editor'（默认）操作当前编辑场景，channel='runtime' 操作运行中的游戏。",
+      "method": "signal.emit",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "node_path": {
+            "type": "string"
+          },
+          "signal_name": {
+            "type": "string"
+          },
+          "args": {
+            "type": "array",
+            "items": {}
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "editor",
+              "runtime"
+            ]
+          }
+        },
+        "required": [
+          "node_path",
+          "signal_name"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "group": "scene_spatial",
+      "name": "scene_spatial_map",
+      "description": "读取当前场景的空间布局：各节点的世界位置、边界（2D Rect2 / 3D AABB）、尺寸，以及计算得到的重叠、间距和包含关系。放置或移动节点前调用，以寻找空闲位置。分页字段：returned、total_nodes、has_more。不提供续读游标；请用 subtree/class/region/radius 缩小范围，或提高 max_nodes以获取更多结果。",
+      "method": "scene.spatial_map",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "detail": {
+            "description": "brief 仅返回位置和尺寸；normal 再加边界和重叠；full 再加包含关系及最近邻间距。",
+            "type": "string",
+            "enum": [
+              "brief",
+              "normal",
+              "full"
+            ]
+          },
+          "class": {
+            "description": "仅包含此类的节点，包含继承关系。",
+            "type": "string"
+          },
+          "subtree": {
+            "description": "仅映射此节点及其后代，节点路径相对于场景根节点。",
+            "type": "string"
+          },
+          "region": {
+            "description": "仅包含与此区域相交的节点：2D 使用 [x,y,w,h]，3D 使用 [x,y,z,sx,sy,sz]。",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "radius": {
+            "description": "仅包含距 center 不超过此距离的节点。",
+            "type": "number"
+          },
+          "center": {
+            "description": "半径筛选的中心：2D 使用 [x,y]，3D 使用 [x,y,z]。",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "max_nodes": {
+            "description": "响应条目上限，默认 200，最大 1000。",
+            "type": "number"
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "successHint": "根据重叠和间距信息确定空闲位置，再使用 node_set_property 的 position / global_position 放置或移动节点。"
+    },
+    {
+      "group": "spriteframes",
+      "name": "spriteframes_create",
+      "description": "根据显式帧纹理，或按网格切分精灵表，创建 SpriteFrames。",
+      "method": "spriteframes.create",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "输出 .tres 文件路径，使用 res://。"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "frames",
+              "spritesheet"
+            ]
+          },
+          "animations": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "动画名称，例如 'idle'、'run'。"
+                    },
+                    "fps": {
+                      "description": "每秒帧数，默认 5.0。",
+                      "type": "number"
+                    },
+                    "loop": {
+                      "description": "是否循环播放动画，默认 true。",
+                      "type": "boolean"
+                    },
+                    "frames": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "texture_path": {
+                            "type": "string",
+                            "description": "帧纹理的 res:// 路径。"
+                          },
+                          "atlas": {
+                            "description": "纹理内的图集区域。",
+                            "type": "object",
+                            "properties": {
+                              "x": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "y": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "width": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "height": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "x",
+                              "y",
+                              "width",
+                              "height"
+                            ]
+                          },
+                          "duration": {
+                            "description": "此帧的持续时间倍率，默认 1.0。",
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "texture_path"
+                        ]
+                      },
+                      "description": "各帧的纹理。"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "frames"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "动画名称。"
+                    },
+                    "row": {
+                      "description": "精灵表行号，从 0 开始，默认 0。",
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "start_col": {
+                      "description": "起始列号，默认 0。",
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "frame_count": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "帧数。"
+                    },
+                    "fps": {
+                      "type": "number"
+                    },
+                    "loop": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "frame_count"
+                  ]
+                }
+              ]
+            }
+          },
+          "texture_path": {
+            "description": "source='spritesheet' 时必填。",
+            "type": "string"
+          },
+          "frame_size": {
+            "description": "source='spritesheet' 时必填，表示每帧的像素宽度和高度。",
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "y": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ]
+          }
+        },
+        "required": [
+          "file_path",
+          "source",
+          "animations"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "使用 spriteframes_edit 添加或修改动画和帧。"
+    },
+    {
+      "group": "spriteframes",
+      "name": "spriteframes_edit",
+      "description": "编辑已有 SpriteFrames 资源：添加或删除动画，添加、删除或重排帧，调整帧率和循环设置。'list' 返回全部动画。",
+      "method": "spriteframes.edit",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "已有 SpriteFrames .tres 资源路径。"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "add_animation",
+              "remove_animation",
+              "add_frame",
+              "remove_frame",
+              "set_fps",
+              "set_loop",
+              "reorder_frames",
+              "list"
+            ],
+            "description": "编辑操作。"
+          },
+          "animation_name": {
+            "description": "目标动画名称。",
+            "type": "string"
+          },
+          "fps": {
+            "description": "新的帧率，用于 set_fps。",
+            "type": "number"
+          },
+          "loop": {
+            "description": "新的循环设置，用于 set_loop。",
+            "type": "boolean"
+          },
+          "frames": {
+            "description": "要添加的帧。",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "texture_path": {
+                  "type": "string",
+                  "description": "帧纹理的 res:// 路径。"
+                },
+                "atlas": {
+                  "description": "纹理内的图集区域。",
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "y": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "width": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "height": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y",
+                    "width",
+                    "height"
+                  ]
+                },
+                "duration": {
+                  "description": "此帧的持续时间倍率，默认 1.0。",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "texture_path"
+              ]
+            }
+          },
+          "frame_index": {
+            "description": "帧索引，用于删除或重排。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "new_index": {
+            "description": "重排后的新位置。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "file_path",
+          "action"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "group": "theme",
+      "name": "theme_edit",
+      "description": "创建或修改 Godot Theme 资源（.tres）。批量编辑任意控件类型的颜色、常量、字体、字号、图标和样式框。",
+      "method": "theme.edit",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Theme 资源路径，例如 'res://themes/ui_theme.tres'；不存在时创建。"
+          },
+          "edits": {
+            "description": "要应用的主题属性编辑数组。",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type_name": {
+                  "type": "string",
+                  "description": "Control 类型名称，例如 'Button'、'Label'、'Panel'。"
+                },
+                "property_type": {
+                  "type": "string",
+                  "enum": [
+                    "color",
+                    "constant",
+                    "font",
+                    "font_size",
+                    "icon",
+                    "stylebox"
+                  ],
+                  "description": "主题属性类别。"
+                },
+                "property": {
+                  "type": "string",
+                  "description": "属性名称，例如 'font_color'、'font_size'、'panel'。"
+                },
+                "value": {
+                  "description": "属性值，格式取决于 property_type：color 使用 {r,g,b,a?}；constant/font_size 使用数字；font/icon 使用 res:// 路径字符串；stylebox 使用 {type:'StyleBoxFlat'|'StyleBoxTexture'|'StyleBoxLine', ...props}。"
+                }
+              },
+              "required": [
+                "type_name",
+                "property_type",
+                "property",
+                "value"
+              ]
+            }
+          }
+        },
+        "required": [
+          "file_path",
+          "edits"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "使用 node_set_property 为 Control 的 theme 属性设置带 Resource 类型标签的主题资源。"
+    },
+    {
+      "group": "3d_tools",
+      "name": "scene_create_3d",
+      "description": "在当前编辑场景的父节点下创建一个 3D 基本形状、WorldEnvironment、灯光或摄像机，支持 UndoRedo。",
+      "method": "scene.create_3d",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "primitive",
+              "environment",
+              "light",
+              "camera"
+            ]
+          },
+          "parent_path": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
+              }
+            }
+          },
+          "rotation": {
+            "description": "欧拉角，单位为度。",
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
+              }
+            }
+          },
+          "primitive": {
+            "type": "string",
+            "enum": [
+              "box",
+              "sphere",
+              "cylinder",
+              "capsule",
+              "plane",
+              "prism"
+            ]
+          },
+          "mesh_size": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
+              }
+            }
+          },
+          "material": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "StandardMaterial3D"
+              },
+              "albedo_color": {
+                "type": "object",
+                "properties": {
+                  "r": {
+                    "type": "number"
+                  },
+                  "g": {
+                    "type": "number"
+                  },
+                  "b": {
+                    "type": "number"
+                  },
+                  "a": {
+                    "type": "number"
+                  }
+                }
+              },
+              "metallic": {
+                "type": "number"
+              },
+              "roughness": {
+                "type": "number"
+              }
+            }
+          },
+          "sky": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "sky_top_color": {
+                "type": "object",
+                "properties": {
+                  "r": {
+                    "type": "number"
+                  },
+                  "g": {
+                    "type": "number"
+                  },
+                  "b": {
+                    "type": "number"
+                  },
+                  "a": {
+                    "type": "number"
+                  }
+                }
+              },
+              "sky_horizon_color": {
+                "type": "object",
+                "properties": {
+                  "r": {
+                    "type": "number"
+                  },
+                  "g": {
+                    "type": "number"
+                  },
+                  "b": {
+                    "type": "number"
+                  },
+                  "a": {
+                    "type": "number"
+                  }
+                }
+              },
+              "ground_bottom_color": {
+                "type": "object",
+                "properties": {
+                  "r": {
+                    "type": "number"
+                  },
+                  "g": {
+                    "type": "number"
+                  },
+                  "b": {
+                    "type": "number"
+                  },
+                  "a": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          },
+          "ambient_light": {
+            "type": "object",
+            "properties": {
+              "color": {
+                "type": "object",
+                "properties": {
+                  "r": {
+                    "type": "number"
+                  },
+                  "g": {
+                    "type": "number"
+                  },
+                  "b": {
+                    "type": "number"
+                  },
+                  "a": {
+                    "type": "number"
+                  }
+                }
+              },
+              "energy": {
+                "type": "number"
+              }
+            }
+          },
+          "tonemap": {
+            "type": "string",
+            "enum": [
+              "linear",
+              "reinhardt",
+              "filmic",
+              "aces"
+            ]
+          },
+          "fog": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "color": {
+                "type": "object",
+                "properties": {
+                  "r": {
+                    "type": "number"
+                  },
+                  "g": {
+                    "type": "number"
+                  },
+                  "b": {
+                    "type": "number"
+                  },
+                  "a": {
+                    "type": "number"
+                  }
+                }
+              },
+              "density": {
+                "type": "number"
+              }
+            }
+          },
+          "light_type": {
+            "type": "string",
+            "enum": [
+              "directional",
+              "omni",
+              "spot"
+            ]
+          },
+          "color": {
+            "type": "object",
+            "properties": {
+              "r": {
+                "type": "number"
+              },
+              "g": {
+                "type": "number"
+              },
+              "b": {
+                "type": "number"
+              },
+              "a": {
+                "type": "number"
+              }
+            }
+          },
+          "energy": {
+            "type": "number"
+          },
+          "shadow": {
+            "type": "boolean"
+          },
+          "projection": {
+            "type": "string",
+            "enum": [
+              "perspective",
+              "orthogonal"
+            ]
+          },
+          "fov": {
+            "type": "number"
+          },
+          "orthogonal_size": {
+            "type": "number"
+          },
+          "current": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "parent_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "group": "tilemap",
+      "name": "tilemap_read_cells",
+      "description": "从 TileMapLayer（4.3+）或已弃用的 TileMap 读取已放置的图块数据。返回单元格坐标、source_id 和 atlas_coords，最多 500 个单元格。分页字段：returned、total_cells、has_more。不提供续读游标；请用 region/source_id 缩小范围以获取更多结果。",
+      "method": "tilemap.read_cells",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "node_path": {
+            "type": "string",
+            "description": "TileMapLayer 或 TileMap 节点路径。"
+          },
+          "region": {
+            "description": "空间筛选：仅包含 {x, y, width, height} 区域内的单元格。",
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "y": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "width": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "height": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "width",
+              "height"
+            ]
+          },
+          "source_id": {
+            "description": "仅包含来自此图集源的单元格。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "layer": {
+            "description": "已弃用的 TileMap 所用的层索引，默认 0。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "node_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "group": "tilemap",
+      "name": "tilemap_set_cells",
+      "description": "批量设置 TileMap 或 TileMapLayer 的单元格，返回 cells_written 和 cells_unchanged。source_id:-1 表示清除单元格。矩形区域填充请使用 regions，比逐个列出单元格更高效。",
+      "method": "tilemap.set_cells",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "node_path": {
+            "type": "string"
+          },
+          "layer": {
+            "type": "number"
+          },
+          "cells": {
+            "description": "{x, y, source_id, atlas_x, atlas_y, alternative_tile?} 数组。source_id:-1 表示清除。",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "regions": {
+            "description": "矩形填充数组：[{x, y, width, height, source_id, atlas_x, atlas_y, alternative_tile?}]。每个区域展开为 width*height 个单元格，填充整间房间时比逐格列出更高效。可与 cells 组合使用，区域生成的单元格会追加到 cells 之后。",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "node_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      }
+    },
+    {
+      "group": "tileset",
+      "name": "tileset_create",
+      "description": "根据纹理创建 TileSet .tres。生成带整格矩形碰撞的图集图块，默认启用物理。返回 source_id 和网格尺寸，可配合 tilemap_set_cells 使用。",
+      "method": "tileset.create",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "输出路径，例如 'res://resources/tileset.tres'。"
+          },
+          "texture_path": {
+            "type": "string",
+            "description": "图集源纹理，例如 'res://assets/tiles.png'。"
+          },
+          "tile_size": {
+            "description": "图块像素尺寸，默认 {x:16, y:16}。",
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "y": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ]
+          },
+          "physics": {
+            "description": "是否添加物理层，默认 true。",
+            "type": "boolean"
+          },
+          "collision_layer": {
+            "description": "物理碰撞层。可用整数位掩码、层编号数组 [1,6] 或名称数组 ['player','walls']，默认 1。",
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "collision_mask": {
+            "description": "物理碰撞掩码。可用整数位掩码、层编号数组 [2,4] 或名称数组 ['enemies','collectibles']，默认 1。",
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "required": [
+          "file_path",
+          "texture_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "使用 tileset_add_source 添加更多图集纹理，再用 tileset_setup_layers 配置物理、地形和导航层。逐图块属性（碰撞多边形、地形、导航）请通过 discover_tools(request: 'tileset_edit') 激活对应编辑组。"
+    },
+    {
+      "group": "tileset",
+      "name": "tileset_add_source",
+      "description": "向已有 TileSet 添加图集源。自动为纹理中的每个网格单元创建图块，返回新的 source_id。",
+      "method": "tileset.add_source",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "已有 TileSet .tres 资源路径。"
+          },
+          "texture_path": {
+            "type": "string",
+            "description": "新图集源的纹理。"
+          },
+          "tile_size": {
+            "description": "图块像素尺寸，默认使用 TileSet 的 tile_size。",
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "y": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ]
+          }
+        },
+        "required": [
+          "file_path",
+          "texture_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "图集源已添加。若尚未配置物理、地形或导航层，请使用 tileset_setup_layers 配置。"
+    },
+    {
+      "group": "tileset",
+      "name": "tileset_remove_source",
+      "description": "从 TileSet 删除一个图集源，同时删除该源的全部图块数据。",
+      "method": "tileset.remove_source",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "已有 TileSet .tres 资源路径。"
+          },
+          "source_id": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "要删除的图集源 ID。"
+          }
+        },
+        "required": [
+          "file_path",
+          "source_id"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      }
+    },
+    {
+      "group": "tileset",
+      "name": "tileset_add_alternative",
+      "description": "为基础图块创建替代变体，可翻转、旋转或改色。",
+      "method": "tileset.add_alternative",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "已有 TileSet .tres 资源路径。"
+          },
+          "source_id": {
+            "description": "图集源 ID，默认 0。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "atlas_x": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "基础图块在图集中的 X 坐标。"
+          },
+          "atlas_y": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "基础图块在图集中的 Y 坐标。"
+          },
+          "flip_h": {
+            "description": "是否水平翻转。",
+            "type": "boolean"
+          },
+          "flip_v": {
+            "description": "是否垂直翻转。",
+            "type": "boolean"
+          },
+          "transpose": {
+            "description": "是否转置，即交换 X/Y。",
+            "type": "boolean"
+          },
+          "modulate": {
+            "description": "颜色调制值 {r, g, b, a}，各分量范围为 0.0–1.0。",
+            "type": "object",
+            "properties": {
+              "r": {
+                "type": "number"
+              },
+              "g": {
+                "type": "number"
+              },
+              "b": {
+                "type": "number"
+              },
+              "a": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "required": [
+          "file_path",
+          "atlas_x",
+          "atlas_y"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "替代图块已创建。使用 tilemap_set_cells 的 alternative_tile 参数放置。"
+    },
+    {
+      "group": "tileset",
+      "name": "tileset_remove_alternative",
+      "description": "从基础图块中删除一个替代变体。",
+      "method": "tileset.remove_alternative",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "已有 TileSet .tres 资源路径。"
+          },
+          "source_id": {
+            "description": "图集源 ID，默认 0。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "atlas_x": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "基础图块在图集中的 X 坐标。"
+          },
+          "atlas_y": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "基础图块在图集中的 Y 坐标。"
+          },
+          "alternative_id": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "要删除的替代图块 ID。"
+          }
+        },
+        "required": [
+          "file_path",
+          "atlas_x",
+          "atlas_y",
+          "alternative_id"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      }
+    },
+    {
+      "group": "tileset",
+      "name": "tileset_setup_layers",
+      "description": "配置 TileSet 的层：包含命名地形的地形集、自定义数据层，以及物理、导航和遮挡层的数量。",
+      "method": "tileset.setup_layers",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "已有 TileSet .tres 资源路径。"
+          },
+          "terrain_sets": {
+            "description": "要添加的地形集。",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "description": "地形匹配模式，默认 match_corners_and_sides。",
+                  "type": "string",
+                  "enum": [
+                    "match_corners_and_sides",
+                    "match_corners",
+                    "match_sides"
+                  ]
+                },
+                "terrains": {
+                  "description": "此地形集中的命名地形。",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "custom_data": {
+            "description": "要添加的自定义数据层。",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "层名称。"
+                },
+                "type": {
+                  "description": "数据类型，默认 int。",
+                  "type": "string",
+                  "enum": [
+                    "int",
+                    "float",
+                    "bool",
+                    "string",
+                    "vector2",
+                    "vector2i",
+                    "vector3",
+                    "color"
+                  ]
+                }
+              },
+              "required": [
+                "name"
+              ]
+            }
+          },
+          "navigation_layers": {
+            "description": "期望的导航层数量。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "occlusion_layers": {
+            "description": "期望的遮挡层数量。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "physics_layers": {
+            "description": "期望的物理层数量。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "file_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "successHint": "层已配置。使用 discover_tools(request: 'tileset_edit') 设置逐图块属性。"
+    },
+    {
+      "group": "tileset_edit",
+      "name": "tileset_edit",
+      "description": "批量编辑图集图块的某一类属性：物理、地形、导航、视觉或自定义数据。",
+      "method": "tileset.edit",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "aspect": {
+            "type": "string",
+            "enum": [
+              "physics",
+              "terrain",
+              "navigation",
+              "visuals",
+              "custom_data"
+            ]
+          },
+          "file_path": {
+            "type": "string",
+            "description": "已有 TileSet .tres 资源路径。"
+          },
+          "source_id": {
+            "description": "图集源 ID，默认 0。",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "tiles": {
+            "description": "每项包含 atlas_x/atlas_y，以及选定 aspect 对应的字段。在支持的情况下可使用 'full'/'none' 快捷值。",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "aspect",
+          "file_path",
+          "tiles"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "successHint": "请先使用 tileset_setup_layers 配置所需的层。"
+    },
+    {
+      "name": "discover_tools",
+      "descriptionDynamic": true,
+      "noInstance": true,
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "request": {
+            "description": "用于查找工具组的名称或关键词。内置组：runtime_advanced、signals、animation_authoring、input_map、resource_io、asset_ops、cleanup、user_data、scene_advanced、editor_advanced、tilemap、tileset、tileset_edit、theme、layer_naming、path_editing、3d_tools、procedural、scene_inheritance、audio、spriteframes、particles、navigation、lsp_code_analysis、lsp_code_navigation、debugger、classdb、project_config、node_advanced、scene_spatial、unsafe；也可查找扩展组。",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "activate": {
+            "description": "自动激活匹配的工具组，默认 true。设为 false 时仅浏览，不加载。",
+            "type": "boolean"
+          },
+          "include_schemas": {
+            "description": "在响应中包含完整参数结构和注解，默认 false。仅在激活工具组后，新工具仍未出现在工具列表中时需要。",
+            "type": "boolean"
+          },
+          "reset": {
+            "description": "停用工具组。true 重置全部按需工具组；名称数组只停用指定组，例如 reset: [\"tilemap\", \"audio\"]；false 或省略时保持当前工具组启用。",
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "refresh_extensions": {
+            "description": "搜索工具组前强制扫描编辑器文件系统，并同步扩展工具。",
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "name": "editor_windows",
+      "description": "列出编辑器当前可见的额外窗口（对话框、弹窗）。每行含 id、kind、标题与按钮清单；主编辑器窗口永不列出。无对话框时 count 为 0。",
+      "method": "editor.windows",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "successHint": "应答窗口用 editor_answer_dialog；对“文件在外部被修改”类确认框选 reload/overwrite 动作，不要 cancel。"
+    },
+    {
+      "name": "editor_answer_dialog",
+      "description": "应答编辑器对话框：按窗口 id 按下 ok/cancel/自定义按钮，或 dismiss 关闭。window id 来自 editor_windows。对“场景在外部被修改”类确认框应选 reload/overwrite 动作——cancel/dismiss 保留编辑器内副本，后续保存会覆盖外部修改。",
+      "method": "editor.answer_dialog",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "window": {
+            "description": "窗口 id（editor_windows 返回的 w<数字>）。",
+            "type": "string"
+          },
+          "button": {
+            "description": "要按的按钮：ok / cancel / dismiss / 自定义动作名 / 精确文本，默认 ok。",
+            "type": "string"
+          }
+        },
+        "required": [
+          "window"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "editor_build_csharp",
+      "description": "启动 C# 项目的 dotnet build（仅适用于 C# 宿主项目），立即返回 running。用 editor_build_csharp_status 或 editor_build_csharp_wait 观察结果；成败以快照的 ok 与 alc.status 为准，绝不以 exit_code 为准。",
+      "method": "editor.build_csharp",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "no_incremental": {
+            "description": "传 --no-incremental（全量重建）。",
+            "type": "boolean"
+          },
+          "csproj": {
+            "description": "显式 .csproj；省略时自动发现 res:// 根的单个 *.csproj。",
+            "type": "string"
+          },
+          "configuration": {
+            "description": "MSBuild 配置，默认 Debug（编辑器恒加载 Debug 程序集）。",
+            "type": "string"
+          },
+          "timeout_s": {
+            "description": "构建超时秒数，默认 300，最小 5。",
+            "type": "number"
+          },
+          "alc_timeout_s": {
+            "description": "热重载观测超时秒数，默认 45，最小 1。",
+            "type": "number"
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "editor_build_csharp_status",
+      "description": "读取 C# 构建任务快照：status（idle/running/succeeded/build_failed/alc_failed）、exit_code、errors/warnings、日志 tail 与 alc 观测。快照恒为成功信封，构建成败看其中的 ok 与 status 字段。",
+      "method": "editor.build_csharp_status",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "editor_build_csharp_wait",
+      "description": "阻塞等待 C# 构建离开 running 状态（内部 500ms 轮询编辑器快照），返回最终快照；timeout_ms 超时则返回当时的 running 快照。配合 editor_build_csharp 使用，避免 agent 侧轮询。",
+      "method": null,
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "timeout_ms": {
+            "description": "最长等待毫秒数，默认 240000，钳制到 1000..540000。",
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 540000
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    }
+  ]
+}

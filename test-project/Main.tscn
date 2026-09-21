@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://io2irnmbv6hm"]
+
+[ext_resource type="Script" uid="uid://7ejokgxe4fle" path="res://runtime_counter.gd" id="1_counter"]
+
+[node name="Main" type="Node" unique_id=1702625371]
+script = ExtResource("1_counter")

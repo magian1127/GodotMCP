@@ -1,0 +1,27 @@
+{
+  "name": "godot-mcp-local",
+  "description": "Godot MCP Unified 本地插件市场：市场根即仓库根，唯一插件源为 plugin/godot-mcp-unified（各客户端适配器共存于插件目录内）。",
+  "owner": {
+    "name": "Magian"
+  },
+  "plugins": [
+    {
+      "name": "godot-mcp-unified",
+      "description": "通过 83 个 MCP 工具、确定性游玩测试和六项代理技能控制本地 Godot 4 编辑器与游戏。仅监听本地主机的 Godot 编辑器/运行时桥接，提供场景、节点、脚本、资源、LSP、调试器、输入、截图和确定性帧控制工作流。",
+      "version": "1.1.0",
+      "source": "./plugin/godot-mcp-unified",
+      "author": {
+        "name": "Magian and upstream contributors"
+      },
+      "license": "MIT",
+      "keywords": [
+        "godot",
+        "mcp",
+        "gamedev",
+        "gdscript",
+        "dotnet",
+        "playtest"
+      ]
+    }
+  ]
+}

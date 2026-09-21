@@ -1,0 +1,22 @@
+{
+  "name": "godot-mcp-unified",
+  "version": "1.1.0",
+  "description": "通过 83 个内置 MCP 工具、确定性游玩测试和六项代理技能控制本地 Godot 4 编辑器与游戏。",
+  "description_i18n": {
+    "en": "Control the local Godot 4 editor and games through 83 built-in MCP tools, deterministic playtests, and six agent skills.",
+    "zh-CN": "通过 83 个内置 MCP 工具、确定性游玩测试和六项代理技能控制本地 Godot 4 编辑器与游戏。"
+  },
+  "author": {
+    "name": "Magian"
+  },
+  "license": "MIT",
+  "keywords": [
+    "godot",
+    "mcp",
+    "gamedev",
+    "gdscript",
+    "dotnet",
+    "playtest"
+  ],
+  "skills": "skills"
+}

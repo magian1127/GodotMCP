@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "godot": {
+      "type": "http",
+      "url": "http://127.0.0.1:6590/",
+      "headers": {
+        "Authorization": "Bearer <daemon-token>"
+      },
+      "timeoutMs": 120000
+    }
+  }
+}

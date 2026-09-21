@@ -1,0 +1,12 @@
+node_modules/
+# 锚定仓库根:构建产物 lib/、bin/。不锚定会误忽略 src/bin/ 源码树
+# (曾致整个 CLI 源码从未入库、克隆即缺文件)。
+/lib/
+/bin/
+.tsbuild/
+*.tmp
+.DS_Store
+Thumbs.db
+.superpowers/
+.mimosa
+.vs

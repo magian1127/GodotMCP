@@ -1,0 +1,15 @@
+interface:
+  display_name: "Godot UI"
+  short_description: "创建并样式化 Godot 菜单、HUD、背包与对话系统等游戏 UI"
+  brand_color: "#478CBF"
+  default_prompt: "使用 $godot-ui 按本技能的节点层级、主题与响应式布局模式搭建此 Godot 界面，并用游玩测试验证。"
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "godot"
+      description: "本地 Godot 场景、节点、主题与运行时验证工具"
+      transport: "stdio"
+
+policy:
+  allow_implicit_invocation: true

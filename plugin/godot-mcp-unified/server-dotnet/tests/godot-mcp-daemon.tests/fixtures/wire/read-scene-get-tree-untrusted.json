@@ -1,0 +1,79 @@
+{
+  "schema": "wire-fixture/1",
+  "id": "read-scene-get-tree-untrusted",
+  "title": "只读通道 scene.get_tree:无排队/执行通知;结果携带 untrusted 信封(nonce 随机)",
+  "contract": ["C1", "C3", "C8", "C21"],
+  "provenance": {
+    "kind": "derived",
+    "sources": [
+      "addons/godot_mcp_toolkit/transport/dispatch/dispatch_lane.gd#ReadOnlyLane(无通知)",
+      "addons/godot_mcp_toolkit/commands/scene_commands.gd#_cmd_scene_get_tree",
+      "addons/godot_mcp_toolkit/security/untrusted.gd#wrap"
+    ],
+    "engineBasis": "形状随契约稳定(4.2–4.7);树载荷为示例"
+  },
+  "auth": {
+    "ack": {
+      "authed": true,
+      "godot_version": "4.5.1",
+      "version": "1.0.0",
+      "headless": false
+    }
+  },
+  "steps": [
+    {
+      "name": "只读往返:结果 = {success:true, tree:<untrusted 信封>}",
+      "call": {
+        "method": "scene.get_tree",
+        "params": {
+          "max_depth": 2
+        },
+        "timeoutMs": 3000
+      },
+      "script": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": "$request_id",
+            "result": {
+              "success": true,
+              "tree": "<untrusted-0badf00d kind=\"scene_tree\" source=\"res://Main.tscn\">\n{\"name\":\"Main\",\"class\":\"Node2D\",\"path\":\".\",\"children\":[{\"name\":\"Player\",\"class\":\"CharacterBody2D\",\"path\":\"Player\",\"children\":[]}]}\n</untrusted-0badf00d>"
+            }
+          }
+        }
+      ],
+      "expect": {
+        "resolves": {
+          "success": true,
+          "tree": {
+            "$untrusted": {
+              "kind": "scene_tree",
+              "source": "res://Main.tscn",
+              "bodyJson": {
+                "name": "Main",
+                "class": "Node2D",
+                "path": ".",
+                "children": [
+                  {
+                    "name": "Player",
+                    "class": "CharacterBody2D",
+                    "path": "Player",
+                    "children": []
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "expectSent": {
+        "jsonrpc": "2.0",
+        "method": "scene.get_tree",
+        "params": {
+          "max_depth": 2
+        }
+      }
+    }
+  ],
+  "expectNotifications": []
+}

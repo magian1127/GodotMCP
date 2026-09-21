@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>GodotMcp.Daemon</RootNamespace>
+    <Version>1.0.0</Version>
+    <!-- daemon 配置只来自环境变量;发布物不需要 IIS 的 web.config。 -->
+    <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Node 工具表(ALL_TOOL_DEFS 83 + discover_tools;schema 与 tools/list 同源)——
+         NodeToolTable.cs 以嵌入资源加载。基准已冻结:Node 桥 2026-09-14 退役
+         (tag node-bridge-final 保存全量前身),生成脚本 dump-group-tools.ts 随之移除;
+         后续工具变更直接编辑本表,由 GroupParityTests 的名称/schema/描述断言锚定。 -->
+    <EmbeddedResource Include="Groups\NodeToolTable.json" />
+  </ItemGroup>
+
+</Project>

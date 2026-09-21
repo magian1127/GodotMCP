@@ -1,0 +1,37 @@
+{
+  "schema": "wire-fixture/1",
+  "id": "auth-rejected-invalid-token",
+  "title": "错误 token:服务器 1008 关闭连接,客户端在握手期以 AUTH_FAILED 拒绝",
+  "contract": ["C2"],
+  "provenance": {
+    "kind": "derived",
+    "sources": [
+      "addons/godot_mcp_toolkit/transport/ws_transport.gd#validate_auth",
+      "server/src/transport/authHandshake.ts#authenticate(onClose)"
+    ],
+    "engineBasis": "形状随契约稳定(4.2–4.7)"
+  },
+  "auth": {
+    "close": {
+      "code": 1008,
+      "reason": "invalid token"
+    }
+  },
+  "steps": [
+    {
+      "name": "错误 token:连接期即被 1008 关闭",
+      "call": {
+        "method": "echo",
+        "params": {},
+        "timeoutMs": 3000
+      },
+      "script": [],
+      "expect": {
+        "rejects": {
+          "code": "AUTH_FAILED",
+          "messageIncludes": "invalid token"
+        }
+      }
+    }
+  ]
+}

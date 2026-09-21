@@ -1,0 +1,60 @@
+{
+  "schema": "wire-fixture/1",
+  "id": "auth-runtime-bare-ack",
+  "title": "运行时鉴权握手:ack 仅 {authed:true}(无版本字段;运行时通道 noReconnect + skipVersionCheck)",
+  "contract": ["C2"],
+  "provenance": {
+    "kind": "derived",
+    "sources": [
+      "addons/godot_mcp_toolkit/transport/ws_transport.gd#validate_auth(默认 ack)",
+      "addons/godot_mcp_toolkit/runtime/mcp_runtime_server.gd",
+      "server/src/transport/channel.ts#performAuth(skipVersionCheck)"
+    ],
+    "engineBasis": "形状随契约稳定(4.2–4.7)"
+  },
+  "auth": {
+    "ack": {
+      "authed": true
+    }
+  },
+  "channelOpts": {
+    "noReconnect": true,
+    "skipVersionCheck": true
+  },
+  "expectAuthResolved": null,
+  "steps": [
+    {
+      "name": "运行时通道 echo 往返",
+      "call": {
+        "method": "echo",
+        "params": {
+          "ping": "runtime"
+        },
+        "timeoutMs": 3000
+      },
+      "script": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": "$request_id",
+            "result": {
+              "ping": "runtime"
+            }
+          }
+        }
+      ],
+      "expect": {
+        "resolves": {
+          "ping": "runtime"
+        }
+      },
+      "expectSent": {
+        "jsonrpc": "2.0",
+        "method": "echo",
+        "params": {
+          "ping": "runtime"
+        }
+      }
+    }
+  ]
+}

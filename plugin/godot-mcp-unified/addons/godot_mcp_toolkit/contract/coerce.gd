@@ -1,0 +1,402 @@
+@tool
+extends RefCounted
+## 共享的 Variant 强制转换辅助工具及其序列化逆操作。
+##
+## _coerce_value: JSON 字典 → Godot 类型化值(用于属性写入、方法参数)。
+## _serialize_value: Godot 类型化值 → JSON 安全字典(用于属性读取、响应)。
+## _check_resource_paths: 强制转换前的门禁,用于验证 Resource 引用能否解析。
+##
+## 两个方向共享一套对称的标签词汇表 — 必须保持一致,否则往返转换会失败。
+
+# 直接 preload(不经由 _hub)以避免循环依赖 — _hub 会 preload 本文件。
+const _FileGuard := preload("res://addons/godot_mcp_toolkit/security/file_guard.gd")
+
+
+static func coerce_value(value: Variant) -> Variant:
+	if typeof(value) == TYPE_ARRAY:
+		var result: Array = []
+		for element in value:
+			result.append(coerce_value(element))
+		return result
+	if typeof(value) != TYPE_DICTIONARY:
+		return value
+	match str(value.get("type", "")):
+		"Resource", "ResourceRef":
+			var resource_path := str(value.get("path", ""))
+			if resource_path.is_empty():
+				# 落入后续分支:{"type":"Resource","resource_type":"X"} → 内联 NewResource
+				var res_class := str(value.get("resource_type", value.get("class", "")))
+				if not res_class.is_empty():
+					return coerce_value({"type": "NewResource", "class": res_class,
+						"properties": value.get("properties", {})})
+				return null
+			var guard := _FileGuard.resolve_safe(resource_path)
+			if guard["error"] != null:
+				return null
+			return ResourceLoader.load(resource_path, "", ResourceLoader.CACHE_MODE_REPLACE)
+		"NewResource":
+			var res_class := str(value.get("class", ""))
+			if res_class.is_empty() or not ClassDB.class_exists(res_class):
+				return null
+			if not ClassDB.is_parent_class(res_class, "Resource"):
+				return null
+			if not ClassDB.can_instantiate(res_class):
+				return null
+			var resource = ClassDB.instantiate(res_class)
+			if resource == null:
+				return null
+			var props: Dictionary = _safe_dict(value.get("properties", {}))
+			for key in props.keys():
+				resource.set(str(key), coerce_value(props[key]))
+			return resource
+		"Vector2":
+			return Vector2(
+				float(value.get("x", 0.0)),
+				float(value.get("y", 0.0)),
+			)
+		"Vector3":
+			return Vector3(
+				float(value.get("x", 0.0)),
+				float(value.get("y", 0.0)),
+				float(value.get("z", 0.0)),
+			)
+		"Vector4":
+			return Vector4(
+				float(value.get("x", 0.0)),
+				float(value.get("y", 0.0)),
+				float(value.get("z", 0.0)),
+				float(value.get("w", 0.0)),
+			)
+		"Vector2i":
+			return Vector2i(int(value.get("x", 0)), int(value.get("y", 0)))
+		"Vector3i":
+			return Vector3i(
+				int(value.get("x", 0)),
+				int(value.get("y", 0)),
+				int(value.get("z", 0)),
+			)
+		"Color":
+			return Color(
+				float(value.get("r", 0.0)),
+				float(value.get("g", 0.0)),
+				float(value.get("b", 0.0)),
+				float(value.get("a", 1.0)),
+			)
+		"Rect2":
+			return Rect2(
+				float(value.get("x", 0.0)),
+				float(value.get("y", 0.0)),
+				float(value.get("w", 0.0)),
+				float(value.get("h", 0.0)),
+			)
+		"Rect2i":
+			return Rect2i(
+				int(value.get("x", 0)),
+				int(value.get("y", 0)),
+				int(value.get("w", 0)),
+				int(value.get("h", 0)),
+			)
+		"Transform2D":
+			var x_axis: Dictionary = _safe_dict(value.get("x_axis", {}))
+			var y_axis: Dictionary = _safe_dict(value.get("y_axis", {}))
+			var origin_2d: Dictionary = _safe_dict(value.get("origin", {}))
+			return Transform2D(
+				Vector2(float(x_axis.get("x", 1.0)), float(x_axis.get("y", 0.0))),
+				Vector2(float(y_axis.get("x", 0.0)), float(y_axis.get("y", 1.0))),
+				Vector2(float(origin_2d.get("x", 0.0)), float(origin_2d.get("y", 0.0))),
+			)
+		"Transform3D":
+			var basis_dict: Dictionary = _safe_dict(value.get("basis", {}))
+			var basis_x: Dictionary = _safe_dict(basis_dict.get("x", {}))
+			var basis_y: Dictionary = _safe_dict(basis_dict.get("y", {}))
+			var basis_z: Dictionary = _safe_dict(basis_dict.get("z", {}))
+			var origin_3d: Dictionary = _safe_dict(value.get("origin", {}))
+			var basis := Basis(
+				Vector3(float(basis_x.get("x", 1.0)), float(basis_x.get("y", 0.0)), float(basis_x.get("z", 0.0))),
+				Vector3(float(basis_y.get("x", 0.0)), float(basis_y.get("y", 1.0)), float(basis_y.get("z", 0.0))),
+				Vector3(float(basis_z.get("x", 0.0)), float(basis_z.get("y", 0.0)), float(basis_z.get("z", 1.0))),
+			)
+			return Transform3D(
+				basis,
+				Vector3(
+					float(origin_3d.get("x", 0.0)),
+					float(origin_3d.get("y", 0.0)),
+					float(origin_3d.get("z", 0.0)),
+				),
+			)
+		"NodePath":
+			return NodePath(str(value.get("path", "")))
+		"PackedVector2Array":
+			var arr := PackedVector2Array()
+			var elements = value.get("values", [])
+			if typeof(elements) == TYPE_ARRAY:
+				for el in elements:
+					var v = coerce_value(el)
+					if v is Vector2:
+						arr.append(v)
+					elif typeof(v) == TYPE_DICTIONARY and not (v as Dictionary).has("_coerce_error"):
+						arr.append(Vector2(float(v.get("x", 0.0)), float(v.get("y", 0.0))))
+					else:
+						return {"_coerce_error":
+							"PackedVector2Array elements must be Vector2. Use: {type:'PackedVector2Array', values: [{type:'Vector2', x:0, y:0}, ...]}"}
+			return arr
+		"PackedVector3Array":
+			var arr := PackedVector3Array()
+			var elements = value.get("values", [])
+			if typeof(elements) == TYPE_ARRAY:
+				for el in elements:
+					var v = coerce_value(el)
+					if v is Vector3:
+						arr.append(v)
+					elif typeof(v) == TYPE_DICTIONARY and not (v as Dictionary).has("_coerce_error"):
+						arr.append(Vector3(float(v.get("x", 0.0)), float(v.get("y", 0.0)), float(v.get("z", 0.0))))
+					else:
+						return {"_coerce_error":
+							"PackedVector3Array elements must be Vector3. Use: {type:'PackedVector3Array', values: [{type:'Vector3', x:0, y:0, z:0}, ...]}"}
+			return arr
+		"PackedColorArray":
+			var arr := PackedColorArray()
+			var elements = value.get("values", [])
+			if typeof(elements) == TYPE_ARRAY:
+				for el in elements:
+					var v = coerce_value(el)
+					if v is Color:
+						arr.append(v)
+					elif typeof(v) == TYPE_DICTIONARY and not (v as Dictionary).has("_coerce_error"):
+						arr.append(Color(float(v.get("r", 0.0)), float(v.get("g", 0.0)),
+							float(v.get("b", 0.0)), float(v.get("a", 1.0))))
+					else:
+						return {"_coerce_error":
+							"PackedColorArray elements must be Color. Use: {type:'PackedColorArray', values: [{type:'Color', r:1, g:0, b:0, a:1}, ...]}"}
+			return arr
+		"LayerMask":
+			var lm_category := str(value.get("category", "2d_physics"))
+			return layers_to_mask(value.get("layers", []), lm_category)
+		_:
+			# 拒绝未知的类型标签,而不是静默透传。
+			var type_tag := str(value.get("type", ""))
+			if not type_tag.is_empty():
+				return {"_coerce_error":
+					"Unknown type tag '%s'. Supported: Vector2, Vector3, Vector4, Vector2i, Vector3i, Color, Rect2, Rect2i, Transform2D, Transform3D, NodePath, Resource, NewResource, PackedVector2Array, PackedVector3Array, PackedColorArray, LayerMask." % type_tag}
+			# 没有 type 键 — 通用字典,递归执行强制转换。
+			var result := {}
+			for k in value.keys():
+				result[k] = coerce_value(value[k])
+			return result
+
+
+## 将图层编号值转换为位掩码整数。
+## 接受:int(原样返回),或图层编号数组(int)或
+## 命名图层(String)→ 位掩码。命名图层通过
+## ProjectSettings(layer_names/{category}/layer_N)解析。
+static func layers_to_mask(value: Variant, category: String = "2d_physics") -> int:
+	if typeof(value) == TYPE_ARRAY:
+		var mask := 0
+		for layer in value:
+			if typeof(layer) == TYPE_STRING:
+				var n := _resolve_layer_name(str(layer), category)
+				if n >= 1:
+					mask |= (1 << (n - 1))
+			else:
+				var n := int(layer)
+				if n >= 1 and n <= 32:
+					mask |= (1 << (n - 1))
+		return mask
+	return int(value)
+
+
+## 通过扫描 ProjectSettings 将命名图层解析为从 1 开始计数的编号。
+## 若未找到该名称,则返回 -1。
+static func _resolve_layer_name(layer_name: String, category: String) -> int:
+	for n in range(1, 33):
+		var key := "layer_names/%s/layer_%d" % [category, n]
+		if ProjectSettings.has_setting(key):
+			var stored: String = str(ProjectSettings.get_setting(key))
+			if stored.to_lower() == layer_name.to_lower():
+				return n
+	return -1
+
+
+## 将 {r,g,b,a} JSON 字典映射到 Color,通道默认为不透明白色
+## (着色(tint)/ modulate 语义)。非字典值返回 [param default]
+## (自身为不透明白色,除非被覆盖);在字典内,每个缺失的通道
+## 回退为 1.0,因此不完整的 {r,g,b} 仍保持完全不透明。这与上方
+## "Color" 类型标签不同,后者的通道默认为不透明黑色(绘制(paint)
+## 语义)— 这两种默认值不可混为一谈。
+static func color_from_dict(d: Variant, default: Color = Color(1, 1, 1, 1)) -> Color:
+	if typeof(d) != TYPE_DICTIONARY:
+		return default
+	return Color(
+		float(d.get("r", 1.0)), float(d.get("g", 1.0)),
+		float(d.get("b", 1.0)), float(d.get("a", 1.0)))
+
+
+static func serialize_value(value: Variant) -> Variant:
+	match typeof(value):
+		TYPE_NIL:
+			return null
+		TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING:
+			return value
+		TYPE_VECTOR2:
+			return {"type": "Vector2", "x": value.x, "y": value.y}
+		TYPE_VECTOR3:
+			return {"type": "Vector3", "x": value.x, "y": value.y, "z": value.z}
+		TYPE_VECTOR4:
+			return {"type": "Vector4", "x": value.x, "y": value.y, "z": value.z, "w": value.w}
+		TYPE_VECTOR2I:
+			return {"type": "Vector2i", "x": value.x, "y": value.y}
+		TYPE_VECTOR3I:
+			return {"type": "Vector3i", "x": value.x, "y": value.y, "z": value.z}
+		TYPE_COLOR:
+			return {"type": "Color", "r": value.r, "g": value.g, "b": value.b, "a": value.a}
+		TYPE_RECT2:
+			return {
+				"type": "Rect2",
+				"x": value.position.x, "y": value.position.y,
+				"w": value.size.x, "h": value.size.y,
+			}
+		TYPE_RECT2I:
+			return {
+				"type": "Rect2i",
+				"x": value.position.x, "y": value.position.y,
+				"w": value.size.x, "h": value.size.y,
+			}
+		TYPE_TRANSFORM2D:
+			return {
+				"type": "Transform2D",
+				"x_axis": {"x": value.x.x, "y": value.x.y},
+				"y_axis": {"x": value.y.x, "y": value.y.y},
+				"origin": {"x": value.origin.x, "y": value.origin.y},
+			}
+		TYPE_TRANSFORM3D:
+			return {
+				"type": "Transform3D",
+				"basis": {
+					"x": {"x": value.basis.x.x, "y": value.basis.x.y, "z": value.basis.x.z},
+					"y": {"x": value.basis.y.x, "y": value.basis.y.y, "z": value.basis.y.z},
+					"z": {"x": value.basis.z.x, "y": value.basis.z.y, "z": value.basis.z.z},
+				},
+				"origin": {"x": value.origin.x, "y": value.origin.y, "z": value.origin.z},
+			}
+		TYPE_NODE_PATH:
+			return {"type": "NodePath", "path": str(value)}
+		TYPE_PACKED_VECTOR2_ARRAY:
+			# 输出 coerce_value 可解析回来的带标签形式:每个元素
+			# 本身是一个带标签的 {type:"Vector2",x,y} 字典(递归处理,确保往返转换
+			# 精确)。遍历类型化 PackedVector2Array 得到的是 Vector2 元素。
+			var packed_v2: Array = []
+			for element in value:
+				packed_v2.append(serialize_value(element))
+			return {"type": "PackedVector2Array", "values": packed_v2}
+		TYPE_PACKED_VECTOR3_ARRAY:
+			var packed_v3: Array = []
+			for element in value:
+				packed_v3.append(serialize_value(element))
+			return {"type": "PackedVector3Array", "values": packed_v3}
+		TYPE_PACKED_COLOR_ARRAY:
+			var packed_col: Array = []
+			for element in value:
+				packed_col.append(serialize_value(element))
+			return {"type": "PackedColorArray", "values": packed_col}
+		TYPE_STRING_NAME:
+			return str(value)
+		TYPE_ARRAY:
+			var serialized_array: Array = []
+			for element in value:
+				serialized_array.append(serialize_value(element))
+			return serialized_array
+		TYPE_DICTIONARY:
+			var serialized_dictionary: Dictionary = {}
+			for key in value.keys():
+				serialized_dictionary[str(key)] = serialize_value(value[key])
+			return serialized_dictionary
+		TYPE_OBJECT:
+			if value == null:
+				return null
+			if value is Node:
+				return str((value as Node).get_path())
+			if value is Resource:
+				var resource := value as Resource
+				return {
+					"type": "Resource",
+					"path": resource.resource_path,
+					"class": resource.get_class(),
+				}
+			return "<unserialisable>"
+		_:
+			return var_to_str(value)
+
+
+## 强制转换前门禁:递归扫描 {type:"Resource",path:...} 条目,
+## 并返回第一个未通过 FileGuard 或 ResourceLoader.load 的路径。
+## 空字符串表示所有 Resource 引用均可解析。
+static func check_resource_paths(value: Variant) -> String:
+	if typeof(value) == TYPE_DICTIONARY:
+		var vtype := str(value.get("type", ""))
+		if vtype == "Resource" or vtype == "ResourceRef":
+			var resource_path := str(value.get("path", ""))
+			if resource_path.is_empty():
+				# 落入后续分支:无路径的 Resource + class/resource_type → NewResource
+				var res_class := str(value.get("resource_type", value.get("class", "")))
+				if not res_class.is_empty():
+					return check_resource_paths({"type": "NewResource", "class": res_class,
+						"properties": value.get("properties", {})})
+				return "<empty path>"
+			var guard := _FileGuard.resolve_safe(resource_path)
+			if guard["error"] != null:
+				return resource_path
+			if ResourceLoader.load(resource_path) == null:
+				return resource_path
+		elif vtype == "NewResource":
+			var res_class := str(value.get("class", ""))
+			if res_class.is_empty() or not ClassDB.class_exists(res_class):
+				return "<invalid class: %s>" % res_class
+			if not ClassDB.is_parent_class(res_class, "Resource"):
+				return "<not a Resource: %s>" % res_class
+			# 递归进入 properties,检查嵌套的 Resource 引用
+			var props: Dictionary = value.get("properties", {}) if typeof(value.get("properties", null)) == TYPE_DICTIONARY else {}
+			for key in props.keys():
+				var nested := check_resource_paths(props[key])
+				if nested != "":
+					return nested
+		else:
+			# 递归进入未类型化的字典值,查找嵌套的子资源
+			for key in value.keys():
+				var nested := check_resource_paths(value[key])
+				if nested != "":
+					return nested
+		return ""
+	if typeof(value) == TYPE_ARRAY:
+		for element in value:
+			var missing := check_resource_paths(element)
+			if missing != "":
+				return missing
+	return ""
+
+
+## 使用现有属性值作为类型提示,对 JSON 值执行强制转换。
+## 当 JSON 字典缺少 "type" 键时,根据当前 Variant 类型推断正确的类型标签
+## 并注入,以便 coerce_value() 能处理它。
+## 无法推断时,回退到普通的 coerce_value()。
+static func coerce_value_hint(raw: Variant, existing: Variant) -> Variant:
+	if typeof(raw) != TYPE_DICTIONARY or (raw as Dictionary).has("type"):
+		return coerce_value(raw)
+	var tag := ""
+	match typeof(existing):
+		TYPE_VECTOR2:   tag = "Vector2"
+		TYPE_VECTOR3:   tag = "Vector3"
+		TYPE_VECTOR4:   tag = "Vector4"
+		TYPE_VECTOR2I:  tag = "Vector2i"
+		TYPE_VECTOR3I:  tag = "Vector3i"
+		TYPE_COLOR:     tag = "Color"
+		TYPE_RECT2:     tag = "Rect2"
+		TYPE_RECT2I:    tag = "Rect2i"
+	if tag.is_empty():
+		return coerce_value(raw)
+	var tagged := (raw as Dictionary).duplicate()
+	tagged["type"] = tag
+	return coerce_value(tagged)
+
+
+static func _safe_dict(value: Variant) -> Dictionary:
+	return value if typeof(value) == TYPE_DICTIONARY else {}

@@ -1,0 +1,46 @@
+{
+  "schema": "wire-fixture/1",
+  "id": "cancel-inflight-request",
+  "title": "飞行中取消:abort → 客户端以 CANCELLED 拒绝,并向 toolkit 发出 _cancel 通知(request_id 指向该请求)",
+  "contract": ["C5"],
+  "provenance": {
+    "kind": "derived",
+    "sources": [
+      "server/src/transport/channel.ts#cancelPending",
+      "addons/godot_mcp_toolkit/transport/dispatch/server_request_router.gd#_handle_cancel"
+    ],
+    "engineBasis": "形状随契约稳定(4.2–4.7)"
+  },
+  "auth": {
+    "ack": {
+      "authed": true,
+      "godot_version": "4.5.1",
+      "version": "1.0.0",
+      "headless": false
+    }
+  },
+  "steps": [
+    {
+      "name": "请求在飞 60ms 后 abort;服务器不回应该请求",
+      "call": {
+        "method": "scene.get_tree",
+        "params": {},
+        "timeoutMs": 5000,
+        "abortAfterMs": 60
+      },
+      "script": [],
+      "expect": {
+        "rejects": {
+          "code": "CANCELLED",
+          "messageIncludes": "cancelled"
+        }
+      },
+      "expectSent": {
+        "jsonrpc": "2.0",
+        "method": "scene.get_tree",
+        "params": {}
+      },
+      "expectCancelFrame": true
+    }
+  ]
+}

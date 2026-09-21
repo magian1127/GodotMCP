@@ -1,0 +1,39 @@
+{
+  "name": "godot-mcp-unified",
+  "version": "1.1.0+codex.20260914",
+  "description": "\u901a\u8fc7 83 \u4e2a MCP \u5de5\u5177\u3001\u786e\u5b9a\u6027\u6e38\u73a9\u6d4b\u8bd5\u548c\u516d\u9879\u4ee3\u7406\u6280\u80fd\u63a7\u5236\u672c\u5730 Godot 4 \u7f16\u8f91\u5668\u4e0e\u6e38\u620f\u3002",
+  "author": {
+    "name": "Magian"
+  },
+  "license": "MIT",
+  "keywords": [
+    "godot",
+    "mcp",
+    "gamedev",
+    "gdscript",
+    "dotnet",
+    "playtest"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Godot MCP Unified\uff08Godot MCP \u7edf\u4e00\u5de5\u5177\uff09",
+    "shortDescription": "\u5728\u672c\u5730\u63a7\u5236\u3001\u8c03\u8bd5\u5e76\u9a8c\u8bc1 Godot 4 \u9879\u76ee\u4e0e\u6e38\u620f",
+    "longDescription": "\u4ec5\u76d1\u542c\u672c\u5730\u4e3b\u673a\u7684 Godot \u7f16\u8f91\u5668/\u8fd0\u884c\u65f6\u6865\u63a5\uff0c\u63d0\u4f9b\u573a\u666f\u3001\u8282\u70b9\u3001\u811a\u672c\u3001\u8d44\u6e90\u3001LSP\u3001\u8c03\u8bd5\u5668\u3001\u8f93\u5165\u3001\u622a\u56fe\u548c\u786e\u5b9a\u6027\u5e27\u63a7\u5236\u5de5\u4f5c\u6d41\u3002",
+    "developerName": "Magian",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write",
+      "Interactive"
+    ],
+    "defaultPrompt": [
+      "\u68c0\u67e5\u6b64 Godot \u9879\u76ee\u5e76\u5b9e\u73b0\u8bf7\u6c42\u7684\u53d8\u66f4\u3002",
+      "\u8bca\u65ad\u6b64 Godot \u9519\u8bef\u5e76\u9a8c\u8bc1\u4fee\u590d\u7ed3\u679c\u3002",
+      "\u8fd0\u884c\u786e\u5b9a\u6027\u7684\u6e38\u73a9\u6d4b\u8bd5\u5e76\u62a5\u544a\u8bc1\u636e\u3002"
+    ],
+    "brandColor": "#478CBF",
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/icon.svg"
+  },
+  "mcpServers": "./.codex-plugin/mcp.json"
+}

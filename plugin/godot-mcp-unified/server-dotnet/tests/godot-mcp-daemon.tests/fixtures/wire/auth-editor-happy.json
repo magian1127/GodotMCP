@@ -1,0 +1,63 @@
+{
+  "schema": "wire-fixture/1",
+  "id": "auth-editor-happy",
+  "title": "编辑器鉴权握手:首帧 {auth,version} → 编辑器 ack(含 godot_version/version/headless)",
+  "contract": ["C1", "C2"],
+  "provenance": {
+    "kind": "derived",
+    "sources": [
+      "addons/godot_mcp_toolkit/transport/ws_transport.gd#validate_auth",
+      "addons/godot_mcp_toolkit/transport/mcp_server.gd#_build_auth_ack",
+      "server/src/transport/authHandshake.ts#authenticate"
+    ],
+    "engineBasis": "形状随契约稳定(4.2–4.7);godot_version/version 为示例值"
+  },
+  "auth": {
+    "ack": {
+      "authed": true,
+      "godot_version": "4.5.1",
+      "version": "1.0.0",
+      "headless": false
+    }
+  },
+  "expectAuthResolved": {
+    "version": "4.5.1",
+    "headless": false
+  },
+  "steps": [
+    {
+      "name": "鉴权后 echo 往返",
+      "call": {
+        "method": "echo",
+        "params": {
+          "ping": "hello"
+        },
+        "timeoutMs": 3000
+      },
+      "script": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": "$request_id",
+            "result": {
+              "ping": "hello"
+            }
+          }
+        }
+      ],
+      "expect": {
+        "resolves": {
+          "ping": "hello"
+        }
+      },
+      "expectSent": {
+        "jsonrpc": "2.0",
+        "method": "echo",
+        "params": {
+          "ping": "hello"
+        }
+      }
+    }
+  ],
+  "expectNotifications": []
+}

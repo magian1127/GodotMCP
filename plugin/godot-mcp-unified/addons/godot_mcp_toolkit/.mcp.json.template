@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "godot": {
+      "type": "http",
+      "url": "http://127.0.0.1:6590/",
+      "env": {
+        "GODOT_MCP_CONFIG_VERSION": "2"
+      }
+    }
+  }
+}

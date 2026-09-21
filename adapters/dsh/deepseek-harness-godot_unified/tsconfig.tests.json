@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": ".tsbuild",
+    "noCheck": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": [
+    "src/ambient.d.ts",
+    "src/*.ts",
+    "src/workbench/**/*.ts",
+    "src/bin/**/*.mts",
+    "src/tests/*.mts",
+    "src/client/grouping.ts",
+    "src/client/form-schema.ts",
+    "src/client/history.ts"
+  ],
+  "exclude": []
+}

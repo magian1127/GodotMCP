@@ -1,0 +1,17 @@
+# deepseek-harness-godot_unified bundle patch(持久挂载通道,行 id `dsh-godot`)
+#
+# 本文件随包发布并由 package.json 的 dsh.bundle.patch 引用:
+#
+#   dsh plugin --profile <name> add deepseek-harness-godot_unified
+#
+# 会把本包编进 profile 的 dsh.profile.bundles,冷启动时挂载(发布环境语义)。
+# 本机开发安装用 CLI:
+#
+#   node bin/dsh-godot.mjs install --profile web --link <项目目录> --project <Godot 项目>
+#
+# 本行只注册 Godot 工作流提示词 section(host 侧最小插件)。
+# MCP 桥接行(id `godot-mcp`,name `@deepseek-ai/dsh-mcp-client`)由 CLI 写入
+# profile 用户 patch 层——它携带机器本地路径,不属于随包发布的静态 patch。
+- insert:
+    - id: dsh-godot
+      name: 'deepseek-harness-godot_unified'

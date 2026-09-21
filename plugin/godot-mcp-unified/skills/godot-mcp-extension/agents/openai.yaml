@@ -1,0 +1,15 @@
+interface:
+  display_name: "Godot MCP 扩展"
+  short_description: "创建、测试并验证安全的项目专用 Godot MCP 工具"
+  brand_color: "#478CBF"
+  default_prompt: "使用 $godot-mcp-extension 为此项目添加专用的 Godot MCP 操作，并编写测试。"
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "godot"
+      description: "Godot MCP 扩展发现和验证工具"
+      transport: "stdio"
+
+policy:
+  allow_implicit_invocation: true

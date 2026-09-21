@@ -1,0 +1,67 @@
+{
+  "schema": "wire-fixture/1",
+  "id": "error-envelope-not-found-with-hint",
+  "title": "toolkit 失败信封走 result(非 error 帧):{success:false, error, code, hint};客户端在通道层 resolve",
+  "contract": ["C3", "C4"],
+  "provenance": {
+    "kind": "derived",
+    "sources": [
+      "addons/godot_mcp_toolkit/contract/mcp_toolkit_error.gd#fail",
+      "addons/godot_mcp_toolkit/commands/node_commands.gd#_cmd_node_get_property",
+      "server/src/registration/toolDispatch.ts#callAndWrap(REFLECT 原样转发)"
+    ],
+    "engineBasis": "形状随契约稳定(4.2–4.7);报文取自 node.get_property 的 NOT_FOUND 分支"
+  },
+  "auth": {
+    "ack": {
+      "authed": true,
+      "godot_version": "4.5.1",
+      "version": "1.0.0",
+      "headless": false
+    }
+  },
+  "steps": [
+    {
+      "name": "节点不存在 → 失败信封(带 HINT_NODE_PATH)",
+      "call": {
+        "method": "node.get_property",
+        "params": {
+          "node_path": "HUD",
+          "property": "text"
+        },
+        "timeoutMs": 3000
+      },
+      "script": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": "$request_id",
+            "result": {
+              "success": false,
+              "error": "node not found: HUD",
+              "code": "NOT_FOUND",
+              "hint": "Use scene.get_tree to list valid node paths. Root node is always path '.'."
+            }
+          }
+        }
+      ],
+      "expect": {
+        "resolves": {
+          "success": false,
+          "error": "node not found: HUD",
+          "code": "NOT_FOUND",
+          "hint": "Use scene.get_tree to list valid node paths. Root node is always path '.'."
+        }
+      },
+      "expectSent": {
+        "jsonrpc": "2.0",
+        "method": "node.get_property",
+        "params": {
+          "node_path": "HUD",
+          "property": "text"
+        }
+      }
+    }
+  ],
+  "expectNotifications": []
+}

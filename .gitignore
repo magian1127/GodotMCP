@@ -1,0 +1,42 @@
+# Third-party source snapshots remain local research inputs.
+references/github/
+references/local/
+references/test-artifacts/
+
+# Reproducible dependencies and build/runtime state.
+plugin/godot-mcp-unified/server/node_modules/
+plugin/godot-mcp-unified/server-dotnet/**/bin/
+plugin/godot-mcp-unified/server-dotnet/**/obj/
+plugin/godot-mcp-unified/server-dotnet/publish/
+__pycache__/
+test-project/.godot/
+test-project/.godot-mcp-unified-backups/
+test-project/addons/godot_mcp_toolkit/
+
+# Mimosa security-scan and hook runtime state.
+.mimosa
+
+# Godot import sidecars generated for the acceptance fixture.
+test-project/*.import
+
+# Projects that junction the shared addon may generate its import sidecars here.
+plugin/godot-mcp-unified/addons/godot_mcp_toolkit/*.import
+
+# Visual Studio session state (regenerated on open; never tracked).
+.vs/
+plugin/godot-mcp-unified/server-dotnet/**/launchSettings.json
+
+# daemon binary drop-in for copy installs (populated by installers, never tracked).
+plugin/godot-mcp-unified/addons/godot_mcp_toolkit/bin/
+
+# Local tool caches and agent runtime state (never tracked).
+.codegraph/
+.zcode/
+.agents/
+
+# Agent scratch space (one-off scripts, smoke logs, transient artifacts; never tracked).
+/temp/
+.scratch/
+
+# Local machine paths/values (never tracked; tracked template is .env.example).
+.env

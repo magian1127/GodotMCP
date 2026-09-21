@@ -1,0 +1,76 @@
+{
+  "schema": "wire-fixture/1",
+  "id": "mutation-single-scene-create-node-created",
+  "title": "变更通道单飞:执行前先发 _executing,随后 result(status=created)",
+  "contract": ["C3", "C5", "C8"],
+  "provenance": {
+    "kind": "derived",
+    "sources": [
+      "addons/godot_mcp_toolkit/transport/dispatch/dispatch_lane.gd#MutationLane._execute",
+      "addons/godot_mcp_toolkit/commands/scene_commands.gd#_cmd_scene_create_node(created 分支)"
+    ],
+    "engineBasis": "形状随契约稳定(4.2–4.7);节点路径为示例"
+  },
+  "auth": {
+    "ack": {
+      "authed": true,
+      "godot_version": "4.5.1",
+      "version": "1.0.0",
+      "headless": false
+    }
+  },
+  "steps": [
+    {
+      "name": "变更往返:_executing → result",
+      "call": {
+        "method": "scene.create_node",
+        "params": {
+          "class_name": "Label",
+          "parent_path": ".",
+          "node_name": "HUD"
+        },
+        "timeoutMs": 3000
+      },
+      "script": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "method": "_executing",
+            "params": {
+              "request_id": "$request_id"
+            }
+          }
+        },
+        {
+          "afterMs": 20,
+          "send": {
+            "jsonrpc": "2.0",
+            "id": "$request_id",
+            "result": {
+              "status": "created",
+              "path": "HUD",
+              "success": true
+            }
+          }
+        }
+      ],
+      "expect": {
+        "resolves": {
+          "status": "created",
+          "path": "HUD",
+          "success": true
+        }
+      },
+      "expectSent": {
+        "jsonrpc": "2.0",
+        "method": "scene.create_node",
+        "params": {
+          "class_name": "Label",
+          "parent_path": ".",
+          "node_name": "HUD"
+        }
+      }
+    }
+  ],
+  "expectNotifications": []
+}

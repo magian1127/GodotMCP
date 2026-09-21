@@ -1,0 +1,74 @@
+{
+  "schema": "wire-fixture/1",
+  "id": "echo-roundtrip",
+  "title": "echo:传输层诊断请求,result 原样回送 params;请求帧四键 (jsonrpc/id/method/params) 钉形",
+  "contract": ["C1"],
+  "provenance": {
+    "kind": "derived",
+    "sources": [
+      "addons/godot_mcp_toolkit/transport/dispatch/server_request_router.gd#route_request(echo)",
+      "server/src/transport/channel.ts#call(请求帧构造)"
+    ],
+    "engineBasis": "形状随契约稳定(4.2–4.7)"
+  },
+  "auth": {
+    "ack": {
+      "authed": true,
+      "godot_version": "4.5.1",
+      "version": "1.0.0",
+      "headless": false
+    }
+  },
+  "steps": [
+    {
+      "name": "嵌套 params 原样回送",
+      "call": {
+        "method": "echo",
+        "params": {
+          "nested": {
+            "list": [1, 2, 3],
+            "flag": true
+          },
+          "zero": 0
+        },
+        "timeoutMs": 3000
+      },
+      "script": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": "$request_id",
+            "result": {
+              "nested": {
+                "list": [1, 2, 3],
+                "flag": true
+              },
+              "zero": 0
+            }
+          }
+        }
+      ],
+      "expect": {
+        "resolves": {
+          "nested": {
+            "list": [1, 2, 3],
+            "flag": true
+          },
+          "zero": 0
+        }
+      },
+      "expectSent": {
+        "jsonrpc": "2.0",
+        "method": "echo",
+        "params": {
+          "nested": {
+            "list": [1, 2, 3],
+            "flag": true
+          },
+          "zero": 0
+        }
+      }
+    }
+  ],
+  "expectNotifications": []
+}

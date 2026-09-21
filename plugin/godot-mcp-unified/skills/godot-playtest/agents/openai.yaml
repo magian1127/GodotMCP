@@ -1,0 +1,15 @@
+interface:
+  display_name: "Godot 游玩测试"
+  short_description: "运行并验证确定性的 Godot 游戏玩法与运行时行为"
+  brand_color: "#478CBF"
+  default_prompt: "使用 $godot-playtest 运行确定性的游玩测试，并报告具体的运行时证据。"
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "godot"
+      description: "本地 Godot 运行时、输入、截图和时间控制工具"
+      transport: "stdio"
+
+policy:
+  allow_implicit_invocation: true

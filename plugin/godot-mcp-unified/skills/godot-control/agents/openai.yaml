@@ -1,0 +1,15 @@
+interface:
+  display_name: "Godot 控制"
+  short_description: "通过 MCP 构建、编辑并控制 Godot 项目的编辑器和运行时"
+  brand_color: "#478CBF"
+  default_prompt: "使用 $godot-control 检查此 Godot 项目并实现请求的变更。"
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "godot"
+      description: "本地 Godot 编辑器和运行时控制工具"
+      transport: "stdio"
+
+policy:
+  allow_implicit_invocation: true

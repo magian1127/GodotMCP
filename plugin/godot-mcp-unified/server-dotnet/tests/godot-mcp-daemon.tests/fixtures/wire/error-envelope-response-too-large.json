@@ -1,0 +1,65 @@
+{
+  "schema": "wire-fixture/1",
+  "id": "error-envelope-response-too-large",
+  "title": "超大响应被尺寸护栏替换为 RESPONSE_TOO_LARGE 失败信封(截图载荷走专用 hint),仍以 result 投递",
+  "contract": ["C3"],
+  "provenance": {
+    "kind": "derived",
+    "sources": [
+      "addons/godot_mcp_toolkit/contract/mcp_toolkit_error.gd#guard_response_size/_IMAGE_RESPONSE_TOO_LARGE_HINT"
+    ],
+    "engineBasis": "形状随契约稳定(4.2–4.7);limit 数值随对端缓冲变化,故 error 用 $regex 断言"
+  },
+  "auth": {
+    "ack": {
+      "authed": true,
+      "godot_version": "4.5.1",
+      "version": "1.0.0",
+      "headless": false
+    }
+  },
+  "steps": [
+    {
+      "name": "截图结果超缓冲 → 替换后的失败信封",
+      "call": {
+        "method": "editor.screenshot",
+        "params": {
+          "image_response_mode": "inline"
+        },
+        "timeoutMs": 3000
+      },
+      "script": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": "$request_id",
+            "result": {
+              "success": false,
+              "error": "response too large for the transport buffer (limit ~1024 KB)",
+              "code": "RESPONSE_TOO_LARGE",
+              "hint": "The captured image exceeded the WebSocket transport buffer. Retry with image_response_mode:\"disk\" to save the PNG to disk and receive only its file path, or request a smaller size. Raising mcp_toolkit/limits/ws_buffer_kb in Project Settings also works but requires a reconnect."
+            }
+          }
+        }
+      ],
+      "expect": {
+        "resolves": {
+          "success": false,
+          "error": {
+            "$regex": "^response too large for the transport buffer \\(limit ~\\d+ KB\\)$"
+          },
+          "code": "RESPONSE_TOO_LARGE",
+          "hint": "The captured image exceeded the WebSocket transport buffer. Retry with image_response_mode:\"disk\" to save the PNG to disk and receive only its file path, or request a smaller size. Raising mcp_toolkit/limits/ws_buffer_kb in Project Settings also works but requires a reconnect."
+        }
+      },
+      "expectSent": {
+        "jsonrpc": "2.0",
+        "method": "editor.screenshot",
+        "params": {
+          "image_response_mode": "inline"
+        }
+      }
+    }
+  ],
+  "expectNotifications": []
+}

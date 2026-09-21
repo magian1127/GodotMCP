@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/godot-mcp-daemon/godot-mcp-daemon.csproj" />
+    <Project Path="src/godot-mcp-shim/godot-mcp-shim.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/godot-mcp-daemon.tests/godot-mcp-daemon.tests.csproj" />
+  </Folder>
+</Solution>

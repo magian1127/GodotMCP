@@ -1,0 +1,15 @@
+interface:
+  display_name: "Godot 调试"
+  short_description: "诊断、修复并验证 Godot 编辑器、脚本和运行时故障"
+  brand_color: "#478CBF"
+  default_prompt: "使用 $godot-debug 复现此 Godot 故障、找出原因、修复问题，并验证同一案例。"
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "godot"
+      description: "本地 Godot 诊断、调试器、编辑器和运行时工具"
+      transport: "stdio"
+
+policy:
+  allow_implicit_invocation: true

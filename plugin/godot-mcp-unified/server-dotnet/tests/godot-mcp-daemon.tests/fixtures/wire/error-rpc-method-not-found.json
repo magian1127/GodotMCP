@@ -1,0 +1,55 @@
+{
+  "schema": "wire-fixture/1",
+  "id": "error-rpc-method-not-found",
+  "title": "未注册方法:JSON-RPC error 帧 (-32601) → 客户端以 RPC_ERROR '<code>: <message>' 拒绝",
+  "contract": ["C4"],
+  "provenance": {
+    "kind": "derived",
+    "sources": [
+      "addons/godot_mcp_toolkit/transport/dispatch/server_request_router.gd#route_request(注册表未命中)",
+      "server/src/transport/channel.ts#(message.error → BridgeError RPC_ERROR)"
+    ],
+    "engineBasis": "形状随契约稳定(4.2–4.7)"
+  },
+  "auth": {
+    "ack": {
+      "authed": true,
+      "godot_version": "4.5.1",
+      "version": "1.0.0",
+      "headless": false
+    }
+  },
+  "steps": [
+    {
+      "name": "未知 domain.verb",
+      "call": {
+        "method": "no.such.verb",
+        "params": {},
+        "timeoutMs": 3000
+      },
+      "script": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": "$request_id",
+            "error": {
+              "code": -32601,
+              "message": "Method not found: no.such.verb"
+            }
+          }
+        }
+      ],
+      "expect": {
+        "rejects": {
+          "code": "RPC_ERROR",
+          "messageIncludes": "-32601: Method not found: no.such.verb"
+        }
+      },
+      "expectSent": {
+        "jsonrpc": "2.0",
+        "method": "no.such.verb",
+        "params": {}
+      }
+    }
+  ]
+}

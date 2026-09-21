@@ -1,0 +1,138 @@
+{
+  "schema": "wire-fixture/1",
+  "id": "mutation-serialized-queued-executing",
+  "title": "变更串行化:A 在飞,B 排队(_queued)→ A 完成后 B 执行(_executing → result);B 为幂等 returned 分支",
+  "contract": ["C3", "C5", "C6", "C8"],
+  "provenance": {
+    "kind": "derived",
+    "sources": [
+      "addons/godot_mcp_toolkit/transport/dispatch/dispatch_lane.gd#MutationLane(_enqueue/_execute/drain)",
+      "addons/godot_mcp_toolkit/commands/scene_commands.gd#_cmd_scene_create(returned 分支)"
+    ],
+    "engineBasis": "形状随契约稳定(4.2–4.7);时间轴按语料脚本顺序,仅约束帧序不约束真实间隔"
+  },
+  "auth": {
+    "ack": {
+      "authed": true,
+      "godot_version": "4.5.1",
+      "version": "1.0.0",
+      "headless": false
+    }
+  },
+  "steps": [
+    {
+      "name": "两条变更并发发出,B 被串行化",
+      "concurrentCalls": [
+        {
+          "label": "A",
+          "call": {
+            "method": "scene.create_node",
+            "params": {
+              "class_name": "Label",
+              "parent_path": ".",
+              "node_name": "HUD"
+            },
+            "timeoutMs": 3000
+          },
+          "script": [
+            {
+              "afterMs": 150,
+              "send": {
+                "jsonrpc": "2.0",
+                "id": "$request_id",
+                "result": {
+                  "status": "created",
+                  "path": "HUD",
+                  "success": true
+                }
+              }
+            }
+          ]
+        },
+        {
+          "label": "B",
+          "afterMs": 80,
+          "call": {
+            "method": "scene.create",
+            "params": {
+              "file_path": "res://Levels/Level01.tscn"
+            },
+            "timeoutMs": 3000
+          },
+          "script": [
+            {
+              "send": {
+                "jsonrpc": "2.0",
+                "method": "_queued",
+                "params": {
+                  "request_id": "$request_id"
+                }
+              }
+            },
+            {
+              "afterMs": 90,
+              "send": {
+                "jsonrpc": "2.0",
+                "method": "_executing",
+                "params": {
+                  "request_id": "$request_id"
+                }
+              }
+            },
+            {
+              "afterMs": 120,
+              "send": {
+                "jsonrpc": "2.0",
+                "id": "$request_id",
+                "result": {
+                  "status": "returned",
+                  "path": "res://Levels/Level01.tscn",
+                  "root_name": "Level01",
+                  "root_path": ".",
+                  "success": true
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "A": {
+          "resolves": {
+            "status": "created",
+            "path": "HUD",
+            "success": true
+          }
+        },
+        "B": {
+          "resolves": {
+            "status": "returned",
+            "path": "res://Levels/Level01.tscn",
+            "root_name": "Level01",
+            "root_path": ".",
+            "success": true
+          }
+        }
+      },
+      "expectSent": {
+        "A": {
+          "jsonrpc": "2.0",
+          "method": "scene.create_node",
+          "params": {
+            "class_name": "Label",
+            "parent_path": ".",
+            "node_name": "HUD"
+          }
+        },
+        "B": {
+          "jsonrpc": "2.0",
+          "method": "scene.create",
+          "params": {
+            "file_path": "res://Levels/Level01.tscn"
+          }
+        }
+      }
+    }
+  ],
+  "expectNotifications": []
+}

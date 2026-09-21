@@ -1,0 +1,113 @@
+{
+  "schema": "wire-fixture/1",
+  "id": "notify-extensions-changed",
+  "title": "广播信封 {notification, params}:extensions.changed 携带 {commands, removed};entry 形状见 build_command_entry",
+  "contract": ["C14"],
+  "provenance": {
+    "kind": "derived",
+    "sources": [
+      "addons/godot_mcp_toolkit/extensions/services/extension_watcher.gd#_broadcast_extensions_changed",
+      "addons/godot_mcp_toolkit/extensions/services/extension_meta_commands.gd#build_command_entry",
+      "server/src/transport/channel.ts#(notification 字段分发)"
+    ],
+    "engineBasis": "形状随契约稳定(4.2–4.7);命令条目为示例"
+  },
+  "auth": {
+    "ack": {
+      "authed": true,
+      "godot_version": "4.5.1",
+      "version": "1.0.0",
+      "headless": false
+    }
+  },
+  "onConnect": [
+    {
+      "afterMs": 30,
+      "send": {
+        "notification": "extensions.changed",
+        "params": {
+          "commands": [
+            {
+              "method": "demo.hello",
+              "description": "Say hello",
+              "input_schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              },
+              "annotations": {
+                "readOnlyHint": true,
+                "destructiveHint": false,
+                "idempotentHint": true
+              },
+              "group": {
+                "name": "demo_tools",
+                "description": "Demo tools"
+              }
+            }
+          ],
+          "removed": ["demo.bye"]
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "name": "鉴权后一次 echo 往返",
+      "call": {
+        "method": "echo",
+        "params": {},
+        "timeoutMs": 3000
+      },
+      "script": [
+        {
+          "send": {
+            "jsonrpc": "2.0",
+            "id": "$request_id",
+            "result": {}
+          }
+        }
+      ],
+      "expect": {
+        "resolves": {}
+      }
+    },
+    {
+      "sleepMs": 120
+    }
+  ],
+  "expectNotifications": [
+    {
+      "type": "extensions.changed",
+      "params": {
+        "commands": [
+          {
+            "method": "demo.hello",
+            "description": "Say hello",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false,
+              "idempotentHint": true
+            },
+            "group": {
+              "name": "demo_tools",
+              "description": "Demo tools"
+            }
+          }
+        ],
+        "removed": ["demo.bye"]
+      }
+    }
+  ]
+}

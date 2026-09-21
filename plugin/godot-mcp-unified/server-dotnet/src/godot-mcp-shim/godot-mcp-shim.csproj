@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>GodotMcp.Shim</RootNamespace>
+    <AssemblyName>godot-mcp-shim</AssemblyName>
+    <!-- 版本随插件产品线(plugin.cfg 1.0.0;迁移期纪律,随 18/19 收尾)。 -->
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+</Project>
