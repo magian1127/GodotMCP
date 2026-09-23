@@ -6,7 +6,7 @@
  * 顶层 YAML 数组(空时保留 `[]`)。原子写 + 同目录写锁 + 陈锁回收。
  */
 import { closeSync, existsSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
-import { BUNDLE_ROW_ID, MCP_ROW_ID, ROW_BEGIN, ROW_END } from './cli/constants.mjs'
+import { BUNDLE_ROW_ID, isScriptEntry, MCP_ROW_ID, ROW_BEGIN, ROW_END } from './cli/constants.mjs'
 import { patchPath } from './cli/paths.mjs'
 
 function escapeRe(text: string): string {
@@ -109,7 +109,22 @@ export function yamlScalar(value: string): string {
   return `'${value.replace(/'/g, "''")}'`
 }
 
-/** 生成受管块内容:mcp-client 桥接行。 */
+/** YAML 单引号标量还原(内部单引号减半);非引号形态原样返回。 */
+function parseYamlScalar(raw: string): string {
+  const trimmed = raw.trim()
+  if (trimmed.length >= 2 && trimmed.startsWith("'") && trimmed.endsWith("'")) {
+    return trimmed.slice(1, -1).replace(/''/g, "'")
+  }
+  return trimmed
+}
+
+/**
+ * 生成受管块内容:mcp-client 桥接行。
+ *
+ * 入口按类型落到两种等价形态:随包 shim 是 native 可执行文件(标准形态,
+ * 由它自举 daemon)→ `command` 直接是该路径、`args` 为空;`.mjs/.js` 脚本
+ * (仅 stdio 兜底桥或回滚通道)才经 node 执行 → `command: node` + `args: [路径]`。
+ */
 export function mcpRowBlock(opts: McpRowOptions): string {
   const env: Array<[string, string]> = [
     ['GODOT_MCP_PROJECT_PATH', opts.projectPath],
@@ -121,6 +136,7 @@ export function mcpRowBlock(opts: McpRowOptions): string {
   if (opts.editorPort !== null) env.push(['GODOT_MCP_EDITOR_PORT', String(opts.editorPort)])
   if (opts.runtimePort !== null) env.push(['GODOT_MCP_RUNTIME_PORT', String(opts.runtimePort)])
 
+  const scriptEntry = isScriptEntry(opts.serverDist)
   const lines: string[] = [
     `${ROW_BEGIN} — managed by dsh-godot CLI (install/uninstall); do not edit by hand`,
     '- insert:',
@@ -129,11 +145,14 @@ export function mcpRowBlock(opts: McpRowOptions): string {
     '      config:',
     `        serverName: ${opts.serverName}`,
     '        transport: stdio',
-    '        command: node',
-    '        args:',
-    `          - ${yamlScalar(opts.serverDist)}`,
-    '        env:',
+    scriptEntry ? '        command: node' : `        command: ${yamlScalar(opts.serverDist)}`,
   ]
+  if (scriptEntry) {
+    lines.push('        args:', `          - ${yamlScalar(opts.serverDist)}`)
+  } else {
+    lines.push('        args: []')
+  }
+  lines.push('        env:')
   for (const [key, value] of env) lines.push(`          ${key}: ${yamlScalar(value)}`)
   if (opts.timeoutMs !== null) lines.push(`        toolCallTimeoutMs: ${opts.timeoutMs}`)
   // 双条目:同块追加 dsh-godot bundle 行 config 覆盖(serverName + 可选根/项目)。
@@ -157,7 +176,13 @@ export function mcpRowBlock(opts: McpRowOptions): string {
 /** 从受管块文本解析关键配置(status 用);块缺失返回 null。 */
 export function parseMcpRowBlock(block: string): { serverName: string; serverDist: string; projectPath: string; readOnly: boolean } | null {
   const serverName = block.match(/^ {8}serverName: (\S+)$/m)?.[1]
-  const serverDist = block.match(/^ {10}- '([^']+)'$/m)?.[1]
+  // 入口两种形态:command 即入口(native shim),或 command: node + args 里的脚本。
+  const command = block.match(/^ {8}command: (.+)$/m)?.[1]
+  let serverDist: string | undefined
+  if (command !== undefined) {
+    const parsedCommand = parseYamlScalar(command)
+    serverDist = parsedCommand === 'node' ? block.match(/^ {10}- '([^']+)'$/m)?.[1] : parsedCommand
+  }
   const projectPath = block.match(/^ {10}GODOT_MCP_PROJECT_PATH: '([^']+)'$/m)?.[1]
   if (serverName === undefined || serverDist === undefined || projectPath === undefined) return null
   return { serverName, serverDist, projectPath, readOnly: /GODOT_MCP_READ_ONLY: '1'/.test(block) }

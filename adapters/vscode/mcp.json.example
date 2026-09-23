@@ -1,12 +1,9 @@
 {
-  "mcpServers": {
+  "servers": {
     "godot": {
-      "type": "http",
-      "url": "http://127.0.0.1:6590/",
-      "headers": {
-        "Authorization": "Bearer <daemon-token>"
-      },
-      "timeoutMs": 120000
+      "type": "stdio",
+      "command": "C:/path/to/GodotMCP/plugin/godot-mcp-unified/server-dotnet/publish/win-x64/godot-mcp-shim.exe",
+      "args": []
     }
   }
 }

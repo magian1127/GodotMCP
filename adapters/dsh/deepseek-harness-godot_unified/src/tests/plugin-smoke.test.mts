@@ -2,7 +2,7 @@
 // 重复注册容错、工作台装配与 teardown。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { apply, inject, name, parsePluginConfig, SETTINGS_NAMESPACE, GODOT_PRESET_ID } from '../index.js'
+import { apply, inject, name, parsePluginConfig, Config, GODOT_PRESET_ID } from '../index.js'
 import { SECTION_NAME } from '../constants.js'
 
 interface SectionRecord { name: string; order?: number; text: () => string }
@@ -17,6 +17,13 @@ function makeCtx(options: { alwaysReject?: boolean; agents?: FakeAgent[]; settin
   const sections: SectionRecord[] = []
   const effects: Array<() => void> = []
   const listeners = new Map<string, Array<(payload: unknown) => void>>()
+  // 模拟宿主物化 volatile 引用:apply 必须收到本对象(字段带 .get()),实时
+  // 变更改 configState 后经 emit('loader/volatile-update') 派发。
+  const configState: Record<string, unknown> = { ...(options.settings ?? {}) }
+  const configRef: Record<string, unknown> = {}
+  for (const key of Object.keys(configState)) {
+    configRef[key] = { get: () => configState[key] }
+  }
 
   const promptService = {
     section: (input: SectionRecord) => {
@@ -56,6 +63,14 @@ function makeCtx(options: { alwaysReject?: boolean; agents?: FakeAgent[]; settin
     effects,
     listeners,
     agents: agentShapes,
+    configRef,
+    fireVolatile(patch: Record<string, unknown>): void {
+      Object.assign(configState, patch)
+      for (const key of Object.keys(configState)) {
+        if (configRef[key] === undefined) configRef[key] = { get: () => configState[key] }
+      }
+      for (const handler of listeners.get('loader/volatile-update') ?? []) handler([])
+    },
     emit(name: string, payload?: unknown): void {
       for (const handler of listeners.get(name) ?? []) handler(payload)
     },
@@ -67,17 +82,6 @@ function makeCtx(options: { alwaysReject?: boolean; agents?: FakeAgent[]; settin
           { name: 'godot_scene_get_tree' },
           { name: 'read' },
         ],
-      }
-      if (service === 'settings') {
-        return {
-          register: (_namespace: string, _schema: unknown, opts: { base: Record<string, unknown> }) => ({
-            get: () => (options.settings ?? opts.base),
-            watch: (_listener: (next: Record<string, unknown>) => void) => {
-              listeners.set('settings/watch', [...(listeners.get('settings/watch') ?? []), _listener])
-              return () => {}
-            },
-          }),
-        }
       }
       if (service === 'agents') return { list: () => (options.listAgents === false ? [] : agentShapes) }
       if (service === 'agentPresets') return { composedPreset: (agentCtx: { presetId?: string }) => agentCtx?.presetId }
@@ -96,20 +100,22 @@ function makeCtx(options: { alwaysReject?: boolean; agents?: FakeAgent[]; settin
 
 test('模块导出形状', () => {
   assert.equal(name, 'deepseek-harness-godot_unified')
-  assert.deepEqual(inject, ['systemPrompt', 'tools', 'settings', 'agents'])
-  assert.equal(SETTINGS_NAMESPACE, 'godot')
+  assert.deepEqual(inject, ['systemPrompt', 'tools', 'agents'])
+  // Config 为宿主 0.1.7+ 投影表单的依据;本机 profile 有 schemastery 时为可调用
+  // schema,不可用时导出 undefined(绝不能是 null,会崩掉宿主整页设置)。
+  assert.ok(Config === undefined || typeof Config === 'object' || typeof Config === 'function')
   assert.equal(GODOT_PRESET_ID, 'godot')
 })
 
 test('apply:默认(未开原版模式)不注册全局 section', () => {
   const ctx = makeCtx()
-  apply(ctx as never)
+  apply(ctx as never, ctx.configRef)
   assert.equal(ctx.sections.length, 0)
 })
 
 test('apply:原版模式注册全局 section,默认 serverName=godot;teardown 注销', () => {
   const ctx = makeCtx({ settings: { injectLegacyMode: true } })
-  apply(ctx as never)
+  apply(ctx as never, ctx.configRef)
   assert.equal(ctx.sections.length, 1)
   assert.equal(ctx.sections[0]!.name, SECTION_NAME)
   assert.ok(ctx.sections[0]!.text().includes('godot_discover_tools'))
@@ -120,14 +126,14 @@ test('apply:原版模式注册全局 section,默认 serverName=godot;teardown �
 })
 
 test('apply:原版模式下 config.serverName 覆盖工具前缀', () => {
-  const ctx = makeCtx({ settings: { injectLegacyMode: true } })
-  apply(ctx as never, { serverName: 'gd47' })
+  const ctx = makeCtx({ settings: { injectLegacyMode: true, serverName: 'gd47' } })
+  apply(ctx as never, ctx.configRef)
   assert.ok(ctx.sections[0]!.text().includes('gd47_discover_tools'))
 })
 
 test('apply:重复注册(双行并存)被容错,不抛异常', () => {
   const rejected = makeCtx({ alwaysReject: true, settings: { injectLegacyMode: true } })
-  assert.doesNotThrow(() => apply(rejected as never))
+  assert.doesNotThrow(() => apply(rejected as never, rejected.configRef))
   // 被拒实例未注册成功;teardown effect 仍注册但内部为 no-op。
   assert.equal(rejected.sections.length, 0)
   assert.doesNotThrow(() => rejected.effects[0]!())
@@ -137,7 +143,7 @@ test('apply:agent/created 按 preset 分流——Godot preset 得提示词,其�
   const ctx = makeCtx({
     agents: [{ presetId: 'godot', restrictCalls: [], scopedSections: [] }, { presetId: 'standard', restrictCalls: [], scopedSections: [] }],
   })
-  apply(ctx as never)
+  apply(ctx as never, ctx.configRef)
   // 默认策略:全局无 section;Godot preset agent 注册 scoped section(fake 环境里
   // agent.ctx.get('systemPrompt') 即全局 promptService,注册落在同一数组),
   // standard agent 不注册提示词、只被 restrict deny。
@@ -150,7 +156,7 @@ test('apply:agent/created 按 preset 分流——Godot preset 得提示词,其�
 test('apply:agent/created 的 deny 名单只含 godot_* 工具;重复 created 幂等跳过', () => {
   // fresh agent 不在 apply 时的 list 中:走 agent/created 首次安装。
   const ctx = makeCtx({ agents: [{ presetId: 'standard', restrictCalls: [], scopedSections: [] }], listAgents: false })
-  apply(ctx as never)
+  apply(ctx as never, ctx.configRef)
   assert.equal(ctx.sections.length, 0)
   ctx.emit('agent/created', { agent: ctx.agents[0] })
   const calls = restrictedOf(ctx, 0)
@@ -168,13 +174,11 @@ function restrictedOf(ctx: ReturnType<typeof makeCtx>, index: number): Array<{ d
   return (ctx.agents[index] as unknown as { restrictCalls: Array<{ deny?: string[] }> }).restrictCalls
 }
 
-test('apply:settings watch 切原版模式后全局 section 出现', () => {
+test('apply:volatile 变更切原版模式后全局 section 出现', () => {
   const ctx = makeCtx()
-  apply(ctx as never)
+  apply(ctx as never, ctx.configRef)
   assert.equal(ctx.sections.length, 0)
-  for (const listener of ctx.listeners.get('settings/watch') ?? []) {
-    listener({ injectLegacyMode: true, promptGuidance: true, zhPrompt: false })
-  }
+  ctx.fireVolatile({ injectLegacyMode: true, promptGuidance: true, zhPrompt: false })
   assert.equal(ctx.sections.length, 1)
   assert.equal(ctx.sections[0]!.name, SECTION_NAME)
 })
@@ -251,7 +255,7 @@ function makeWorkbenchCtx(hasTools: boolean) {
 
 test('apply:tools 在场时经 inject 挂载工作台路由;teardown 注销', () => {
   const ctx = makeWorkbenchCtx(true)
-  apply(ctx as never)
+  apply(ctx as never, ctx.configRef)
   assert.deepEqual(ctx.state.injectDeps, ['webServer'])
   ctx.state.injectCb!()
   assert.equal(ctx.routes.length, 8)
@@ -261,7 +265,7 @@ test('apply:tools 在场时经 inject 挂载工作台路由;teardown 注销', ()
 
 test('apply:tools 缺席时不装配工作台路由', () => {
   const ctx = makeWorkbenchCtx(false)
-  apply(ctx as never)
+  apply(ctx as never, ctx.configRef)
   assert.equal(ctx.state.injectDeps, undefined)
   assert.equal(ctx.routes.length, 0)
 })

@@ -15,7 +15,7 @@
 ## 前提
 
 1. DSH（CLI 自带 `@deepseek-ai/dsh-mcp-client`，无需另装）。
-2. GodotMCP 工作区就绪：`<GodotMCP>/adapters/dsh/godot-http-bridge.mjs` 在位（仓库自带，随桥接自举拉起机器级 daemon——daemon 由 GodotMCP 的 `adapters/zcode/install-http-face.ps1` 发布，或编辑器边车自动拉起；Node 桥已随插件 1.1.0 退役）。
+2. GodotMCP 工作区就绪：随包 shim 在位——`<GodotMCP>/plugin/godot-mcp-unified/server-dotnet/publish/<rid>/godot-mcp-shim[.exe]`（由仓库发布产出：`dotnet publish plugin/godot-mcp-unified/server-dotnet/src/godot-mcp-shim -c Release -p:PublishProfile=<rid>`）。host 直接 spawn 该 shim，由它确保机器级单例 daemon 在跑（同目录的 `godot-mcp-daemon[.exe]`）再把 stdio 转发到 daemon 的 HTTP 面，因此不要求 daemon 先被别处拉起。仅 stdio 兜底/回滚时才用 `<GodotMCP>/adapters/dsh/godot-http-bridge.mjs`（Node 脚本，经 node 执行；Node 桥已随插件 1.1.0 退役）。
 3. 目标 Godot 项目已安装 `godot_mcp_toolkit` addon（用 GodotMCP 的 `install-godot-project.ps1`），且**编辑器正在运行**（无头亦可：`godot --headless --editor --path <项目>`）。server 不启动编辑器；编辑器不在时工具调用返回可行动错误。
 
 ## 环境要求
@@ -36,12 +36,12 @@ node bin/dsh-godot.mjs install --profile web \
 # 或不装 bundle(只要桥接能力,不要提示词 section/工作台):
 node bin/dsh-godot.mjs install --profile web \
   --project <Godot 项目绝对路径> \
-  --server-dist <GodotMCP>/adapters/dsh/godot-http-bridge.mjs
+  --server-dist <GodotMCP>/plugin/godot-mcp-unified/server-dotnet/publish/<rid>/godot-mcp-shim.exe
 ```
 
 server dist 解析顺序：`--server-dist` > `$GODOT_MCP_SERVER_DIST` > `--godot-mcp-root`/`$GODOT_MCP_ROOT`。
 
-v0.4 起 install **不再写官方 mcp-client 行**（自研桥接）：把 `serverDist` 与 `{cwd, projectPath}` 条目写入 `$DSH_HOME/godot/paths.json`（并清理历史官方桥接行）。路径生效无需重启——在 **Godot preset 会话**（`~/.dsh/.agent-presets/godot/`）中首次创建时桥接自动加载；也可在侧栏「插件」页 → deepseek-harness-godot_unified 页面按 cwd 增改路径（保存即时生效，DSH 0.1.6+）。不同会话工作区可以配置不同 Godot 项目。
+v0.4 起 install **不再写官方 mcp-client 行**（自研桥接）：把 `serverDist` 与 `{cwd, projectPath}` 条目写入 `$DSH_HOME/godot/paths.json`（并清理历史官方桥接行）。路径生效无需重启——在 **Godot preset 会话**（`Godot` 模式，由本包 bundle patch 的 `preset-godot` 行声明，无需手工安装 preset 目录）中首次创建时桥接自动加载；也可在侧栏「插件」页 → deepseek-harness-godot_unified 页面按 cwd 增改路径（保存即时生效，DSH 0.1.6+）。不同会话工作区可以配置不同 Godot 项目。
 
 ### 常用选项
 
@@ -59,6 +59,8 @@ dsh --profile web --dump-config | grep godot  # 组合校验(不启动)
 ```
 
 GUI 里：用 Godot preset 新建会话 → 模型即可看到 `godot_*` 工具；也可在「Godot」工作台 Tab 浏览/手动调用。前提是目标项目的 Godot 编辑器在运行。
+
+**技能目录**：本包的 6 个 Godot 工作流技能（godot-control / godot-debug / godot-mcp-extension / godot-playtest / godot-project-setup / godot-ui）随 Godot preset 提供，来源是包内 `skills/`——它是指向上游 GodotMCP `plugin/godot-mcp-unified/skills` 的 junction，**改上游即时生效**（无需重建本包）。历史 `~/.dsh/.agent-presets/godot/skills/` 目录已废弃（DSH 0.1.6+ 不再读取该目录）。
 
 ## 卸载
 

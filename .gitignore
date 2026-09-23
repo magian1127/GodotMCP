@@ -19,8 +19,15 @@ test-project/addons/godot_mcp_toolkit/
 # Godot import sidecars generated for the acceptance fixture.
 test-project/*.import
 
+# Godot runtime user data written by acceptance/editor runs (app_userdata logs).
+test-project/Godot/
+
 # Projects that junction the shared addon may generate its import sidecars here.
 plugin/godot-mcp-unified/addons/godot_mcp_toolkit/*.import
+
+# DSH adapter's skills/ is a junction view of plugin/godot-mcp-unified/skills
+# (single source of truth lives upstream; never track the duplicate path).
+adapters/dsh/deepseek-harness-godot_unified/skills/
 
 # Visual Studio session state (regenerated on open; never tracked).
 .vs/
@@ -33,6 +40,9 @@ plugin/godot-mcp-unified/addons/godot_mcp_toolkit/bin/
 .codegraph/
 .zcode/
 .agents/
+# AI session state (memory/logs). Contains machine-local absolute paths, which the
+# release checklist forbids in tracked files — never track it.
+.workbuddy/
 
 # Agent scratch space (one-off scripts, smoke logs, transient artifacts; never tracked).
 /temp/

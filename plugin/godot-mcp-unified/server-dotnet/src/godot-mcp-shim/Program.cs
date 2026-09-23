@@ -3,7 +3,8 @@
 /// <para>逻辑链:控制台重设为显式 UTF-8 无 BOM(stdout 只承载协议消息,其余输出一律走 stderr)→
 /// 从环境变量构建 ShimOptions,组合 DaemonBootstrap 与 HttpForwarder → 启动期 EnsureAsync 自举
 /// (失败不退出:仍进入转发循环,让宿主首个调用收到明确错误而非挂死)→ 逐行读取 stdin,
-/// 空行跳过,其余整行交 HttpForwarder 转发并回写 → stdin 关闭(宿主撤退)即退出,
+/// 空行跳过,其余整行交 HttpForwarder 转发并回写(长流方法在内部转交后台泵后立即返回,
+/// 因此长流挂起期间后续行照常转发)→ stdin 关闭(宿主撤退)时取消在飞长流并收尾后退出,
 /// daemon 交由空闲超时自管。</para>
 /// </summary>
 using System.Text;
@@ -35,7 +36,10 @@ while ((line = await Console.In.ReadLineAsync()) is not null)
     {
         continue;
     }
+    // 长流(subscriptions/listen)在此内部转交后台泵后立即返回——主循环不被长流阻塞。
     await forwarder.ForwardLineAsync(line, Console.Out);
 }
 
-// stdin 关闭 = host 撤退;daemon 交由空闲超时自管。
+// stdin 关闭 = host 撤退:取消在飞的长流并等其收尾(不留半开连接),再退出。
+// daemon 交由空闲超时自管。
+await forwarder.DisposeAsync();

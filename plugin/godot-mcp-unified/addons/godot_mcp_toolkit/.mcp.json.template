@@ -1,8 +1,9 @@
 {
   "mcpServers": {
     "godot": {
-      "type": "http",
-      "url": "http://127.0.0.1:6590/",
+      "type": "stdio",
+      "command": "<仓库>/plugin/godot-mcp-unified/server-dotnet/publish/<rid>/godot-mcp-shim[.exe]",
+      "args": [],
       "env": {
         "GODOT_MCP_CONFIG_VERSION": "2"
       }

@@ -279,6 +279,28 @@ public sealed class InstanceManager : BackgroundService
             $"no running game for instance: {key}{(inner is null ? "" : $" ({inner.Message})")}");
     }
 
+    /// <summary>OS 截图兜底的进程定位(OsWindowCapture):解析目标实例并返回
+    /// 编辑器与运行时(若有)进程 id。寻址失败返回 false(兜底放弃,不另报错)。</summary>
+    /// <param name="instance">实例标识,可空(省略时单实例隐式选中)。</param>
+    /// <param name="editorPid">编辑器进程 id。</param>
+    /// <param name="runtimePid">运行中游戏进程 id;未运行为 0。</param>
+    /// <param name="error">寻址失败时的错误;成功为 null。</param>
+    /// <returns>定位成功为 true。</returns>
+    internal bool TryGetCapturePids(string? instance, out int editorPid, out int runtimePid,
+        out InstanceCallException? error)
+    {
+        editorPid = 0;
+        runtimePid = 0;
+        var connection = ResolveConnection(instance, out error);
+        if (connection is null)
+        {
+            return false;
+        }
+        editorPid = connection.Entry.Pid;
+        runtimePid = connection.Entry.RuntimePid ?? 0;
+        return true;
+    }
+
     /// <summary>
     /// 把一次调用路由到目标实例的运行时通道(Mode B)。运行时通道缺席或连接失败
     /// 一律映射为 GAME_NOT_RUNNING(与 Node 桥 callRuntime 同语义)。

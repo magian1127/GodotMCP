@@ -3,7 +3,7 @@
  */
 import { existsSync, statSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
-import { BRIDGE_ENTRY_RELATIVE, SERVER_ENTRY_CANDIDATES } from './cli/constants.mjs'
+import { SERVER_ENTRY_CANDIDATES, shimEntryRelative } from './cli/constants.mjs'
 
 /** 解析输入(flag 与环境变量已展开)。 */
 export interface ResolveInputs {
@@ -25,7 +25,7 @@ export function toForwardSlashes(p: string): string {
  * server dist 解析优先级:
  * 1. --server-dist flag
  * 2. $GODOT_MCP_SERVER_DIST
- * 3. --godot-mcp-root flag / $GODOT_MCP_ROOT + 固定相对路径(bridge 候选优先,legacy 兼容)
+ * 3. --godot-mcp-root flag / $GODOT_MCP_ROOT + 固定相对路径(随包 shim 优先,bridge 兜底,legacy 兼容)
  * 都缺失时报错并给出可行动指引。
  */
 export function resolveServerDist(inputs: ResolveInputs): ResolveResult {
@@ -42,12 +42,12 @@ export function resolveServerDist(inputs: ResolveInputs): ResolveResult {
       const candidate = toForwardSlashes(join(resolvedRoot, ...rel.split('/')))
       if (fileExists(candidate)) return { ok: true, path: candidate }
     }
-    // 都不存在时返回 bridge 候选(daemon 桥为默认形态),让 validate 报出可行动的新形态路径。
-    return { ok: true, path: toForwardSlashes(join(resolvedRoot, ...BRIDGE_ENTRY_RELATIVE.split('/'))) }
+    // 都不存在时返回随包 shim 候选(标准形态),让 validate 报出可行动的新形态路径。
+    return { ok: true, path: toForwardSlashes(join(resolvedRoot, ...shimEntryRelative().split('/'))) }
   }
   return {
     ok: false,
-    reason: '未找到 GodotMCP 桥接 server:请传 --server-dist 指向 adapters/dsh/godot-http-bridge.mjs(daemon HTTP 自举桥)的绝对路径,或 --godot-mcp-root <GodotMCP 工作区根目录>,或设置环境变量 GODOT_MCP_SERVER_DIST / GODOT_MCP_ROOT',
+    reason: '未找到 GodotMCP 桥接 server:请传 --server-dist 指向随包 shim 的绝对路径(server-dotnet/publish/<rid>/godot-mcp-shim[.exe]),或 --godot-mcp-root <GodotMCP 工作区根目录>,或设置环境变量 GODOT_MCP_SERVER_DIST / GODOT_MCP_ROOT',
   }
 }
 
@@ -57,7 +57,7 @@ export function validateServerDistFile(path: string): ResolveResult {
     if (!statSync(path).isFile()) return { ok: false, reason: `server dist 不是普通文件: ${path}` }
     return { ok: true, path }
   } catch {
-    return { ok: false, reason: `server dist 不存在(Node 桥已退役;daemon 形态先在仓库根运行 pwsh adapters/zcode/install-http-face.ps1 发布,路径应指向 adapters/dsh/godot-http-bridge.mjs): ${path}` }
+    return { ok: false, reason: `server dist 不存在(Node 桥已退役;先在仓库根发布服务:dotnet publish plugin/godot-mcp-unified/server-dotnet/src/godot-mcp-shim -c Release -p:PublishProfile=<rid>,路径应指向 server-dotnet/publish/<rid>/godot-mcp-shim[.exe];仅 stdio 兜底才用 adapters/dsh/godot-http-bridge.mjs): ${path}` }
   }
 }
 

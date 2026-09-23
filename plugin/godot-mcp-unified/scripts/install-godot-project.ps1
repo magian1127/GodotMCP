@@ -23,6 +23,16 @@ $addonSource = Join-Path $pluginRoot "addons\godot_mcp_toolkit"
 $addonDestination = Join-Path $projectRoot "addons\godot_mcp_toolkit"
 $pluginConfigPath = "res://addons/godot_mcp_toolkit/plugin.cfg"
 
+# 服务入口（本机唯一落点：插件根的 server-dotnet/publish/<rid>/，由发布产出）。
+# 项目 .mcp.json 的 stdio 条目就指向它——与插件面板写入的形态同源。
+function Get-CurrentRid {
+    if ($IsWindows) { return "win-x64" }
+    if ($IsMacOS) { return $(if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq "Arm64") { "osx-arm64" } else { "osx-x64" }) }
+    return "linux-x64"
+}
+$rid = Get-CurrentRid
+$shimExe = Join-Path $pluginRoot ("server-dotnet\publish\{0}\godot-mcp-shim{1}" -f $rid, $(if ($IsWindows) { ".exe" } else { "" }))
+
 # 机器相关值回退：显式参数缺省时读仓库根 .env（模板见 .env.example；该文件不入版本管理）。
 if (-not $GodotExecutable) {
     $envFile = Join-Path (Split-Path -Parent (Split-Path -Parent $pluginRoot)) ".env"
@@ -134,9 +144,17 @@ function Write-ProjectMcpConfig {
     if (-not $config.Contains("mcpServers")) {
         $config["mcpServers"] = [ordered]@{}
     }
+    # stdio 型：command 即随包 shim（host 直接 spawn，由它自举机器级 daemon），
+    # args 为空——shim 的参数全部来自 env。绝不写出指向不存在入口的条目。
+    if (-not (Test-Path -LiteralPath $shimExe)) {
+        throw ("服务入口缺失：$shimExe`n先发布该平台产物：`n" +
+            "  dotnet publish plugin/godot-mcp-unified/server-dotnet/src/godot-mcp-shim -c Release -p:PublishProfile=$rid`n" +
+            "（或用 -NoProjectMcpConfig 跳过项目配置写入）")
+    }
     $config["mcpServers"]["godot"] = [ordered]@{
-        type = "http"
-        url = "http://127.0.0.1:6590/"
+        type    = "stdio"
+        command = $shimExe
+        args    = @()
     }
     $json = $config | ConvertTo-Json -Depth 20
     Write-Utf8NoBom -Path $Path -Content ($json + [Environment]::NewLine)
@@ -236,7 +254,7 @@ if (-not $NoProjectMcpConfig) {
     Write-Host "[OK] Registered project MCP config: $mcpConfigPath"
 }
 
-Write-Host "[OK] Project MCP config points at the machine-level daemon (http://127.0.0.1:6590/); start it once via adapters\zcode\install-http-face.ps1 or let the editor sidecar spawn it."
+Write-Host "[OK] Project MCP config points at the bundled shim (stdio); the shim starts the machine-level daemon (127.0.0.1:6590) on demand, so clients need no token and no pre-started daemon."
 
 if (-not $SkipEditorValidation) {
     $editorOutput = (& $godotConsole --headless --path $projectRoot --editor --quit 2>&1 | Out-String)

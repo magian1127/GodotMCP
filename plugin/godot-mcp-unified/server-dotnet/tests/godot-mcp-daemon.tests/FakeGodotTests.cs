@@ -149,7 +149,9 @@ public class FakeGodotTests
                 }
                 catch (OperationCanceledException)
                 {
-                    break;
+                    // 300ms 内没有帧 = 通知尚未到达,继续等到 deadline。**不能 break**:
+                    // 机器满载时任意一次 300ms 空窗都会让上面的 20s 宽限期形同虚设(曾造成偶发失败)。
+                    continue;
                 }
                 var doc = JsonDocument.Parse(raw);
                 if (doc.RootElement.TryGetProperty("notification", out _))

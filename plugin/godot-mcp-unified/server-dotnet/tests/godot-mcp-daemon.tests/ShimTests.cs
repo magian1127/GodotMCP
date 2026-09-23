@@ -22,6 +22,10 @@ public class ShimTests
     private const string InitializedNotification =
         """{"jsonrpc":"2.0","method":"notifications/initialized"}""";
 
+    /// <summary>打开 tools/list_changed 订阅的 subscriptions/listen 请求帧(2026-07-28 无状态 HTTP 形态)。</summary>
+    private const string ListenMessage =
+        """{"jsonrpc":"2.0","id":"listen-1","method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{"tools":{"listChanged":true}},"io.modelcontextprotocol/clientInfo":{"name":"shim-listen-test","version":"1"}}}}""";
+
     /// <summary>daemon 缺席时 shim 冷启动自举:先拉起 daemon,首条调用仍成功处理。</summary>
     /// <para>
     /// Arrange:全新状态目录 + 随机端口,直接以 ShimProcess 起 shim(无 daemon 在跑)。
@@ -202,5 +206,61 @@ public class ShimTests
         var text = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
         using var payload = JsonDocument.Parse(text);
         Assert.True(payload.RootElement.TryGetProperty("instances", out _));
+    }
+
+    /// <summary>
+    /// issue:长流经 shim 必须**增量**投递且不阻塞后续请求。
+    /// <para>
+    /// Arrange:冷启动 shim(自行拉起 daemon),完成 initialize。
+    /// Act:写入 subscriptions/listen(daemon 以 SSE 长流响应并把它挂起),然后照常发一次 tools/call。
+    /// Assert:订阅确认 acknowledged 即时经 stdout 到达;长流仍挂起时后续调用的响应照常往返。
+    /// 两者都是"增量投递 + 非阻塞"的必要条件——若 shim 把长流响应体读到底,前者会超时(30s 后转 -32000),
+    /// 后者会排在长流之后。
+    /// </para>
+    /// <para>
+    /// 回归背景(2026-09-23 修复):修复前 shim 对长流有三处问题 —— ① 不带 SEP-2575 协议头
+    /// (listen 必须带 <c>MCP-Protocol-Version: 2026-07-28</c> 与 <c>Mcp-Method</c>),
+    /// daemon 直接回 400;② PostAsync 用 ReadAsStringAsync 把响应体读到底,而长流永不结束
+    /// → 30s 超时后重试 → 对 listen-1 回 -32000,订阅确认根本到不了宿主;③ 主循环逐行 await,
+    /// 长流挂起期间后续 stdin 行全部排队。现由"按请求方法识别长流 + 后台增量泵 + stdout 写入
+    /// 串行化"解决;协议头的协商规则见 HttpForwarder.ProtocolHeaders。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task shim_delivers_listen_long_stream_without_blocking_later_calls()
+    {
+        var stateDir = TestPaths.NewStateDir();
+        var port = TestPorts.GetFreePort();
+        using var shim = ShimProcess.Start(new ShimSpawnOptions { Port = port, StateDir = stateDir, IdleSeconds = 60 });
+
+        using (var init = JsonDocument.Parse(await shim.SendAsync(InitializeMessage, TimeSpan.FromSeconds(60))))
+        {
+            Assert.Equal(1, init.RootElement.GetProperty("id").GetInt32());
+        }
+
+        // 打开长流:daemon 返回 SSE 并把该请求挂起(无状态 HTTP 下 tools/list_changed 的唯一投递通道)。
+        await shim.WriteLineAsync(ListenMessage);
+
+        // 订阅确认必须**增量**到达:shim 不能等响应体结束(订阅永不结束)。
+        var ackLine = await shim.ReadLineAsync(TimeSpan.FromSeconds(20));
+        using (var ack = JsonDocument.Parse(ackLine))
+        {
+            // 先判错误:否则"被 daemon 拒收"会伪装成 JSON 解析失败,看不出真正原因。
+            Assert.False(
+                ack.RootElement.TryGetProperty("error", out var error),
+                $"长流请求被拒绝(应为 acknowledged 通知):{ackLine}");
+            Assert.Equal(
+                "notifications/subscriptions/acknowledged",
+                ack.RootElement.GetProperty("method").GetString());
+        }
+
+        // 长流仍挂起时,后续调用必须照常往返(不能被长流挡住)。
+        var call = await shim.SendAsync(
+            """{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"list_instances","arguments":{}}}""",
+            TimeSpan.FromSeconds(20));
+        using (var callDoc = JsonDocument.Parse(call))
+        {
+            Assert.Equal(12, callDoc.RootElement.GetProperty("id").GetInt32());
+        }
     }
 }

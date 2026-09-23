@@ -22,14 +22,33 @@ export interface WorkbenchConfig {
 /** 旧 Node 桥 server 入口在工作区布局中的固定相对路径(Node 桥 2026-09-14 退役,保留作回滚通道)。 */
 export const SERVER_DIST_RELATIVE = 'plugin/godot-mcp-unified/server/dist/index.js'
 
-/** daemon HTTP 自举桥入口的固定相对路径(stdio 行帧 ↔ daemon HTTP;DSH 翻转后的默认入口)。 */
+/** daemon HTTP 自举桥入口的固定相对路径(stdio 行帧 ↔ daemon HTTP;仅 stdio 兜底)。 */
 export const BRIDGE_ENTRY_RELATIVE = 'adapters/dsh/godot-http-bridge.mjs'
 
-/** server 入口候选(bridge 优先,legacy 兼容)——根推导后缀与 legacy 探测共用同一顺序。 */
-const SERVER_ENTRY_CANDIDATES = [BRIDGE_ENTRY_RELATIVE, SERVER_DIST_RELATIVE]
+/** 本平台 .NET RID(host 侧独立定义,与 CLI 侧 constants.mts 各自维护)。 */
+export function currentRid(platform: string = process.platform, arch: string = process.arch): string {
+  if (platform === 'win32') return arch === 'arm64' ? 'win-arm64' : 'win-x64'
+  if (platform === 'darwin') return arch === 'arm64' ? 'osx-arm64' : 'osx-x64'
+  return arch === 'arm64' ? 'linux-arm64' : 'linux-x64'
+}
 
-/** 从 server 入口反推工作区根的候选后缀。 */
+/** 随包 shim 入口的相对路径(native 可执行文件,由它自举 daemon)。 */
+export function shimEntryRelative(rid: string = currentRid()): string {
+  const ext = rid.startsWith('win-') ? '.exe' : ''
+  return `plugin/godot-mcp-unified/server-dotnet/publish/${rid}/godot-mcp-shim${ext}`
+}
+
+/** server 入口候选(随包 shim 优先,bridge 兜底,legacy 兼容)——根推导后缀与 legacy 探测共用同一顺序。 */
+const SERVER_ENTRY_CANDIDATES = [shimEntryRelative(), BRIDGE_ENTRY_RELATIVE, SERVER_DIST_RELATIVE]
+
+/** 从 server 入口反推工作区根的候选后缀(固定后缀项)。 */
 const SERVER_ENTRY_SUFFIXES = SERVER_ENTRY_CANDIDATES.map(rel => '/' + rel)
+
+/**
+ * shim 入口的反推模式:RID 段随平台变化,故不能用固定后缀。
+ * 命中即去掉该整段得到工作区根。
+ */
+const SHIM_ENTRY_PATTERN = /\/plugin\/godot-mcp-unified\/server-dotnet\/publish\/[^/]+\/godot-mcp-shim(?:\.exe)?$/i
 
 /** 解析生效的 server dist / 项目路径:serverDist 全局单值;projectPath 按「当前会话 cwd」在批量条目里匹配,无匹配回退全局设置。 */
 export function resolveWorkbenchPaths(config: WorkbenchConfig, cwd?: string): { serverDistPath?: string; projectPath?: string } {
@@ -43,16 +62,22 @@ export function resolveWorkbenchPaths(config: WorkbenchConfig, cwd?: string): { 
  * 解析 GodotMCP 工作区根(技能/提示词面定位,readSkills 依赖它)。
  * 优先组合行 config.godotMcpRoot;v0.4 后安装只写 serverDist 完整路径、不再存
  * godotMcpRoot,故未显式配置时从生效 serverDist 向上推导——serverDist 形如
- * `<根>/adapters/dsh/godot-http-bridge.mjs`(daemon 桥)或旧
- * `<根>/plugin/godot-mcp-unified/server/dist/index.js`,去掉固定相对后缀
- * (SERVER_ENTRY_SUFFIXES)即得工作区根。仅当 serverDist 确实以候选后缀之一结尾时才
- * 推导,避免把无关全路径误当根(推导失败回退 undefined)。
+ * `<根>/plugin/godot-mcp-unified/server-dotnet/publish/<rid>/godot-mcp-shim[.exe]`
+ * (标准:随包 shim)、`<根>/adapters/dsh/godot-http-bridge.mjs`(stdio 兜底桥)或旧
+ * `<根>/plugin/godot-mcp-unified/server/dist/index.js`,去掉对应入口段即得工作区根。
+ * 仅当 serverDist 确实命中候选形态时才推导,避免把无关全路径误当根
+ * (推导失败回退 undefined)。
  */
 export function resolveSkillsRoot(config: WorkbenchConfig): string | undefined {
   if (config.godotMcpRoot !== undefined && config.godotMcpRoot !== '') return config.godotMcpRoot
   const serverDist = config.pathStore?.getServerDist() ?? config.serverDistPath
   if (serverDist === undefined || serverDist === '') return undefined
   const normalized = serverDist.replace(/\\/g, '/')
+  const shimMatch = SHIM_ENTRY_PATTERN.exec(normalized)
+  if (shimMatch !== null) {
+    const root = normalized.slice(0, shimMatch.index)
+    if (root !== '') return root
+  }
   for (const suffix of SERVER_ENTRY_SUFFIXES) {
     if (normalized.endsWith(suffix)) {
       const root = normalized.slice(0, -suffix.length)

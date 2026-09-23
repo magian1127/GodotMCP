@@ -1885,7 +1885,7 @@
     },
     {
       "name": "capture_screenshot",
-      "description": "使用统一的响应格式捕获运行中的游戏或编辑器视口。运行时捕获需要活动的游玩测试。内联图像超过传输缓冲上限时自动适配：先降低 image_detail 级别（响应的 image_detail/hint 披露实际级别），仍放不下则保存全分辨率 PNG 到磁盘并返回 path（不会报 RESPONSE_TOO_LARGE）。",
+      "description": "使用统一的响应格式捕获运行中的游戏或编辑器视口。运行时捕获需要活动的游玩测试。默认（image_response_mode 省略时）保存全分辨率 PNG 到磁盘并返回其文件地址（path），请用文件读取查看；显式传 image_response_mode:'inline' 时内嵌图片。内嵌图像超过传输缓冲上限时自动适配：先降低 image_detail 级别（响应的 image_detail/hint 披露实际级别），仍放不下则保存全分辨率 PNG 到磁盘并返回 path（不会报 RESPONSE_TOO_LARGE）。引擎内捕获失败或超时（TIMEOUT/DISCONNECTED/视口不可用）时，daemon 自动改用系统截图 API（PrintWindow）按目标窗口落盘并返回 path（capture_source:'os_window' 披露，为窗口屏幕内容而非孤立视口）。",
       "method": "capture.screenshot",
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
@@ -1908,7 +1908,7 @@
             "type": "string"
           },
           "image_response_mode": {
-            "description": "inline 内嵌图片；disk 返回保存路径；both 同时返回两者。",
+            "description": "inline 内嵌图片；disk 返回保存路径（省略时默认）；both 同时返回两者。",
             "type": "string",
             "enum": [
               "inline",

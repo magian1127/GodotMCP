@@ -2,6 +2,8 @@ namespace GodotMcp.Daemon;
 
 /// <summary>
 /// 周期检查空闲状态;达到阈值即请求整进程退出(退出原因同时落 stderr 与 daemon.log)。
+/// **未启用空闲自退时(默认)本服务直接返回**,不轮询、不注册定时器:由 ADR-0004
+/// 2026-09-23 修订——默认常驻,避免全 HTTP 接入的宿主在无请求期被"悄悄自退"。
 /// 托管为 BackgroundService,与宿主同生命周期:宿主关机时轮询被取消,服务随之结束。
 /// </summary>
 /// <param name="monitor">空闲状态来源,由 Program 注册为单例。</param>
@@ -17,13 +19,21 @@ public sealed class IdleExitService(
     /// 空闲轮询主循环,直至触发退出或宿主关机。
     /// </summary>
     /// <param name="stoppingToken">宿主关机令牌,同时用作轮询取消令牌。</param>
-    /// <para>逻辑链:检查间隔取 min(1s, 阈值/4),保证退出延迟至多为阈值的约四分之一 →
-    /// 每个周期先看 <see cref="IdleMonitor.IsIdle"/>,再复核 <see cref="IdleMonitor.HasNoRequestsInFlight"/>,
+    /// <para>逻辑链:未启用自退 → 记一行日志后直接返回(零轮询开销)→ 否则检查间隔取
+    /// min(1s, 阈值/4),保证退出延迟至多为阈值的约四分之一 → 每个周期先看
+    /// <see cref="IdleMonitor.IsIdle"/>,再复核 <see cref="IdleMonitor.HasNoRequestsInFlight"/>,
     /// 收窄与请求进入的竞态窗口;任一不满足则继续下一周期 → 双条件成立:记日志、
     /// StopApplication 请求整进程退出并返回(在途请求由 Kestrel 优雅关机 drain)→
     /// stoppingToken 取消(WaitForNextTickAsync 抛 OperationCanceledException):宿主正常关机,静默结束。</para>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (!monitor.IdleExitEnabled)
+        {
+            logger.LogInformation(
+                "空闲自退未启用(GODOT_MCP_DAEMON_IDLE_SECONDS 未设置或为 0)——daemon 常驻至显式结束或宿主关机。");
+            return;
+        }
+
         var checkInterval = TimeSpan.FromMilliseconds(
             Math.Min(1000, monitor.Timeout.TotalMilliseconds / 4));
         using var timer = new PeriodicTimer(checkInterval);

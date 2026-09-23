@@ -12,7 +12,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- OS 截图兜底纯函数(ShouldAttempt/BuildEnvelope 等)对测试程序集开放。 -->
+    <InternalsVisibleTo Include="godot-mcp-daemon.tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
+    <!-- OS 截图兜底(OsWindowCapture)的 PNG 编码;Windows 专属包,调用点以
+         OperatingSystem.IsWindows() 门控,非 Windows 平台不触达类型。 -->
+    <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>

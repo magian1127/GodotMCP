@@ -30,12 +30,15 @@ const MIN_USABLE_DIMENSION := 16
 ## 率等上几帧 — 相比返回一张空白截图,这代价很低。
 const MAX_HEAL_FRAMES := 4
 
-## 等待一个新合成帧的墙上时钟(wall-clock)上限。frame_post_draw 在
-## 渲染被暂停的编辑器上(未最小化但停止合成 — 例如会话被锁定/显示器
-## 休眠/DWM 暂停)永远不会触发,裸 await 会把命令挂到服务器超时;
-## 有界等待把它变成快速、可操作的 EDITOR_VIEWPORT_UNAVAILABLE。
-## 10 秒覆盖失焦节流(约 10 fps)下数帧的余量。
-const FRAME_WAIT_TIMEOUT_MS := 10_000
+## 全部等帧共享的墙上时钟(wall-clock)总预算。frame_post_draw 在渲染被暂停的
+## 编辑器上(未最小化但停止合成 — 例如会话被锁定/显示器休眠/DWM 暂停)永远不会
+## 触发,裸 await 会把命令挂到服务器超时;有界等待把它变成快速、可操作的
+## EDITOR_VIEWPORT_UNAVAILABLE。预算是每条命令一枚(而非每次等待一枚):一条
+## 截图在前置化、首帧与主屏幕自愈之间至多共享这一份,把处理器最坏墙上时钟
+## 封顶在 daemon 的 30s 调用超时之内 — 编辑器传输层顺序 await 每个处理器,
+## 超预算的单次截图会把所有会话的命令派发一起拖住。12 秒覆盖失焦节流
+## (约 10 fps)下数帧的余量,同时给编码与响应回传留足一倍余量。
+const FRAME_WAIT_BUDGET_MS := 12_000
 
 ## 编辑器窗口最小化时的恢复提示:没有任何视口被合成,
 ## 因此无法捕获任何帧。这绝不会是无头情形 — 无头会在任何捕获之前
@@ -47,7 +50,7 @@ const _HINT_MINIMIZED := "The editor window is minimized, so no viewport is comp
 ## 属于超出有界自愈能力的遮挡或时序边缘情况。
 const _HINT_POST_HEAL := "Switched to a 2D/3D main screen but no viewport composited. Retry with force_foreground_editor:true, or use script_check for non-visual verification."
 
-## 渲染在等待上限内没有合成任何帧(未最小化但暂停 — 典型如会话
+## 渲染在共享预算内没有合成任何帧(未最小化但暂停 — 典型如会话
 ## 被锁定、显示器休眠或合成器停滞)时的恢复提示。
 ## 提示先给代价最低且实测有效的动作:编辑器窗口失焦/未置前时合成会被节流,
 ## force_foreground_editor:true 会把它提前并聚焦,通常即可直接出图
@@ -111,6 +114,10 @@ static func cmd_screenshot(parameters: Dictionary) -> Dictionary:
 	var force_foreground := bool(parameters.get("force_foreground_editor", false))
 	var remediation: Array[String] = []
 
+	# 每条命令一枚的等帧预算:从首次等待前盖章,后续所有等待共享同一期限,
+	# 使最坏链路(前置化 + 首帧 + 自愈循环)的墙上时钟有整体上界。
+	var frame_deadline := Time.get_ticks_msec() + FRAME_WAIT_BUDGET_MS
+
 	# 最小化会暂停合成,因此无法捕获任何帧。要提前
 	# 检测它 — 在任何 await frame_post_draw 之前;该信号在渲染被暂停的
 	# 编辑器上永远不会触发,会把处理器挂住直到服务器超时。
@@ -118,34 +125,33 @@ static func cmd_screenshot(parameters: Dictionary) -> Dictionary:
 		if not force_foreground:
 			return MCPToolkitError.fail("EDITOR_VIEWPORT_UNAVAILABLE",
 				"editor viewport unavailable: the editor window is minimized", _HINT_MINIMIZED)
-		await _foreground_editor()
+		await _foreground_editor(frame_deadline)
 		remediation.append("foregrounded_editor")
 
 	var node_path := str(parameters.get("node_path", ""))
 	node_path = Helpers.normalize_editor_path(node_path)
 
 	if not node_path.is_empty():
-		return await _capture_node(parameters, node_path, remediation)
-	return await _capture_standard(parameters, remediation)
+		return await _capture_node(parameters, node_path, remediation, frame_deadline)
+	return await _capture_standard(parameters, remediation, frame_deadline)
 
 
 # -- 捕获路径 -------------------------------------------------------------------
 
 
-## 等待至少一个新合成帧,带墙上时钟上限。以 Engine.get_frames_drawn()
-## 作为"绘制确实发生"的观测(不依赖信号),以 SceneTree.process_frame
-## 作为主循环心跳(每处理帧都触发,与绘制无关 — 注意 frame_post_draw
-## 本身不可用作等待对象:渲染暂停时它永不触发,正是这里要防的挂死)。
-## 超时返回 false — 意味着渲染被暂停(未最小化但停止合成),调用方应
-## 返回 EDITOR_VIEWPORT_UNAVAILABLE 而不是挂到服务器超时。
-static func _await_fresh_frame() -> bool:
+## 等待至少一个新合成帧,带墙上时钟期限(全部等待共享命令级预算)。以
+## Engine.get_frames_drawn() 作为"绘制确实发生"的观测(不依赖信号),以
+## SceneTree.process_frame 作为主循环心跳(每处理帧都触发,与绘制无关 — 注意
+## frame_post_draw 本身不可用作等待对象:渲染暂停时它永不触发,正是这里要防的
+## 挂死)。到期返回 false — 意味着渲染被暂停(未最小化但停止合成)或预算耗尽,
+## 调用方应返回 EDITOR_VIEWPORT_UNAVAILABLE 而不是挂到服务器超时。
+static func _await_fresh_frame(deadline_ms: int) -> bool:
 	var tree := Engine.get_main_loop() as SceneTree
 	if tree == null:
 		return false  # 无主循环(理论上不可达 — 无头已被更早的守卫短路)。
 	var start_frame := Engine.get_frames_drawn()
-	var deadline := Time.get_ticks_msec() + FRAME_WAIT_TIMEOUT_MS
 	while Engine.get_frames_drawn() <= start_frame:
-		if Time.get_ticks_msec() >= deadline:
+		if Time.get_ticks_msec() >= deadline_ms:
 			return false
 		await tree.process_frame
 	return true
@@ -154,7 +160,8 @@ static func _await_fresh_frame() -> bool:
 # 聚焦节点的截图:选中 + 编辑 + 捕获特定节点,然后恢复
 # 先前的选择。错误的主屏幕会依据节点自身的
 # 视口类型自愈(Node3D 用 3D,否则 2D)。
-static func _capture_node(parameters: Dictionary, node_path: String, remediation: Array[String]) -> Dictionary:
+static func _capture_node(parameters: Dictionary, node_path: String, remediation: Array[String],
+		frame_deadline: int) -> Dictionary:
 	var root := Helpers.get_edited_root()
 	if root == null:
 		return MCPToolkitError.fail("NO_SCENE", "no edited scene")
@@ -176,13 +183,13 @@ static func _capture_node(parameters: Dictionary, node_path: String, remediation
 		selection.clear()
 		selection.add_node(node)
 	EditorInterface.edit_node(node)
-	if not await _await_fresh_frame():
+	if not await _await_fresh_frame(frame_deadline):
 		_restore_selection(selection, prior_selection)
 		return MCPToolkitError.fail("EDITOR_VIEWPORT_UNAVAILABLE",
-			"editor viewport unavailable: rendering paused — no frame composited within %d ms" % FRAME_WAIT_TIMEOUT_MS,
+			"editor viewport unavailable: rendering paused — no frame composited within the %d ms frame budget" % FRAME_WAIT_BUDGET_MS,
 			_HINT_PAUSED)
 
-	var image := await _grab_usable_image(wants_3d, remediation)
+	var image := await _grab_usable_image(wants_3d, remediation, frame_deadline)
 	if image == null:
 		_restore_selection(selection, prior_selection)
 		return MCPToolkitError.fail("EDITOR_VIEWPORT_UNAVAILABLE",
@@ -212,17 +219,18 @@ static func _capture_node(parameters: Dictionary, node_path: String, remediation
 
 
 # 标准视口截图。自愈目标默认为 2D 视口。
-static func _capture_standard(parameters: Dictionary, remediation: Array[String]) -> Dictionary:
+static func _capture_standard(parameters: Dictionary, remediation: Array[String],
+		frame_deadline: int) -> Dictionary:
 	# 首次读取前先等待以保新鲜:否则被节流且失焦的编辑器
 	# 可能交回略微过期的帧。现在安全了,因为最小化已被
-	# 提前短路;若渲染在等待上限内没有合成任何帧(未最小化
+	# 提前短路;若渲染在共享预算内没有合成任何帧(未最小化
 	# 但暂停 — 会话锁定/显示器休眠等),快速失败而不是挂死。
-	if not await _await_fresh_frame():
+	if not await _await_fresh_frame(frame_deadline):
 		return MCPToolkitError.fail("EDITOR_VIEWPORT_UNAVAILABLE",
-			"editor viewport unavailable: rendering paused — no frame composited within %d ms" % FRAME_WAIT_TIMEOUT_MS,
+			"editor viewport unavailable: rendering paused — no frame composited within the %d ms frame budget" % FRAME_WAIT_BUDGET_MS,
 			_HINT_PAUSED)
 
-	var image := await _grab_usable_image(false, remediation)
+	var image := await _grab_usable_image(false, remediation, frame_deadline)
 	if image == null:
 		return MCPToolkitError.fail("EDITOR_VIEWPORT_UNAVAILABLE",
 			"editor viewport unavailable: no 2D/3D viewport composited a usable frame", _HINT_POST_HEAL)
@@ -291,7 +299,8 @@ static func _downscale_inline_png(image: Image, parameters: Dictionary,
 # 一旦出现可用帧立即跳出。执行过切换时,把
 # "switched_main_screen" 追加到 [param remediation]。
 # 返回可用的 Image;若在上限内没有任何内容合成,则返回 null。
-static func _grab_usable_image(wants_3d: bool, remediation: Array[String]) -> Image:
+static func _grab_usable_image(wants_3d: bool, remediation: Array[String],
+		frame_deadline: int) -> Image:
 	var image := _read_viewport_image(wants_3d)
 	if image != null and classify_capture(image.get_width(), image.get_height())["ok"]:
 		return image
@@ -302,8 +311,8 @@ static func _grab_usable_image(wants_3d: bool, remediation: Array[String]) -> Im
 	EditorInterface.set_main_screen_editor("3D" if wants_3d else "2D")
 	var switched := false
 	for _attempt in range(MAX_HEAL_FRAMES):
-		if not await _await_fresh_frame():
-			break  # 渲染暂停 — 再多重试也不会合成帧;走 null 路径的错误契约。
+		if not await _await_fresh_frame(frame_deadline):
+			break  # 渲染暂停或预算耗尽 — 再多重试也不会合成帧;走 null 路径的错误契约。
 		image = _read_viewport_image(wants_3d)
 		if image != null and classify_capture(image.get_width(), image.get_height())["ok"]:
 			switched = true
@@ -334,7 +343,7 @@ static func _read_viewport_image(wants_3d: bool) -> Image:
 # 最小化时应用,以免最大化的编辑器被取消最大化;4.6+ 已弃用的
 # Window.move_to_foreground() 被有意避开,改用
 # DisplayServer.window_move_to_foreground() + Window.grab_focus()。
-static func _foreground_editor() -> void:
+static func _foreground_editor(frame_deadline: int) -> void:
 	if _window_is_minimized():
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED, 0)
 	DisplayServer.window_move_to_foreground(0)
@@ -343,7 +352,7 @@ static func _foreground_editor() -> void:
 		var win := base.get_window()
 		if win != null:
 			win.grab_focus()
-	await _await_fresh_frame()
+	await _await_fresh_frame(frame_deadline)
 
 
 # -- 辅助函数 ------------------------------------------------------------------

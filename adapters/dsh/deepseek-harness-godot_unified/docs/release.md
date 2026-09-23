@@ -5,8 +5,17 @@
 1. `npm run typecheck && npm run build && npm test && npm run verify` 全绿。
 2. `node bin/dsh-godot.mjs`（无参数）退出码 2 且打印用法。
 3. 沙盒 install 冒烟：临时 `$DSH_HOME` 下 install → 检查生成的 patch 块形状 → uninstall → 恢复 `[]`。
-4. `dsh --profile <p> --dump-config | grep godot`：bundle 行与 mcp-client 行都在组合树中。
+4. `dsh --profile <p> --dump-config | grep godot`：`dsh-godot` 与 `preset-godot` 行都在组合树中。
 5. （有运行中的 Godot 编辑器时）一次性会话验证进程链（握手、tools=20、WS 认证）。
+
+### 发布阻塞项：tarball 必须自带 skills 快照
+
+`skills/` 是指向上游 GodotMCP 的 junction（本地开发即时同步）。**`npm pack` 不跟随
+junction**（Node 将其归类为 symlink，npm-packlist 跳过其内容）——实测 0.4.0 的 tarball
+`package/skills/` 条目数为 0。发布前必须先把技能物化进包再打包，例如在 `prepack`
+里把 junction 目标内容复制到临时实体目录后再 `npm pack`（发布后由 `postpack` 还原
+junction），或改由 CI 从上游快照生成；否则安装者拿到的是没有技能的 preset，
+`skill-filesystem` 的 `customSkillDirs` 会指向空目录。
 
 ## npm 发布
 
@@ -55,3 +64,10 @@ npx -y deepseek-harness-godot_unified ...                      # CLI(需要本�
 - 功能基线：自研桥接 + 动态工具（清单来自 server `tools/list`，随组激活 `discover_tools` 动态增删）、按会话 cwd 传参（`$DSH_HOME/godot/paths.json`）、工具清单持久缓存（`$DSH_HOME/godot/tools-cache.json`，与 server dist 绑定校验）、Godot 工作台（会话顶部第三 Tab + `/godot-workbench/api/*` 六条同源路由）、`dsh-godot` CLI（install/uninstall/status，v0.4 起不再写官方 mcp-client 行）。
 - 环境要求：DeepSeek Harness ≥ `0.1.5-rc.1`；Node.js `^22.19.0 || >=24.0.0`。
 - 验证状态：typecheck/build/test/verify 随提交执行；运行时 GUI 验收（工作台交互、Godot preset 会话工具调用）待用户环境。
+
+### 未发布：preset 迁移（legacy 目录 → bundle 声明行）
+
+- **背景**：DSH 0.1.6+ 起不再读取 `$DSH_HOME/.agent-presets/<id>/` 目录，Godot preset 因此从模式选择器消失（用户报障）。preset 现在只能由 bundle patch 里的 `@deepseek-ai/dsh-agent-preset` 声明行注册。
+- **变更**：`cordis.patch.yml` 增加 `preset-godot` 声明行（`plugins` 逐字迁自 `agent.cordis.yml`，并按当时安装的 shipped `standard` 校正了 `tool-ralph`（`disabled: true`）与 plan-mode section 文案两处漂移）；新增包内 `skills/` junction（→ 上游 `plugin/godot-mcp-unified/skills`，31 文件）与 `customSkillDirs` 的包 realpath 解析；新增 `src/tests/preset-patch.test.mts`（4 例）守护 patch 形状。
+- **验证状态**：`npm run typecheck && npm test`（86 例）全绿；`dsh --profile web --dump-config` 出现 `preset-godot`；运行态 `include:preset-godot` 行 active；技能 realpath 实测解析到上游目录。**未执行**：GUI 模式选择器点击验收（需用户在刷新后的页面确认「Godot」出现并可选）。
+- **注**：`npm run verify` 在本机为 1 项失败（client bundle 断言 `settingsScope`，而 `src/client/index.ts` 已有未提交 WIP 改用 `configForms`）；该失败与本迁移无关，属既有 WIP 与 verify 脚本的版本不同步。

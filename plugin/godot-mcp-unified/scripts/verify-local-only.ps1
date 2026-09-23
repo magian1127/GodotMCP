@@ -70,8 +70,13 @@ if ($templateText -match "(?i)\bnpx\b|@$upstreamVendor") {
 }
 $template = $templateText | ConvertFrom-Json -AsHashtable
 $templateEntry = $template.mcpServers["godot"]
-if ($templateEntry.type -ne "http" -or $templateEntry.url -notmatch "^http://127\.0\.0\.1:\d+/$") {
-    $failures.Add("project MCP template does not point at the local daemon HTTP face")
+# 项目 MCP 模板必须是 **stdio + 随包 shim** 形态：host 直接 spawn 工程内的本地
+# 可执行文件（其路径在写入时按平台解析），因此不允许 http 型、不允许远程包启动器。
+if ($templateEntry.type -ne "stdio") {
+    $failures.Add("project MCP template is not a stdio entry")
+}
+if ([string]$templateEntry.command -notmatch "godot-mcp-shim") {
+    $failures.Add("project MCP template does not point at the bundled shim")
 }
 
 $catalogPath = Join-Path $addonRoot "extensions\catalog.json"

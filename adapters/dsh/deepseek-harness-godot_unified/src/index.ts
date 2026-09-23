@@ -29,8 +29,6 @@ import type {
   AgentShape,
   Disposer,
   HostContext,
-  SettingsRegistrationShape,
-  SettingsServiceShape,
   SystemPromptService,
   ToolsServiceShape,
 } from './types.js'
@@ -45,10 +43,56 @@ import { mountWorkbenchRoutes } from './workbench/routes.js'
 import { WorkbenchExecutor } from './workbench/executor.js'
 
 export const name = PKG
-export const inject = ['systemPrompt', 'tools', 'settings', 'agents']
+export const inject = ['systemPrompt', 'tools', 'agents']
 
-/** 设置命名空间(插件页配置表单经官方 settingsScope 读写)。 */
-export const SETTINGS_NAMESPACE = 'godot'
+/** 插件 Config 的 schemastery 工厂形状(仅覆盖本插件用到的链式 API)。 */
+interface GodotSchemaField {
+  default(value: unknown): GodotSchemaField
+  /** DSH 0.1.7+ schemastery(3.18.3)提供易变标记;3.18.2 缺席时走 meta 直写。 */
+  volatile?(): GodotSchemaField
+  meta?: Record<string, unknown>
+}
+
+interface GodotSchemaFactory {
+  object(shape: Record<string, unknown>): unknown
+  boolean(): GodotSchemaField
+  string(): GodotSchemaField
+}
+
+function markVolatile(field: GodotSchemaField): GodotSchemaField {
+  if (field === null || field === undefined) return field
+  if (typeof field.volatile === 'function') return field.volatile()
+  // 旧 schemastery(3.18.2 无 .volatile()):直接打 meta.volatile——宿主
+  // volatileForm/diff 读的就是 meta。schema 实例是 function 类型,不能用
+  // typeof 'object' 守卫;旧版 resolve 不物化引用,变更按「重挂载生效」。
+  field.meta = { ...(field.meta ?? {}), volatile: true }
+  return field
+}
+
+/**
+ * 宿主(DSH 0.1.7+)读取的插件 Config。普通字段(serverName/godotMcpRoot/
+ * projectPath/unsafe)变更触发重挂载,经 parsePluginConfig 消费;设置字段
+ * (injectLegacyMode/promptGuidance/zhPrompt/godotServerDist/godotProjectPath)
+ * 全 volatile:插件页实时编辑,值持久化在 profile 行 config,变更经
+ * loader/volatile-update 派发。schemastery 不可用时导出 undefined(不能是
+ * null:宿主 settings 的 `'toJSON' in Config` 检查遇 null 会崩掉整页设置),
+ * 宿主跳过 schema,config 以普通值传入(按默认注入策略工作)。
+ */
+const configSchemaFactory = loadSchemastery() as GodotSchemaFactory | null
+export const Config =
+  configSchemaFactory === null || configSchemaFactory === undefined
+    ? undefined
+    : configSchemaFactory.object({
+        serverName: configSchemaFactory.string().default('godot'),
+        godotMcpRoot: configSchemaFactory.string().default(''),
+        projectPath: configSchemaFactory.string().default(''),
+        unsafe: configSchemaFactory.boolean().default(false),
+        injectLegacyMode: markVolatile(configSchemaFactory.boolean().default(false)),
+        promptGuidance: markVolatile(configSchemaFactory.boolean().default(true)),
+        zhPrompt: markVolatile(configSchemaFactory.boolean().default(false)),
+        godotServerDist: markVolatile(configSchemaFactory.string().default('')),
+        godotProjectPath: markVolatile(configSchemaFactory.string().default('')),
+      })
 
 /** Godot preset id(目录名 ~/.dsh/.agent-presets/godot;显示名 Godot)。 */
 export const GODOT_PRESET_ID = 'godot'
@@ -74,50 +118,27 @@ function errorMessage(error: unknown): string {
 const DENY_REFRESH_DEBOUNCE_MS = 150
 
 export function apply(ctx: HostContext, config: Record<string, unknown> = {}): void {
-  const { serverName, godotMcpRoot, unsafe } = parsePluginConfig(config)
+  // 宿主物化的 volatile 引用(带 .get())读成普通值快照;普通字段原样保留
+  // (Config 为 null、宿主跳过 schema 时的降级路径)。行配置(serverName 等)
+  // 与设置字段统一从该快照消费。
+  const readSettingsSnapshot = (): Record<string, unknown> => {
+    const snapshot: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(config)) {
+      snapshot[key] = value !== null && typeof value === 'object' && typeof (value as { get?: unknown }).get === 'function'
+        ? (value as { get(): unknown }).get()
+        : value
+    }
+    return snapshot
+  }
+  const { serverName, godotMcpRoot, unsafe } = parsePluginConfig(readSettingsSnapshot())
   const toolPrefix = `${serverName}_`
   const warn = (message: string): void => { try { ctx.logger?.warn(message) } catch { /* 日志不可用不致命 */ } }
 
   const systemPrompt = ctx.get('systemPrompt') as SystemPromptService | undefined | null
   const promptService: SystemPromptService | undefined = systemPrompt ?? undefined
 
-  // ---- 设置(schema 从 profile 解析;不可用时降级 base 默认,无设置 UI)。 ----
-  const schemaFactory = loadSchemastery() as
-    | { object: (shape: Record<string, unknown>) => unknown; boolean: () => { default(value: boolean): unknown }; string: () => { default(value: string): unknown } }
-    | null
-  let settings: SettingsRegistrationShape | undefined
-  const SETTINGS_BASE = {
-    injectLegacyMode: false,
-    promptGuidance: true,
-    zhPrompt: false,
-    godotServerDist: '',
-    godotProjectPath: '',
-  }
-  if (schemaFactory !== null && schemaFactory !== undefined && typeof schemaFactory.object === 'function') {
-    try {
-      const Config = schemaFactory.object({
-        injectLegacyMode: schemaFactory.boolean().default(false),
-        promptGuidance: schemaFactory.boolean().default(true),
-        zhPrompt: schemaFactory.boolean().default(false),
-        godotServerDist: schemaFactory.string().default(''),
-        godotProjectPath: schemaFactory.string().default(''),
-      })
-      settings = (ctx.get('settings') as SettingsServiceShape | undefined | null)?.register(
-        SETTINGS_NAMESPACE, Config, {
-          base: { ...SETTINGS_BASE },
-          applies: 'live',
-          exposeToClients: true,
-        },
-      )
-    } catch (error) {
-      warn(`[${PKG}] settings 注册失败,按默认注入策略工作: ${errorMessage(error)}`)
-      settings = undefined
-    }
-  } else {
-    warn(`[${PKG}] schemastery 不可用,设置卡片停用;按默认注入策略工作(仅 Godot preset 注入)`)
-  }
-
-  let current: GodotSettings = resolveSettings(settings === undefined ? undefined : settings.get())
+  // ---- 设置(0.1.7 起经插件 Config volatile 字段;值持久化在 profile 行 config)。 ----
+  let current: GodotSettings = resolveSettings(readSettingsSnapshot())
   let stopped = false
 
   // ---- 路径存储(跨会话持久):serverDist 全局单值 + 项目路径按 cwd 批量条目。 ----
@@ -474,21 +495,19 @@ export function apply(ctx: HostContext, config: Record<string, unknown> = {}): v
     `${PKG}: injection policy teardown`,
   )
 
-  if (settings !== undefined) {
-    ctx.effect(
-      () => settings.watch((next) => {
-        if (stopped) return
-        const previous = current
-        current = resolveSettings(next)
-        refresh()
-        // 中文化开关变化:工具描述随注册定型,需重注册门面(翻译映射,不清单)。
-        if (previous.zhPrompt !== current.zhPrompt && facadeState !== undefined) {
-          applyDefs(facadeState.defs, true)
-        }
-      }),
-      `${PKG}: settings watch`,
-    )
-  }
+  // 实时设置:宿主把 volatile 变更以引用提交进 config 并派发
+  // loader/volatile-update(仅本 fiber);Config 为 null 时事件不派发,按初始
+  // 快照工作。
+  ctx.on('loader/volatile-update', () => {
+    if (stopped) return
+    const previous = current
+    current = resolveSettings(readSettingsSnapshot())
+    refresh()
+    // 中文化开关变化:工具描述随注册定型,需重注册门面(翻译映射,不清单)。
+    if (previous.zhPrompt !== current.zhPrompt && facadeState !== undefined) {
+      applyDefs(facadeState.defs, true)
+    }
+  })
 
   ctx.on('agent/created', (payload: unknown) => {
     try {

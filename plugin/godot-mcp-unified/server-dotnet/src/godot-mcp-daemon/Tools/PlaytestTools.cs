@@ -105,22 +105,26 @@ public sealed class PlaytestTools(InstanceManager instances)
     }
 
     /// <summary>
-    /// capture_screenshot:按 target 捕获运行中的游戏或编辑器视口(screenshot),统一构建响应(含传输上限降级)。
-    /// <para>逻辑链:target=editor 走编辑器实例 editor.screenshot(仅此分支携带 node_path 与
-    /// force_foreground_editor);否则走运行时通道 runtime.screenshot(带 force_foreground_game)
-    /// → toolkit 失败透传错误信封 → BuildScreenshotResult 构建响应(编辑器目标追加"无图且无 path
-    /// 即失败"的空内容检查)→ 实例调用异常:editor 直接映射错误信封,runtime 先附崩溃上下文再返回。</para>
+    /// capture_screenshot:按 target 捕获运行中的游戏或编辑器视口(screenshot),统一构建响应。
+    /// <para>逻辑链:image_response_mode 缺省注入 disk(daemon 面向 MCP 代理 — 默认仅返回
+    /// 保存路径而非内嵌 base64,代理按需读取文件;显式 inline/both 原样透传)→ target=editor
+    /// 走编辑器实例 editor.screenshot(仅此分支携带 node_path 与 force_foreground_editor);否则走
+    /// 运行时通道 runtime.screenshot(带 force_foreground_game)→ toolkit 失败透传错误信封 →
+    /// BuildScreenshotResult 构建响应(编辑器目标追加"无图且无 path 即失败"的空内容检查)→
+    /// 失败时先试 OS 截图兜底(OsWindowCapture:Windows + 未要求 node_path + 可恢复错误码,
+    /// 按目标进程窗口落盘 PNG 返回 path;任何一步失败回落原始错误)→ 实例调用异常:editor
+    /// 直接映射错误信封,runtime 先附崩溃上下文再返回。</para>
     /// </summary>
     /// <param name="target">捕获目标:runtime(需要活动的游玩测试)或 editor。</param>
     /// <param name="node_path">仅编辑器目标生效:聚焦并框选一个节点。</param>
     /// <param name="save_path">disk/both 模式的保存位置(runtime 接受 user://screenshots/,编辑器还接受 res://)。</param>
-    /// <param name="image_response_mode">inline 内嵌图片;disk 返回保存路径;both 两者都返回。</param>
+    /// <param name="image_response_mode">inline 内嵌图片;disk 返回保存路径（缺省默认）;both 两者都返回。</param>
     /// <param name="image_detail">内嵌图片的分辨率(full/mid/low);保存的文件始终保留全分辨率。</param>
     /// <param name="force_foreground">捕获前还原并聚焦选定目标窗口,默认 false。</param>
     /// <param name="instance">目标 Godot 实例:规范化项目路径或 12 位短 id;恰好一个实例时省略。</param>
-    /// <returns>图像内容块 + 元数据 JSON,或仅磁盘信封(path 等);失败时为错误信封(运行时目标可能附崩溃上下文)。</returns>
+    /// <returns>图像内容块 + 元数据 JSON,或仅磁盘信封(path 等);失败时先试 OS 窗口兜底信封,仍失败为错误信封(运行时目标可能附崩溃上下文)。</returns>
     [McpServerTool(Name = "capture_screenshot", ReadOnly = true, OpenWorld = false)]
-    [Description("使用统一的响应格式捕获运行中的游戏或编辑器视口。运行时捕获需要活动的游玩测试。内联图像超过传输缓冲上限时自动适配：先降低 image_detail 级别（响应的 image_detail/hint 披露实际级别），仍放不下则保存全分辨率 PNG 到磁盘并返回 path（不会报 RESPONSE_TOO_LARGE）。")]
+    [Description("使用统一的响应格式捕获运行中的游戏或编辑器视口。运行时捕获需要活动的游玩测试。默认（image_response_mode 省略时）保存全分辨率 PNG 到磁盘并返回其文件地址（path），请用文件读取查看；显式传 image_response_mode:'inline' 时内嵌图片。内嵌图像超过传输缓冲上限时自动适配：先降低 image_detail 级别（响应的 image_detail/hint 披露实际级别），仍放不下则保存全分辨率 PNG 到磁盘并返回 path（不会报 RESPONSE_TOO_LARGE）。引擎内捕获失败或超时（TIMEOUT/DISCONNECTED/视口不可用）时，daemon 自动改用系统截图 API（PrintWindow）按目标窗口落盘并返回 path（capture_source:'os_window' 披露，为窗口屏幕内容而非孤立视口）。")]
     public async Task<CallToolResult> CaptureScreenshot(
         string target,
         string? node_path = null,
@@ -132,8 +136,11 @@ public sealed class PlaytestTools(InstanceManager instances)
     {
         var isEditor = target == "editor";
         var args = new JsonObject();
+        // MCP 代理默认吃"路径"而不是内嵌位图:disk 形态响应恒为小载荷(绕开 ws/MCP
+        // 传输的尺寸上限 — 大图卡死与 RESPONSE_TOO_LARGE 的根源),代理按需读取文件。
+        // 显式传入的 inline/both 原样透传,addon 端负责校验合法值。
+        args["image_response_mode"] = image_response_mode ?? "disk";
         if (save_path is not null) args["save_path"] = save_path;
-        if (image_response_mode is not null) args["image_response_mode"] = image_response_mode;
         if (image_detail is not null) args["image_detail"] = image_detail;
         if (isEditor)
         {
@@ -154,6 +161,13 @@ public sealed class PlaytestTools(InstanceManager instances)
                     instance, "runtime.screenshot", args.ToJsonString(), ToolRouting.CallTimeout, CancellationToken.None);
             if (ToolResults.IsFailure(result))
             {
+                // 引擎路径失败(toolkit 错误信封)→ 先试 OS 窗口兜底,仍失败回落原始错误。
+                var fallback = TryOsWindowFallback(
+                    instances, instance, isEditor, node_path, CodeOf(result), target);
+                if (fallback is not null)
+                {
+                    return fallback;
+                }
                 return ToolResults.FromToolkitResult(result);
             }
             // 编辑器截图在"无 path 且无 image_bytes"时视为失败(Node editorScreenshotHandler 的空内容保护)。
@@ -161,10 +175,59 @@ public sealed class PlaytestTools(InstanceManager instances)
         }
         catch (InstanceCallException ex)
         {
+            // 引擎路径卡死/断连(TIMEOUT/DISCONNECTED 等)→ 先试 OS 窗口兜底 —
+            // 这是 addon 派发循环被拖住时的唯一出图通道。
+            var fallback = TryOsWindowFallback(instances, instance, isEditor, node_path, ex.Code, target);
+            if (fallback is not null)
+            {
+                return fallback;
+            }
             return isEditor
                 ? ToolResults.FromException(ex)
                 : await RuntimeErrors.WithCrashContextAsync(instances, ex, instance);
         }
+    }
+
+    /// <summary>OS 窗口兜底入口:满足触发条件(Windows + 未要求 node_path + 可恢复错误码)
+    /// 时按目标进程定位窗口、系统截图 API 落盘并构建披露信封;任一步不满足/失败返回 null
+    /// (调用方回落原始错误 — 兜底只补位,不掩盖)。</summary>
+    /// <param name="instances">实例管理器(取目标进程 pid)。</param>
+    /// <param name="instance">实例标识,可空。</param>
+    /// <param name="isEditor">是否编辑器目标(决定取编辑器 pid 还是运行时 pid)。</param>
+    /// <param name="nodePath">调用方的 node_path(node 框选必须由引擎执行,OS 路径无法替代)。</param>
+    /// <param name="originalCode">原始失败的错误码。</param>
+    /// <param name="target">捕获目标(披露进信封)。</param>
+    /// <returns>兜底成功为文本响应;否则 null。</returns>
+    private static CallToolResult? TryOsWindowFallback(
+        InstanceManager instances, string? instance, bool isEditor, string? nodePath,
+        string originalCode, string target)
+    {
+        if (!OsWindowCapture.ShouldAttempt(OsWindowCapture.Supported, nodePath, originalCode))
+        {
+            return null;
+        }
+        if (!instances.TryGetCapturePids(instance, out var editorPid, out var runtimePid, out _))
+        {
+            return null;
+        }
+        var pid = isEditor ? editorPid : runtimePid;
+        if (pid <= 0)
+        {
+            return null;
+        }
+        var shot = OsWindowCapture.TryCapture(pid, isEditor ? "editor" : "runtime");
+        return shot is null ? null : ToolResults.Json(OsWindowCapture.BuildEnvelope(shot, originalCode, target));
+    }
+
+    /// <summary>从 toolkit 结果中提取错误码(失败信封缺省 INTERNAL;成功结果同样落 INTERNAL,
+    /// 调用方仅在失败分支使用返回值)。</summary>
+    /// <param name="result">toolkit 返回的结果 JSON。</param>
+    /// <returns>错误码字符串。</returns>
+    private static string CodeOf(JsonElement result)
+    {
+        return result.TryGetProperty("code", out var codeEl) && codeEl.ValueKind == JsonValueKind.String
+            ? codeEl.GetString()!
+            : "INTERNAL";
     }
 
     /// <summary>

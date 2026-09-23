@@ -11,13 +11,13 @@ extends RefCounted
 ## 环境变量 GODOT_MCP_DAEMON_AUTOSTART=0 关闭 —— 关闭/不实例化时,
 ## addon 其余行为与现状完全一致。
 ##
-## 可执行文件解析顺序(对 junction 安装与复制安装两种形态都成立;
-## addon_dir 经 globalize_path 解析,联接(junction)对 res:// 透明):
-##   1. GODOT_MCP_DAEMON_EXE(显式覆盖;审计/测试用);
-##   2. <addon_dir>/bin/<rid>/godot-mcp-daemon[.exe](复制安装的发布位置);
-##   3. <addon_dir>/../../server-dotnet/publish/<rid>/godot-mcp-daemon[.exe]
-##      (仓库 junction 安装的开发布局)。
-## rid 取 .NET RID 命名(win-x64 / linux-x64 / osx-arm64 / osx-x64 …)。
+## 可执行文件解析顺序(单一出处:paths/server_bin.gd——与 .mcp.json 条目的 shim
+## 解析共用,保证"边车拉起的 daemon"与"shim 自举的 daemon"是同一份产物):
+##   1. GODOT_MCP_DAEMON_EXE(显式覆盖;审计/测试用;设置即独占,不存在则不再回退);
+##   2. 仓库的 server-dotnet/publish/<rid>/(本地开发:addon 链接安装时机器上只有这一份);
+##   3. <addon_dir>/bin/<rid>/(随包分发:addon 被整份复制时的随包位置)。
+## rid 取 .NET RID 命名(win-x64 / linux-x64 / osx-arm64 / osx-x64 …),
+## 由 paths/platform_rid.gd 单一出处提供。
 ##
 ## 本文件必须保持"对导出友好"(模块表 modules.gd 位于运行时预加载闭包):
 ## 只使用 OS / Time / FileAccess / ProjectSettings / StreamPeerTCP / Engine 等
@@ -27,6 +27,8 @@ const _ENV_EXE := "GODOT_MCP_DAEMON_EXE"
 const _ENV_PORT := "GODOT_MCP_DAEMON_PORT"
 const _ENV_AUTOSTART := "GODOT_MCP_DAEMON_AUTOSTART"
 const _SETTING_AUTOSTART := "mcp_toolkit/daemon/autostart"
+
+const ServerBin := preload("res://addons/godot_mcp_toolkit/paths/server_bin.gd")
 
 const _DEFAULT_PORT := 6590
 const _PROBE_INTERVAL_S := 5.0
@@ -126,7 +128,8 @@ func _try_spawn() -> void:
 		if not _missing_logged:
 			push_warning(
 				"[DaemonSidecar] 未找到 godot-mcp-daemon 可执行文件,已跳过自动拉起;"
-				+ "请设置 %s 或放置发布产物(addons/godot_mcp_toolkit/bin/<rid>/)。" % _ENV_EXE)
+				+ "请设置 %s,或把服务发布到 server-dotnet/publish/<rid>/(本地开发)"
+				% _ENV_EXE + "／addons/godot_mcp_toolkit/bin/<rid>/(随包分发)。")
 			_missing_logged = true
 		return
 	_missing_logged = false
@@ -138,26 +141,6 @@ func _try_spawn() -> void:
 
 
 func _resolve_daemon_executable() -> String:
-	var env_exe := OS.get_environment(_ENV_EXE)
-	if not env_exe.is_empty():
-		return env_exe if FileAccess.file_exists(env_exe) else ""
-	var rid := _rid()
-	var exe_name := "godot-mcp-daemon.exe" if OS.get_name() == "Windows" else "godot-mcp-daemon"
-	# 本脚本位于 <addon_root>/daemon/ 下。发布产物落到 addon 本地 bin/<rid>/:
-	# 对 junction 安装(联接目标是仓库 addon 目录)与复制安装(addon 被整个复制)
-	# 都经 res:// 透明命中 —— 联接下的 ".." 是词法折叠,不能依赖 addon 之外的相对路径。
-	var script_dir := ProjectSettings.globalize_path(get_script().resource_path.get_base_dir())
-	var addon_root := script_dir.path_join("..")
-	var candidate := addon_root.path_join("bin").path_join(rid).path_join(exe_name)
-	return candidate if FileAccess.file_exists(candidate) else ""
-
-
-static func _rid() -> String:
-	var arch := Engine.get_architecture_name()
-	match OS.get_name():
-		"Windows":
-			return "win-x64" if arch == "x86_64" else "win-arm64"
-		"macOS":
-			return "osx-arm64" if arch == "arm64" else "osx-x64"
-		_:
-			return "linux-x64" if arch == "x86_64" else "linux-arm64"
+	# 落点解析的单一出处(见文件头注释):本地开发指向仓库 publish/<rid>/,
+	# 随包分发指向 addon 的 bin/<rid>/。
+	return ServerBin.daemon_path()

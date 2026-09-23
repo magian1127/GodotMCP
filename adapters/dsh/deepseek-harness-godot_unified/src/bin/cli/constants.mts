@@ -17,11 +17,37 @@ export const ROW_END = '# dsh-godot:end'
 /** 旧 Node 桥 server 入口在工作区布局中的固定相对路径(Node 桥 2026-09-14 退役,保留作回滚通道)。 */
 export const SERVER_DIST_RELATIVE = 'plugin/godot-mcp-unified/server/dist/index.js'
 
-/** daemon HTTP 自举桥入口的固定相对路径(DSH 翻转后的默认 server 入口)。 */
+/** daemon HTTP 自举桥入口的固定相对路径(仅 stdio 的宿主兜底;Node .mjs,经 node 执行)。 */
 export const BRIDGE_ENTRY_RELATIVE = 'adapters/dsh/godot-http-bridge.mjs'
 
-/** root 推导候选(bridge 优先,legacy 兼容)。 */
-export const SERVER_ENTRY_CANDIDATES = [BRIDGE_ENTRY_RELATIVE, SERVER_DIST_RELATIVE]
+/**
+ * 本平台 .NET RID(Node 侧判定;与 addon 的 paths/platform_rid.gd、
+ * server-dotnet 的发布档同名同义)。
+ */
+export function currentRid(platform: string = process.platform, arch: string = process.arch): string {
+  if (platform === 'win32') return arch === 'arm64' ? 'win-arm64' : 'win-x64'
+  if (platform === 'darwin') return arch === 'arm64' ? 'osx-arm64' : 'osx-x64'
+  return arch === 'arm64' ? 'linux-arm64' : 'linux-x64'
+}
+
+/**
+ * 随包 shim 入口在工作区布局中的固定相对路径——DSH 的标准 server 入口:
+ * 该 exe 由 daemon 侧发布产出(与 daemon 同目录),host 直接 spawn 它,
+ * 由 shim 确保机器级单例 daemon 在跑再把 stdio 转发到 daemon 的 HTTP 面,
+ * 因此不需要 Node 参与,也不要求 daemon 先被别处拉起。
+ */
+export function shimEntryRelative(rid: string = currentRid()): string {
+  const ext = rid.startsWith('win-') ? '.exe' : ''
+  return `plugin/godot-mcp-unified/server-dotnet/publish/${rid}/godot-mcp-shim${ext}`
+}
+
+/** root 推导候选(随包 shim 优先,bridge 兜底,legacy 兼容)。 */
+export const SERVER_ENTRY_CANDIDATES = [shimEntryRelative(), BRIDGE_ENTRY_RELATIVE, SERVER_DIST_RELATIVE]
+
+/** 入口是否为「需经 node 执行的脚本」——否则按可执行文件直接 spawn。 */
+export function isScriptEntry(path: string): boolean {
+  return /\.(mjs|cjs|js)$/i.test(path.replace(/\\/g, '/'))
+}
 
 export const WINDOWS_COMMAND_ENV = 'DSH_GODOT_COMMAND_JSON'
 const WINDOWS_COMMAND_SCRIPT = [

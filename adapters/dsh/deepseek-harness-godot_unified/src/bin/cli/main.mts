@@ -17,8 +17,8 @@ const USAGE = [
   `  dsh-godot install --project <Godot 项目绝对路径> [选项]`,
   `      选项:`,
   `        --profile <name>        目标 profile(默认 web;仅用于状态语义)`,
-  `        --server-dist <file>    server dist/index.js 绝对路径(优先级最高)`,
-  `        --godot-mcp-root <dir>  GodotMCP 工作区根目录(取 plugin/godot-mcp-unified/server/dist/index.js)`,
+  `        --server-dist <file>    server 入口绝对路径(优先级最高):随包 shim 可执行文件(标准形态)`,
+  `        --godot-mcp-root <dir>  GodotMCP 工作区根目录(取 server-dotnet/publish/<rid>/godot-mcp-shim[.exe])`,
   `        --cwd <dir>             绑定的会话工作目录(默认当前目录;按 cwd 匹配生效)`,
   `        --server-name <name>    保留参数(工具命名空间,默认 ${SERVER_NAME_DEFAULT})`,
   `        --row-id <id>           保留参数(patch 行 id,默认 ${MCP_ROW_ID})`,
@@ -233,7 +233,7 @@ async function cmdStatus(argv: string[]): Promise<number> {
     console.log('  路径配置:      未配置(运行 dsh-godot install 或在侧栏「插件」页 → 本包页面填写)')
   } else {
     const distOk = paths.serverDist !== undefined ? validateServerDistFile(paths.serverDist) : null
-    console.log(`  server dist:   ${paths.serverDist === undefined ? '(未设置)' : (distOk?.ok ?? false) ? '存在' : '缺失(先构建 GodotMCP server)'} — ${paths.serverDist ?? '-'}`)
+    console.log(`  server dist:   ${paths.serverDist === undefined ? '(未设置)' : (distOk?.ok ?? false) ? '存在' : '缺失(先发布服务:dotnet publish plugin/godot-mcp-unified/server-dotnet/src/godot-mcp-shim -c Release -p:PublishProfile=<rid>)'} — ${paths.serverDist ?? '-'}`)
     console.log(`  项目条目:      ${paths.projects.length} 条(按 cwd 匹配)`)
     for (const entry of paths.projects) {
       console.log(`    ${entry.cwd} → ${validateGodotProject(entry.projectPath).ok ? '有效' : '无效(缺 project.godot)'} ${entry.projectPath}`)

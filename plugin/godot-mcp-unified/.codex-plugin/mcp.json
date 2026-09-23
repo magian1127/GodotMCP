@@ -1,7 +1,9 @@
 {
   "mcpServers": {
     "godot": {
-      "url": "http://127.0.0.1:6590/"
+      "type": "stdio",
+      "command": "${PLUGIN_ROOT}/server-dotnet/publish/win-x64/godot-mcp-shim.exe",
+      "args": []
     }
   }
 }

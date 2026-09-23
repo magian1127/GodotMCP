@@ -151,12 +151,13 @@ public class PlaytestToolsTests
     }
 
     /// <summary>
-    /// capture_screenshot 默认内联模式返回合法的图像内容块(ImageContentBlock)——
+    /// capture_screenshot 显式 image_response_mode:'inline' 返回合法的图像内容块(ImageContentBlock)——
     /// 回归:块数据须是已编码 base64,误喂原始字节会让客户端拿到非法 base64 文本。
     /// <para>断言链:Arrange —— daemon+会话;编辑器替身(D:\proj\inline)与运行时替身(共享令牌),
     /// runtime.screenshot 回帧携带 PNG 头形状字节(非 UTF-8/ASCII,误传必非合法 base64)的 base64
-    /// 与 8x8 元数据;发布运行时条目。Act —— capture_screenshot(target=runtime,默认内联),
-    /// GAME_NOT_RUNNING 视作 watcher 尚未消化注册表变更而轮询重试(15s 上限)。Assert ——
+    /// 与 8x8 元数据;发布运行时条目。Act —— capture_screenshot(target=runtime, 显式 inline;
+    /// 工具缺省已改为 disk,内联路径由本测试守住),GAME_NOT_RUNNING 视作 watcher 尚未消化
+    /// 注册表变更而轮询重试(15s 上限)。Assert ——
     /// ① 首内容块为 ImageContentBlock,DecodedData 还原为原始字节(能反序列化到此处本身即证明
     /// wire 数据为合法 base64),MimeType="image/png";② 次内容块为元数据文本,width=8。</para>
     /// </summary>
@@ -209,6 +210,7 @@ public class PlaytestToolsTests
             shot = await client.CallToolAsync("capture_screenshot", new Dictionary<string, object?>
             {
                 ["target"] = "runtime",
+                ["image_response_mode"] = "inline",
             });
             var shotText = shot.Content.OfType<TextContentBlock>().FirstOrDefault()?.Text ?? "";
             if (shot.IsError is null or false
@@ -230,6 +232,79 @@ public class PlaytestToolsTests
         {
             Assert.Equal(8, payload.RootElement.GetProperty("width").GetInt32());
         }
+    }
+
+    /// <summary>
+    /// capture_screenshot 缺省 image_response_mode 时,daemon 注入 disk 并返回纯文本磁盘信封——
+    /// 默认面向 MCP 代理返回"文件地址"而非内嵌 base64(大图卡死/超限的根源),内联改为显式选择。
+    /// <para>断言链:Arrange —— daemon+会话;编辑器与运行时替身(D:\proj\diskdef),runtime.screenshot
+    /// 回帧携带磁盘形态 path;发布运行时条目。Act —— capture_screenshot(target=runtime)不带模式
+    /// (GAME_NOT_RUNNING 轮询重试同前)。Assert —— ① 响应为纯文本信封:path 随行、无图像内容块;
+    /// ② 替身收到的 ParamsRaw 含注入的 "image_response_mode":"disk"(外发参数的证据)。</para>
+    /// </summary>
+    [Fact]
+    public async Task screenshot_without_mode_defaults_to_disk_path_envelope()
+    {
+        var stateDir = TestPaths.NewStateDir();
+        using var daemon = DaemonProcess.StartReady(new DaemonSpawnOptions { StateDir = stateDir, IdleSeconds = 120 });
+        await using var client = await SessionConnector.ConnectAsync(daemon.Port, daemon.Token);
+
+        using var editor = FakeGodotInstance.Start(new FakeGodotOptions
+        {
+            ProjectPath = @"D:\proj\diskdef",
+            StateDir = stateDir,
+        });
+        using var runtime = FakeGodotInstance.Start(new FakeGodotOptions
+        {
+            ProjectPath = @"D:\proj\diskdef",
+            StateDir = null,
+            Token = editor.Token,
+            AuthAckJson = """{"authed":true}""",
+            Scripts =
+            {
+                new FakeScript
+                {
+                    Method = "runtime.screenshot",
+                    Reusable = true,
+                    Frames =
+                    {
+                        new FakeFrame { Json = ResultFrame(
+                            """{"success":true,"path":"user://screenshots/def.png","width":800,"height":600}""") },
+                    },
+                },
+            },
+        });
+        await WaitConnectedAsync(client, @"D:\proj\diskdef");
+        FakeGodotRegistry.UpdateRuntimeFields(stateDir, @"D:\proj\diskdef", runtime.Port, Environment.ProcessId);
+
+        // 注册表变更异步消化:GAME_NOT_RUNNING 视作"通道尚未就绪",轮询重试(15s 上限)。
+        CallToolResult shot;
+        var shotDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        while (true)
+        {
+            shot = await client.CallToolAsync("capture_screenshot", new Dictionary<string, object?>
+            {
+                ["target"] = "runtime",
+            });
+            var shotText = shot.Content.OfType<TextContentBlock>().FirstOrDefault()?.Text ?? "";
+            if (shot.IsError is null or false
+                || !shotText.Contains("GAME_NOT_RUNNING", StringComparison.Ordinal)
+                || DateTime.UtcNow >= shotDeadline)
+            {
+                break;
+            }
+            await Task.Delay(250);
+        }
+        Assert.True(shot.IsError is null or false, shot.Content.OfType<TextContentBlock>().FirstOrDefault()?.Text ?? "(no text)");
+        // 磁盘信封为纯文本:path 随行,绝无图像内容块。
+        Assert.DoesNotContain(shot.Content, block => block is ImageContentBlock);
+        using (var payload = JsonDocument.Parse(Assert.IsType<TextContentBlock>(shot.Content[0]).Text))
+        {
+            Assert.Equal("user://screenshots/def.png", payload.RootElement.GetProperty("path").GetString());
+        }
+        // 外发参数携带注入的 disk 缺省(替身收到的请求为证)。
+        var op = Assert.Single(runtime.Ops, o => o.Method == "runtime.screenshot");
+        Assert.Contains("\"image_response_mode\":\"disk\"", op.ParamsRaw, StringComparison.Ordinal);
     }
 
     /// <summary>

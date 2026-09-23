@@ -211,22 +211,23 @@ processes inherit the **same** value:
 - **Prefer Scanned mode** if you don't want to manage env on both sides — registry
   discovery keeps the two in agreement automatically.
 
-## macOS: launching your MCP client (daemon HTTP)
+## macOS: launching your MCP client (stdio shim)
 
-The standard configuration points MCP clients at the machine-level daemon over
-loopback HTTP (`http://127.0.0.1:6590/`) — the per-session Node server was
-retired with plugin 1.1.0, so there is no `node` command or `PATH` concern
-anymore. If a GUI-launched client cannot connect, work through these:
+The standard configuration has each MCP client spawn the bundled stdio shim
+(`server-dotnet/publish/<rid>/godot-mcp-shim`), which bootstraps the
+machine-level daemon on first use. The per-session Node server was retired with
+plugin 1.1.0, so there is no `node` command or `PATH` concern anymore. If a
+GUI-launched client cannot connect, work through these:
 
 - **Launch the client from a terminal to see its error.** `open` won't help — start
   the app's binary from a shell so its real startup error is printed.
 - **Confirm `.mcp.json` is present at your project root.** If it is missing, click
-  **Write .mcp.json** in the Godot MCP Unified dock (it writes the daemon HTTP
+  **Write .mcp.json** in the Godot MCP Unified dock (it writes the stdio shim
   entry).
-- **Confirm the daemon is listening** on `127.0.0.1:6590` — the editor's
-  auto-spawn sidecar or the host installer
-  (`adapters/zcode/install-http-face.ps1` in the workspace repo) brings it up on
-  demand.
+- **Confirm the shim exists** at the path your `.mcp.json` names — the dock warns
+  when it does not. Publish the service into `server-dotnet/publish/<rid>/`, or
+  point `GODOT_MCP_SHIM_EXE` at it. The shim starts the daemon on demand, so a
+  missing daemon is not something you have to start by hand.
 
 ## Language server (LSP)
 

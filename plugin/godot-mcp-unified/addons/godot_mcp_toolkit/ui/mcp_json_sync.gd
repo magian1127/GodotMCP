@@ -3,11 +3,15 @@ extends RefCounted
 ## 项目 MCP 配置的读取与工程根目录 .mcp.json 的显式写入。
 ##
 ## 拥有插件对 .mcp.json 的全部访问：既负责读取（路径解析、godot
-## 服务器条目的环境变量、只读检测），也负责构建由插件发起的写入。
-## 写入生成 daemon HTTP 条目（type=http + 回环 URL，与
-## scripts/install-godot-project.ps1 写出的形态一致）：机器级单例 daemon 由
-## 编辑器边车或宿主安装器拉起，项目配置不再引用本地 Node server
-## （Node 桥已随插件 1.1.0 退役）。
+## 服务器条目的环境变量、只读检测、失效条目检测），也负责构建
+## 由插件发起的写入。
+## 写入生成 stdio 条目：command 指向**工程内随附的 shim**
+## （addons/godot_mcp_toolkit/bin/<rid>/godot-mcp-shim[.exe]）。host（Codex/IDE 等）
+## spawn 该 shim，由 shim 确保机器级单例 daemon 在跑、再把 stdio 转发到 daemon
+## 的回环 HTTP 面——因此任何装了本插件的 Godot 工程都能自行把服务拉起来，
+## 不依赖编辑器先启动、也不依赖宿主侧安装器（Node 桥已随插件 1.1.0 退役）。
+## 本地开发下每个工程都链接(junction)同一个 addon 目录，所以
+## 一次产物就位即服务所有工程（见 server-dotnet/Directory.Build.targets）。
 ## 该文件的编辑权始终归用户；插件只在用户显式操作时写入
 ## （停靠面板(dock) / 工具菜单的“写入 .mcp.json”），
 ## 并保留现有文件中的 GODOT_MCP_* 环境变量键。
@@ -17,15 +21,13 @@ extends RefCounted
 ## 反馈（弹出提示(toast)）留在各调用方；本仓库只触碰文件本身，
 ## 绝不触及 EditorInterface / 对话框 / 弹出提示。
 ## 随附的环境/结构骨架：写入流程读取其 env 块作为基础环境
-## （GODOT_MCP_CONFIG_VERSION）；服务器条目为常量 daemon HTTP 形态。
+## （GODOT_MCP_CONFIG_VERSION）；服务器条目的 command 在写入时按平台解析。
 
 const ConfigDiscovery := preload("res://addons/godot_mcp_toolkit/ui/mcp_json_discovery.gd")
+const ServerBin := preload("res://addons/godot_mcp_toolkit/paths/server_bin.gd")
 
 # 由本集成插件拥有的 mcpServers 键。
 const _TEMPLATE_PATH := "res://addons/godot_mcp_toolkit/.mcp.json.template"
-
-# daemon 的回环监听面(ADR-0002;端口与 daemon 默认一致,env 可覆盖)。
-const _DAEMON_URL := "http://127.0.0.1:6590/"
 
 # 按设计不存在网络/npm 回退(fallback)。
 const _SERVER_KEY := "godot"
@@ -88,7 +90,6 @@ static func _extract_server_env(parsed: Dictionary) -> Dictionary:
 ## 共享查询（停靠面板子面板 + 按钮、信息对话框）——只解析一次，只此一个归宿。
 ## 连续需要两次的调用方应缓存结果
 ## （停靠面板在每次状态刷新时如此做），而不是重新解析。
-## 当且仅当 .mcp.json 存在但不是有效 JSON（或不是 JSON 对象）时为真——
 static func is_read_only() -> bool:
 	var env := get_all_env_vars()
 	return env.get("GODOT_MCP_READ_ONLY", "") == "1"
@@ -102,6 +103,30 @@ static func is_malformed() -> bool:
 	return has_mcp_json() and _parse_mcp_json() == null
 
 
+## 当且仅当 .mcp.json 有效、但其服务器条目已无法拉起任何东西时为真——
+## 即指向已退役的 Node 桥入口(server/dist/index.js),或 command 指向的
+## 绝对路径已不存在(判据见 ConfigDiscovery)。这是"文件合法、客户端却必然连不上"
+## 的第四种状态,停靠面板据此提供迁移。与 is_malformed() 一样是文件的实时事实(FACT),
+## 可以安全地在停靠面板的 1 秒定时器上检查。
+static func needs_migration() -> bool:
+	var parsed = _parse_mcp_json()
+	if parsed == null:
+		return false
+	var entry := ConfigDiscovery.server_entry(parsed)
+	return ConfigDiscovery.points_at_retired_entry(entry) \
+		or ConfigDiscovery.command_is_missing(entry)
+
+
+## 当且仅当该条目的 command 指向已退役的 Node 桥入口时为真——
+## 把迁移提示从"入口不存在"精确到"入口是已退役的 Node 桥"。
+## 仅在 needs_migration() 为真时有意义。
+static func points_at_retired_entry() -> bool:
+	var parsed = _parse_mcp_json()
+	if parsed == null:
+		return false
+	return ConfigDiscovery.points_at_retired_entry(ConfigDiscovery.server_entry(parsed))
+
+
 ## 当且仅当项目根目录已存在 .mcp.json（写入会将其覆盖）时为真。
 ## 共享写入流程用它决定在调用 write_from_template() 之前
 ## 是否显示覆盖确认对话框。
@@ -109,18 +134,27 @@ static func needs_overwrite_confirm() -> bool:
 	return FileAccess.file_exists(get_mcp_json_path())
 
 
-## daemon HTTP 条目为常量内容,写入没有本地文件系统前置条件(Node 时代需要
-## 证实随附 server/dist 入口存在,已随 Node 桥退役)。保留函数以维持
-## 启用提议(mcp_json_enable_prompt)等调用点。
+## 供 .mcp.json 的 command 使用的 shim 可执行文件绝对路径。
+## 落点解析（单一出处）见 paths/server_bin.gd：本地开发（链接安装）命中仓库里
+## 唯一的那份 server-dotnet/publish/<rid>/，随包分发（复制安装）命中 addon 的
+## bin/<rid>/。command 必须是绝对路径——host 的工作目录不一定是本工程。
+static func shim_path() -> String:
+	return ServerBin.shim_path()
+
+
+## 当且仅当 shim 可执行文件存在时为真——host 靠它自举 daemon，所以条目可写的
+## 前提是"确有一个入口指向"；缺失时写入会报告失败并给出补救路径
+## （`dotnet publish src/godot-mcp-shim -c Release -p:PublishProfile=<rid>`）。
 static func can_write_mcp_json() -> bool:
-	return true
+	return FileAccess.file_exists(shim_path())
 
 
-## 构建本地 mcpServers 服务器条目（daemon HTTP 形态）。
-## 与 scripts/install-godot-project.ps1 写出的条目一致：type=http + 回环 URL；
-## 认证 token 由各宿主的安装器注入,项目级条目保持无凭据形态(同规)。
+## 构建本地 mcpServers 服务器条目（stdio + 工程内 shim）。
+## `type` 显式写 stdio（各宿主同名同义；缺省虽也按 stdio 解释，但显式更不易被误读）。
+## command 必须是绝对路径:host 的工作目录不一定是本工程,相对路径无从解析。
+## args 为空——shim 的参数全部来自 env（GODOT_MCP_DAEMON_PORT / _EXE）。
 static func build_server_entry() -> Dictionary:
-	return {"type": "http", "url": _DAEMON_URL}
+	return {"type": "stdio", "command": shim_path(), "args": []}
 
 
 ## 写入 .mcp.json，并通过 on_result 上报结果，
@@ -128,14 +162,21 @@ static func build_server_entry() -> Dictionary:
 ##   (ok: bool, message: String, severity: int, tooltip: String)
 ## — severity 采用编辑器弹出提示刻度（0 信息 / 1 警告 / 2 错误），
 ## 调用方将其直接转发给自己的弹出提示。模板缺失 -> 错误报告；
+## shim 产物缺失 -> 错误报告（见 can_write_mcp_json；绝不写出一个
+## 指向不存在文件的条目——那正是要迁移掉的失效形态）；
 ## 文件已存在且 force_overwrite == false -> “需要确认”报告
 ## （防御性——共享写入流程会先通过 needs_overwrite_confirm() 预检）；
-## 否则构建 daemon HTTP 条目内容（见 build_server_entry）并报告
+## 否则构建 stdio + 工程内 shim 条目内容（见 build_server_entry）并报告
 ## 成功（信息级，以目标路径作为提示(tooltip)）
 ## 或打开失败（错误级）。不含界面：无对话框、无 EditorInterface、无弹出提示。
 static func write_from_template(force_overwrite: bool, on_result: Callable) -> void:
 	if not FileAccess.file_exists(_TEMPLATE_PATH):
 		on_result.call(false, "Template not found: " + _TEMPLATE_PATH, 2, "")
+		return
+	if not can_write_mcp_json():
+		on_result.call(
+			false, "Shim executable missing: " + shim_path(), 2,
+			"Publish the server or sync a build into the addon's bin folder first.")
 		return
 	var dest := get_mcp_json_path()
 	if not force_overwrite and needs_overwrite_confirm():
@@ -185,7 +226,7 @@ static func _stringify_entry(entry: Dictionary) -> String:
 	return JSON.stringify(document, "\t") + "\n"
 
 
-## 构建服务器条目（{type, url, env}），并分层合并 env
+## 构建服务器条目（{command, args, env}），并分层合并 env
 ## 以保留现有文件中的用户键（见 merge_server_env）。
 static func _build_entry() -> Dictionary:
 	var entry := build_server_entry()

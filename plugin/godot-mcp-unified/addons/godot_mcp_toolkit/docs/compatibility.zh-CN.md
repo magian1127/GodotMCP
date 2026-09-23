@@ -138,15 +138,15 @@ Godot 4.2 可能仍把 `addons/godot_mcp_toolkit/icon.svg.import` 及其烘焙�
 ```bash
 godot --headless --editor --path /path/to/project &
 # The addon's auto-spawn sidecar brings up the machine-level daemon;
-# MCP clients connect via loopback HTTP (http://127.0.0.1:6590/) —
-# there is no per-session Node server to launch anymore.
+# MCP clients reach it through the bundled stdio shim, which bootstraps
+# the daemon on demand — there is no per-session Node server to launch anymore.
 ```
 
 文件工具（脚本、资源、场景、文件夹）、ClassDB 内省和项目设置均无需显示器。场景树操作也可用——`scene_open` 以编程方式加载场景，完整节点 / 信号工具链从此可用。
 
-## 客户端连接（daemon HTTP）
+## 客户端连接（stdio shim）
 
-自插件 1.1.0 起 Node 桥退役，所有平台都让 MCP 客户端经回环 HTTP 连接常驻 daemon——随包 Node 服务器已不存在。如果无法连接：从终端启动客户端以查看真实错误；确认项目根存在 `.mcp.json`；确认 daemon 正在监听 `127.0.0.1:6590`（编辑器边车或宿主安装器会拉起）。完整排查见 [advanced_configuration.zh-CN.md](advanced_configuration.zh-CN.md)。
+自插件 1.1.0 起 Node 桥退役，所有平台都让 MCP 客户端经随包的 stdio shim 连接常驻 daemon——随包 Node 服务器已不存在。如果无法连接：从终端启动客户端以查看真实错误；确认项目根存在 `.mcp.json`；确认它所指的 shim 在磁盘上确实存在（缺失时 dock 会示警）。完整排查见 [advanced_configuration.zh-CN.md](advanced_configuration.zh-CN.md)。
 
 ## 向前兼容
 

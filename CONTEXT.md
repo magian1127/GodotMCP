@@ -47,3 +47,8 @@ _Avoid_: 代理、转发器
 **自举器(shim)**:
 以 stdio 面向 host、把流量转发给 daemon 的小进程，并负责在 daemon 缺席时拉起它。
 _Avoid_: 启动器、代理
+
+**宿主条目(host entry)**:
+宿主配置文件（`.mcp.json` 等）里声明如何接入 daemon 的那一条记录。其形态是决策而非约定，
+由 [ADR-0005](docs/adr/0005-host-entry-stdio-shim.md) 决定，不随宿主而异。
+_Avoid_: MCP 配置、服务器定义

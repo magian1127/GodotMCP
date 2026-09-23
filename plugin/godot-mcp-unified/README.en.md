@@ -8,10 +8,10 @@ The control plane is a machine-level singleton **godot-mcp-daemon** (.NET self-c
 
 | Client | Adapter | How it loads |
 | --- | --- | --- |
-| Codex | `.codex-plugin/` (plugin.json + mcp.json, url form) | Personal/repo plugin marketplace, or `codex plugins add` pointing at this directory |
-| ZCode | `.zcode-plugin/plugin.json` + root `.mcp.json` (http form) | Local plugin marketplace whose root is the repository root (see root `marketplace.json`) |
-| VS Code | `adapters/vscode/` (repo access layer: README + mcp.json example + install script) | Project-level `.vscode/mcp.json` written by the install script |
-| DSH (stdio-only) | `adapters/dsh/godot-http-bridge.mjs` (node stdio ↔ daemon HTTP) | point the DSH godotServerDist setting at that file |
+| Codex | `.codex-plugin/` (plugin.json + mcp.json, stdio form: `${PLUGIN_ROOT}` points at the bundled shim) | Personal/repo plugin marketplace, or `codex plugins add` pointing at this directory |
+| ZCode | `.zcode-plugin/plugin.json` + root `.mcp.json` (stdio form: `${ZCODE_PLUGIN_ROOT}` points at the bundled shim) | Local plugin marketplace whose root is the repository root (see root `marketplace.json`) |
+| VS Code | `adapters/vscode/` (repo access layer: README + mcp.json example + install script) | Project-level `.vscode/mcp.json` written by the install script (stdio form + bundled shim) |
+| DSH (stdio-only) | the bundled shim (`server-dotnet/publish/<rid>/`, spawned natively); `adapters/dsh/godot-http-bridge.mjs` is the node fallback | point DSH's `serverDist` at the bundled shim (`dsh-godot install --server-dist`, or the plugin page path field) |
 
 > To adapt a new client, add a small adapter directory/file at the plugin root — do **not** copy the whole plugin.
 
@@ -29,13 +29,13 @@ The validated Godot target: Godot 4.7.2 stable (.NET/mono build); the verified b
 
 ### Codex
 
-Codex reads the plugin from `.codex-plugin/plugin.json` (skills and the MCP server config live in `.codex-plugin/mcp.json`, url form pointing at the daemon HTTP face). Register this directory as a personal/repo marketplace plugin, or run `codex plugins add <absolute path>` and enable `godot-mcp-unified`; provide the Bearer token via the user environment variable `GODOT_MCP_DAEMON_TOKEN` (the installer writes it).
+Codex reads the plugin from `.codex-plugin/plugin.json` (skills and the MCP server config live in `.codex-plugin/mcp.json`, **stdio form**: `command` uses `${PLUGIN_ROOT}` to reach the repo's single service entry `server-dotnet/publish/<rid>/godot-mcp-shim[.exe]`, which makes sure the machine-level daemon is running and then forwards stdio to the daemon's HTTP face). Register this directory as a personal/repo marketplace plugin, or run `codex plugins add <absolute path>` and enable `godot-mcp-unified`; for local development prefer `adapters/codex/link-codex-plugin.ps1`, which turns the plugin cache into a junction to the single source so edits need no redeploy. The stdio form needs no Bearer token (the shim reads it from the machine-level registry); `GODOT_MCP_DAEMON_TOKEN` is only for url-type consumers such as DSH's `godot-http-bridge.mjs`.
 
 ### ZCode
 
-ZCode installs through the local plugin marketplace whose root is the repo root (`marketplace.json`), with the plugin source pointing at this directory. ZCode reads `.zcode-plugin/plugin.json` and the root `.mcp.json` (http form + Authorization header, same token).
+ZCode installs through the local plugin marketplace whose root is the repo root (`marketplace.json`), with the plugin source pointing at this directory. ZCode reads `.zcode-plugin/plugin.json` and the root `.mcp.json` (**stdio form**: `command` uses `${ZCODE_PLUGIN_ROOT}` to reach the repo's single service entry `server-dotnet/publish/<rid>/godot-mcp-shim[.exe]`, which makes sure the daemon is running and then forwards stdio to the daemon's HTTP face — **no Bearer token needed**).
 
-Install/update: run `& ".\adapters\zcode\install-http-face.ps1"` from the repo root (publishes the daemon, spawns it, flips the registration; idempotent) or `& ".\adapters\zcode\link-zcode-plugin.ps1"` (junction deploy), then restart ZCode.
+Install/update: run `& ".\adapters\zcode\install-zcode-plugin.ps1"` from the repo root (publishes daemon+shim, validates the plugin contract, migrates away the user-level http registration that would shadow it, pre-warms the daemon; idempotent) or `& ".\adapters\zcode\link-zcode-plugin.ps1"` (junction deploy), then restart ZCode.
 
 ### VS Code
 
@@ -43,7 +43,7 @@ VS Code has no marketplace/plugin-package concept; it consumes a project-level `
 
     & "<repo>\adapters\vscode\install-vscode-mcp.ps1" -ProjectPath "D:\Games\MyProject"
 
-The script writes `.vscode/mcp.json` into the target project (http form pointing at the daemon HTTP face + Bearer token). Open the project in VS Code and the `godot` server (`mcp__godot__*`) is available. Full details in [`../../adapters/vscode/README.md`](../../adapters/vscode/README.md).
+The script writes `.vscode/mcp.json` into the target project (**stdio form**: `type: stdio` + `command` pointing at the bundled shim, no token required; other MCP server entries in the same file are preserved). Open the project in VS Code and the `godot` server (`mcp__godot__*`) is available. Full details in [`../../adapters/vscode/README.md`](../../adapters/vscode/README.md).
 
 ## Install into a Godot project
 
@@ -56,7 +56,7 @@ The installer:
 1. verifies Godot 4;
 2. backs up any existing addon and `project.godot`;
 3. installs `addons/godot_mcp_toolkit` and enables it (the sidecar auto-spawns the daemon on demand);
-4. writes the project-level `.vscode/mcp.json` (http form) while preserving other servers;
+4. writes the project-root `.mcp.json` (**stdio form**: points at the bundled shim, no token) while preserving other servers and `GODOT_MCP_*` keys;
 5. launches a headless editor and requires a confirmed authenticated loopback listener.
 
 Use `-Template empty`, `default`, `2d-platformer` or `3d-fps` to create a new project in an empty target directory.

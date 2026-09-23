@@ -7,7 +7,6 @@ extends RefCounted
 
 const Modules := preload("res://addons/godot_mcp_toolkit/core/modules.gd")
 const MCPJsonSync = Modules.MCPJsonSync
-const NodejsCheck = Modules.NodejsCheck
 const EditorLocale := preload("res://addons/godot_mcp_toolkit/ui/editor_locale.gd")
 
 const _BOOTSTRAP_KEY := "mcp_toolkit/internal/bootstrap_complete"
@@ -20,12 +19,10 @@ const _READ_ONLY_WARNING_TEXT := (
 	+ "the MCP client to restore full access.")
 const _MCP_JSON_MISSING_TEXT := (
 	"No project .mcp.json detected. Clients can also connect through plugin or global MCP configuration.")
-const _NODEJS_NOT_FOUND_TEXT := (
-	"NODE.JS NOT FOUND — The MCP server bridge requires Node.js 22+. "
-	+ "See the bundled advanced-configuration guide for local setup.")
-const _NODEJS_OLD_VERSION_TEXT := (
-	"NODE.JS %s FOUND BUT 22+ REQUIRED — "
-	+ "See the bundled advanced-configuration guide for local setup.")
+const _SHIM_MISSING_TEXT := (
+	"MCP SERVER SHIM NOT FOUND — the service executable the plugin points .mcp.json at "
+	+ "is absent. Publish the bundled service (server-dotnet/publish/<rid>/) or set "
+	+ "GODOT_MCP_SHIM_EXE. See the bundled advanced-configuration guide.")
 
 
 static func register_all() -> void:
@@ -47,8 +44,8 @@ static func register_all() -> void:
 static func _register_daemon() -> void:
 	_register_basic_bool("mcp_toolkit/daemon/autostart", true,
 		EditorLocale.pick(
-			"Automatically spawn the local godot-mcp-daemon when it is absent, and re-spawn it if it exits (probed every few seconds). Set false (or env GODOT_MCP_DAEMON_AUTOSTART=0) to disable. The executable is resolved from GODOT_MCP_DAEMON_EXE, then addons/godot_mcp_toolkit/bin/<rid>/, then the repository publish directory.",
-			"daemon 缺席时自动拉起本地 godot-mcp-daemon,并在其退出后重拉(数秒一次探活)。设为 false(或环境变量 GODOT_MCP_DAEMON_AUTOSTART=0)可禁用。可执行文件按 GODOT_MCP_DAEMON_EXE → addons/godot_mcp_toolkit/bin/<rid>/ → 仓库发布目录的顺序解析。"))
+			"Automatically spawn the local godot-mcp-daemon when it is absent, and re-spawn it if it exits (probed every few seconds). Set false (or env GODOT_MCP_DAEMON_AUTOSTART=0) to disable. The executable is resolved from GODOT_MCP_DAEMON_EXE, then the repository publish directory (server-dotnet/publish/<rid>/), then addons/godot_mcp_toolkit/bin/<rid>/.",
+			"daemon 缺席时自动拉起本地 godot-mcp-daemon,并在其退出后重拉(数秒一次探活)。设为 false(或环境变量 GODOT_MCP_DAEMON_AUTOSTART=0)可禁用。可执行文件按 GODOT_MCP_DAEMON_EXE → 仓库发布目录(server-dotnet/publish/<rid>/) → addons/godot_mcp_toolkit/bin/<rid>/ 的顺序解析。"))
 
 
 ## register_all 的镜像 —— 在卸载时(仅 _disable_plugin)擦除所有
@@ -153,18 +150,13 @@ static func _compute_status_text() -> String:
 		parts.append(EditorLocale.pick(
 			_MCP_JSON_MISSING_TEXT,
 			"未检测到项目 .mcp.json。客户端也可以通过插件或全局 MCP 配置连接。"))
-	# Node.js 可用性。
-	var node_check := NodejsCheck.check()
-	if not node_check["found"]:
+	# 服务入口(shim)产物是否存在——缺失时写入 .mcp.json 必然失败(见 MCPJsonSync)。
+	if MCPJsonSync.shim_path().is_empty():
 		parts.append(EditorLocale.pick(
-			_NODEJS_NOT_FOUND_TEXT,
-			"未找到 NODE.JS — 本地 MCP 服务器桥接需要 Node.js 22 或更高版本。"
-				+ "请查看随插件提供的高级配置文档。"))
-	elif not node_check["meets_minimum"]:
-		parts.append(EditorLocale.pick(
-			_NODEJS_OLD_VERSION_TEXT,
-			"检测到 NODE.JS %s，但需要 22 或更高版本 — 请查看随插件提供的本地安装说明。"
-			) % str(node_check["version"]))
+			_SHIM_MISSING_TEXT,
+			"未找到 MCP 服务入口（shim）— 插件要写进 .mcp.json 的服务程序不存在。"
+				+ "请发布随包服务（server-dotnet/publish/<rid>/）或设置 GODOT_MCP_SHIM_EXE，"
+				+ "详情见随插件提供的高级配置文档。"))
 	return "\n\n".join(parts)
 
 

@@ -54,20 +54,6 @@ export interface WebServerServiceShape {
 // 运行时真值以 DSH 实际注入的服务为准;全部结构化最小子集。
 // ---------------------------------------------------------------------------
 
-/** settings 服务命名空间注册(live 应用 + 客户端暴露),对齐 hashline 模式。 */
-export interface SettingsRegistrationShape {
-  get(): Record<string, unknown>
-  watch(listener: (next: Record<string, unknown>) => void): Disposer
-}
-
-export interface SettingsServiceShape {
-  register(
-    namespace: string,
-    schema: unknown,
-    options: { base: Record<string, unknown>; applies: 'live'; exposeToClients: boolean },
-  ): SettingsRegistrationShape
-}
-
 /** agent/created 等事件携带的 agent 最小形状。 */
 export interface AgentShape {
   id?: string

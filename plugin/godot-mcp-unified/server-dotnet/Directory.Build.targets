@@ -1,0 +1,42 @@
+<Project>
+
+  <!--
+    随包分发:把发布产物同步到 addon 的 bin/<rid>/(**仅打包时**显式打开):
+
+      dotnet publish src/godot-mcp-daemon -c Release -p:PublishProfile=<rid> -p:CopyPublishToAddonBin=true
+      dotnet publish src/godot-mcp-shim   -c Release -p:PublishProfile=<rid> -p:CopyPublishToAddonBin=true
+
+    为什么默认关闭:publish 的落点 server-dotnet/publish/<rid>/ 就是本机唯一的
+    那一份——插件的落点解析(paths/server_bin.gd)在本地开发(工程链接安装)时
+    直接指向它,因此开发期不需要任何搬运,addon 里也不会多出上百 MB 的可执行
+    文件。只有"把插件整份复制给其他用户/机器"时才需要服务随包,此时才开此开关。
+
+    为什么必须同目录:shim 缺省从自身同目录解析 godot-mcp-daemon(.exe)
+    (见 ShimOptions / DaemonBootstrap),而随包形态下 host 直接 spawn
+    <addon>/bin/<rid>/godot-mcp-shim[.exe],因此两个可执行文件必须同目录、同一次
+    产出——两个工程共用本目标,各同步各的产物,不会漏掉其中一个。
+
+    锁定容错:Windows 会锁定正在运行的 exe(daemon 是机器级常驻,边车拉起后即可
+    锁住目标文件)。此时 Copy 记为告警而不中断构建,其余文件照常落位——结束该
+    进程(或等其空闲自退)后重跑即补齐。
+  -->
+  <PropertyGroup>
+    <_AddonBinRoot>$(MSBuildThisFileDirectory)..\addons\godot_mcp_toolkit\bin\</_AddonBinRoot>
+    <_AddonBinRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_AddonBinRid>
+    <_AddonBinRid Condition="'$(_AddonBinRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</_AddonBinRid>
+  </PropertyGroup>
+
+  <Target Name="CopyPublishToAddonBin"
+          AfterTargets="Publish"
+          Condition="'$(CopyPublishToAddonBin)' == 'true' and '$(RuntimeIdentifier)' != ''">
+    <ItemGroup>
+      <_AddonPublishFile Include="$(PublishDir)**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_AddonPublishFile)"
+          DestinationFolder="$(_AddonBinRoot)$(_AddonBinRid)\%(_AddonPublishFile.RecursiveDir)"
+          SkipUnchangedFiles="true"
+          ContinueOnError="WarnAndContinue" />
+    <Message Importance="high" Text="[addon] bin/$(_AddonBinRid)/ 已同步自 $(PublishDir)" />
+  </Target>
+
+</Project>

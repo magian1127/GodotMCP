@@ -38,6 +38,22 @@ function scrubEnv(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return env
 }
 
+/** 入口是否为「需经 node 执行的脚本」——否则按可执行文件直接 spawn。 */
+function isScriptEntry(path: string): boolean {
+  return /\.(mjs|cjs|js)$/i.test(path.replace(/\\/g, '/'))
+}
+
+/**
+ * server 入口的启动方案。默认入口是随包 shim(native 可执行文件,
+ * 由 daemon 侧发布产出)——host 直接 spawn 它,shim 负责确保机器级单例 daemon
+ * 在跑、再把 stdio 转发到 daemon 的 HTTP 面;仅当入口是 .mjs/.js 脚本
+ * (stdin 兜底桥或回滚通道)时才经 node 执行。
+ */
+export function buildSpawnPlan(dist: string, nodeExecPath: string = process.execPath): { command: string; args: string[] } {
+  if (isScriptEntry(dist)) return { command: nodeExecPath, args: [dist] }
+  return { command: dist, args: [] }
+}
+
 export class GodotBridge {
   private proc: ChildProcessWithoutNullStreams | undefined
   private buffer = ''
@@ -97,7 +113,8 @@ export class GodotBridge {
     this.startedCwd = this.activeCwd
     const env = scrubEnv(process.env)
     env.GODOT_MCP_PROJECT_PATH = projectPath
-    const proc = spawn(process.execPath, [dist], { env, stdio: ['pipe', 'pipe', 'pipe'] })
+    const plan = buildSpawnPlan(dist)
+    const proc = spawn(plan.command, plan.args, { env, stdio: ['pipe', 'pipe', 'pipe'] })
     this.proc = proc
     proc.stdout.setEncoding('utf8')
     proc.stdout.on('data', (chunk: string) => {

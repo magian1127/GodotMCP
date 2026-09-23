@@ -2,6 +2,8 @@ extends SceneTree
 ## 对真实工具坞和向导检查可选配置语义，不启用插件、不连接编辑器。
 
 const ConfigPanel := preload("res://addons/godot_mcp_toolkit/ui/dock/mcp/dock_mcp_json_panel.gd")
+const MCPJsonSync := preload("res://addons/godot_mcp_toolkit/ui/mcp_json_sync.gd")
+const PlatformRid := preload("res://addons/godot_mcp_toolkit/paths/platform_rid.gd")
 const Wizard := preload("res://addons/godot_mcp_toolkit/ui/onboarding_wizard.gd")
 const Settings := preload("res://addons/godot_mcp_toolkit/core/settings_registration.gd")
 
@@ -42,11 +44,55 @@ func _run() -> void:
 	panel.refresh()
 	_check(panel.visible and button.text == "Fix .mcp.json", "有效的 JSON 错误警告被一起隐藏")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("res://.mcp.json"))
+	# 失效条目（Node 桥退役形态）：文件合法、却必然拉不起服务。
+	# 必须给出迁移入口，而不是当成正常配置只提供"打开"。
+	_write_config(_retired_config())
+	panel.refresh()
+	_check(panel.visible and button.text == "Migrate .mcp.json", "失效条目未进入迁移态")
+	_check(button.has_theme_color_override("font_color"), "迁移态按钮未高亮")
+	var warn_label: Label = panel.get("_warning_label")
+	_check("server/dist/index.js" in warn_label.text, "迁移警告未点名已退役的入口")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("res://.mcp.json"))
+	# 正常形态（随附 shim 条目）必须回到普通的"打开"态。
+	_write_config(_shim_config())
+	panel.refresh()
+	_check(not panel.visible and button.text == "Open .mcp.json", "随附 shim 条目被误判为失效")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("res://.mcp.json"))
 	panel.free()
 	button.free()
 	if _failures == 0:
 		print("PASS: MCP 工具坞、设置页及中英文向导提示测试全部通过。")
 	quit(0 if _failures == 0 else 1)
+
+
+## 随附 shim 条目：command 取**文档化的随包布局**路径（`bin/<rid>/`），并按该布局落
+## 占位文件，使"正常形态"分支的判定与真实写入口径一致。
+## 刻意不经 MCPJsonSync.shim_path() 反推路径——文件不存在时它返回空串。
+func _shim_config() -> String:
+	var exe := "godot-mcp-shim.exe" if OS.get_name() == "Windows" else "godot-mcp-shim"
+	var shim := ProjectSettings.globalize_path("res://").path_join(
+		"addons/godot_mcp_toolkit").path_join("bin").path_join(PlatformRid.current()).path_join(exe)
+	DirAccess.make_dir_recursive_absolute(shim.get_base_dir())
+	var stub := FileAccess.open(shim, FileAccess.WRITE)
+	stub.store_string("stub")
+	stub.close()
+	return JSON.stringify({"mcpServers": {"godot": {"type": "stdio", "command": shim, "args": [], "env": {
+		"GODOT_MCP_CONFIG_VERSION": "2"}}}})
+
+
+## 退役前的 Node 桥形态：旧服务器键 + node 入口 + server/dist/index.js。
+func _retired_config() -> String:
+	return JSON.stringify({"mcpServers": {"godot-mcp-unified": {
+		"command": "node",
+		"args": ["<仓库>/plugin/godot-mcp-unified/server/dist/index.js"],
+		"env": {"GODOT_MCP_CONFIG_VERSION": "1"},
+	}}})
+
+
+func _write_config(content: String) -> void:
+	var file := FileAccess.open("res://.mcp.json", FileAccess.WRITE)
+	file.store_string(content)
+	file.close()
 
 
 func _test_wizard(language: String, continue_text: String, optional: String, global_config: String) -> void:

@@ -3,10 +3,11 @@
 A Godot 4.2+ editor plugin that runs a localhost WebSocket server so an AI
 coding assistant — Claude Code, or any MCP-compatible client — can create
 scenes, edit scripts, inspect nodes, and run playtests inside your editor.
-The plugin is half the stack: a machine-level daemon
-(`http://127.0.0.1:6590/`) is the face your assistant actually talks to —
-the editor's auto-spawn sidecar or a host installer brings it up, and it
-connects back to this WebSocket server through the machine registry.
+The plugin is half the stack: a machine-level daemon does the work, and your
+assistant reaches it through a bundled **stdio shim** that the MCP client
+spawns (`server-dotnet/publish/<rid>/godot-mcp-shim`). The shim bootstraps the
+daemon when it is not already running, and the daemon connects back to this
+WebSocket server through the machine registry.
 
 Everything runs locally. Nothing leaves your machine.
 
@@ -20,13 +21,14 @@ Everything runs locally. Nothing leaves your machine.
    after discovering it via the registry.
 2. **Write the client config:** run the bundled
    `scripts/install-godot-project.ps1`. It writes a project-root `.mcp.json`
-   pointing MCP clients at the machine-level daemon over loopback HTTP
-   (`type: "http"`, `http://127.0.0.1:6590/`). No local Node.js is required
-   anymore (the bundled Node bridge was retired with plugin 1.1.0); host-side
-   auth tokens are plumbed by each host's installer.
-3. **Connect:** launch your MCP client from the project root. It discovers
-   the daemon and authenticates automatically; the dock's peer count
-   increments on connection.
+   whose entry is `type: "stdio"` and points at the bundled shim
+   (`server-dotnet/publish/<rid>/godot-mcp-shim`), which bootstraps the daemon
+   on first use. No local Node.js is required anymore (the bundled Node bridge
+   was retired with plugin 1.1.0), and no host-side auth token is needed — the
+   shim reads the machine-level token itself.
+3. **Connect:** launch your MCP client from the project root. It spawns the
+   shim, which brings the daemon up and authenticates against it; the dock's
+   peer count increments on connection.
 
 If a step misfires, start with the bundled
 [advanced configuration guide](docs/advanced_configuration.md).

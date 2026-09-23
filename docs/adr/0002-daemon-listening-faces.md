@@ -9,5 +9,15 @@ daemon 对 MCP host 暴露 loopback Streamable HTTP（MCP 2026-07-28 的推荐�
 
 ## Consequences
 
-- ZCode/Codex/VSCode 的 `.mcp.json` 需切换为 http 型（实现前先验证各 host 对 http 型 server 的支持度，不成立则全量退回 shim 方案）。
+- ZCode/Codex/VSCode 的 `.mcp.json` 需切换为 http 型（实现前先验证各 host 对 http 型 server 的支持度，不成立则全量退回 shim 方案）。**→ 2026-09-23 被推翻，见文末修订记录。**
 - daemon 侧需完整实现注册表消费（含 PID + 探针活性判定）、运行时通道与 LSP 通道——这是全量 parity 的必然要求。
+
+## 修订记录
+
+### 2026-09-23：Consequences 第 1 条（"需切换为 http 型"）被推翻
+
+宿主条目最终定为 **stdio + 随包 shim（由 shim 自举 daemon）**，理由与取舍见
+[ADR-0005](0005-host-entry-stdio-shim.md)。本文对 host 面的判断（daemon 具备 loopback
+Streamable HTTP 能力）仍然成立，但它不再是宿主的**默认**接入形态；本文 Considered Options
+里被否的"全 stdio shim"实际成为采纳项——否它的理由（每会话多一跳转发进程）被接受，
+因为"每宿主能自行拉起服务"的价值更高。

@@ -1,10 +1,11 @@
 {
   "mcpServers": {
     "godot": {
-      "type": "http",
-      "url": "http://127.0.0.1:6590/",
-      "headers": {
-        "Authorization": "Bearer <daemon-token>"
+      "type": "stdio",
+      "command": "${ZCODE_PLUGIN_ROOT}/server-dotnet/publish/win-x64/godot-mcp-shim.exe",
+      "args": [],
+      "env": {
+        "GODOT_MCP_CONFIG_VERSION": "2"
       },
       "timeoutMs": 120000
     }

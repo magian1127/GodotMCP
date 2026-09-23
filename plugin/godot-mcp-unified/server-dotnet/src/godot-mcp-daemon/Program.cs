@@ -3,6 +3,8 @@
 // 2. 单例锁获取:DaemonState.Acquire 打开机器级锁文件,顺带确保稳定 token(DaemonToken.EnsureStable)——
 //    锁被另一实例明确持有 → 退出码 2;锁状态不明确(Unix)→ 3;
 // 3. 主机构建:UseUrls 绑定 127.0.0.1:Port;日志全部落 stderr + daemon.log(stdout 保留给 MCP 协议通道);
+// 3b. 作业对象自检(只读):daemon 若诞生在宿主"关闭即杀"的 Job 中,宿主退出会把它连带杀掉 ——
+//    命中即告警(JobMembership),不影响启动;
 // 4. MCP server 注册:Stateless HTTP;ServerInfo 维持 godot-mcp-unified;每请求会话经 GroupService
 //    按组激活状态 + NodeToolTable schema + 版本门控裁剪工具面;subscriptions/listen 长流由
 //    GroupListenStream 自持,承载 tools/list_changed;
@@ -98,6 +100,13 @@ try
     builder.Services.AddSingleton<ExtensionService>();
 
     var app = builder.Build();
+
+    // 机器级常驻的前提:daemon 不能诞生在宿主"关闭即杀"的作业对象里。只读自检,命中即告警
+    // (非 Windows / 探测失败一律静默)——把"服务莫名消失"的隐形风险变成可见告警。
+    if (JobMembership.DescribeKillOnCloseRisk() is { } jobRisk)
+    {
+        app.Logger.LogWarning("作业对象风险:{Risk}", jobRisk);
+    }
 
     // issue 14 组合接线:扩展工具的版本门控 + extensions.changed 通知消费
     // (Instances → Extensions 的依赖边留在组合根,保持两者互不引用)。

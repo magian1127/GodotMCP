@@ -121,15 +121,15 @@ MCP 服务器也会读取相同的 `GODOT_MCP_EDITOR_PORT` / `GODOT_MCP_RUNTIME_
 
 - 如果不想在两侧管理环境，请**优先使用扫描模式**——注册表发现会自动保持两侧一致。
 
-## macOS：启动 MCP 客户端（daemon HTTP）
+## macOS：启动 MCP 客户端（stdio shim）
 
-标准配置让 MCP 客户端经回环 HTTP(`http://127.0.0.1:6590/`)连接机器级 daemon——每会话 Node 服务器已随插件 1.1.0 退役，不再有 `node` 命令或 `PATH` 问题。
+标准配置由每个 MCP 客户端自己 spawn 随包的 stdio shim（`server-dotnet/publish/<rid>/godot-mcp-shim`），首次使用时由 shim 自举拉起机器级 daemon。每会话 Node 服务器已随插件 1.1.0 退役，不再有 `node` 命令或 `PATH` 问题。
 
 **如果客户端在 macOS 上无法连接**，依次检查：
 
 - **从终端启动客户端以查看错误。**`open` 没有帮助——从 shell 启动应用的二进制文件，才能打印客户端真正的启动错误。
-- **确认项目根目录存在 `.mcp.json`。** 如果缺少，请在 Godot MCP Unified dock 中点击 **Write .mcp.json**（写入的是 daemon HTTP 条目）。
-- **确认 daemon 正在监听** `127.0.0.1:6590`——编辑器的 auto-spawn 边车或宿主安装器（工作区仓库的 `adapters/zcode/install-http-face.ps1`）会按需拉起它。
+- **确认项目根目录存在 `.mcp.json`。** 如果缺少，请在 Godot MCP Unified dock 中点击 **Write .mcp.json**（写入的是 stdio shim 条目）。
+- **确认 `.mcp.json` 所指路径上确实有 shim**——缺失时 dock 会示警。请把服务发布到 `server-dotnet/publish/<rid>/`，或用 `GODOT_MCP_SHIM_EXE` 指向它。daemon 由 shim 按需拉起，不需要你手动启动。
 
 ## 语言服务器（LSP）
 

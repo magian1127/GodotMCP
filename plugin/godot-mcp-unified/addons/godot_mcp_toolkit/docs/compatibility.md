@@ -446,8 +446,8 @@ Headless mode enables CI pipelines and SSH-only workflows. A typical CI setup:
 ```bash
 godot --headless --editor --path /path/to/project &
 # The addon's auto-spawn sidecar brings up the machine-level daemon;
-# MCP clients connect via loopback HTTP (http://127.0.0.1:6590/) —
-# there is no per-session Node server to launch anymore.
+# MCP clients reach it through the bundled stdio shim, which bootstraps
+# the daemon on demand — there is no per-session Node server to launch anymore.
 ```
 
 File-based tools (scripts, resources, scenes, folders), ClassDB introspection,
@@ -455,14 +455,14 @@ and project settings all work without any display. Scene tree operations also
 work — `scene_open` loads scenes programmatically and the full node/signal
 tool chain functions from there.
 
-## Client connectivity (daemon HTTP)
+## Client connectivity (stdio shim)
 
-Since the Node bridge retirement (plugin 1.1.0), all platforms connect MCP
-clients to the resident daemon over loopback HTTP — the bundled Node server no
-longer exists. If a client won't connect, launch it from a terminal to see its
-startup error, confirm `.mcp.json` is present at the project root, and confirm
-the daemon is listening on `127.0.0.1:6590` (the editor sidecar or the host
-installer spawns it). Full diagnosis is in
+Since the Node bridge retirement (plugin 1.1.0), every platform connects MCP
+clients to the resident daemon through the bundled stdio shim — the bundled
+Node server no longer exists. If a client won't connect, launch it from a
+terminal to see its startup error, confirm `.mcp.json` is present at the
+project root, and confirm the shim it names actually exists on disk (the dock
+warns when it does not). Full diagnosis is in
 [advanced_configuration.md](advanced_configuration.md).
 
 ## Forward compatibility

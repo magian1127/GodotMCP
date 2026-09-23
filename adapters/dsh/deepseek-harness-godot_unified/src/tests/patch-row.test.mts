@@ -39,6 +39,24 @@ test('标记与行 id 在 host/CLI 两侧保持一致', () => {
   assert.equal(ROW_END, '# dsh-godot:end')
 })
 
+test('mcpRowBlock:随包 shim(native 入口)直连,不经 node', () => {
+  const shim = 'D:/repo/GodotMCP/plugin/godot-mcp-unified/server-dotnet/publish/win-x64/godot-mcp-shim.exe'
+  const block = mcpRowBlock({ ...baseOptions(), serverDist: shim })
+  assert.ok(block.includes(`        command: '${shim}'`), 'native 入口应作为 command 直连')
+  assert.ok(block.includes('        args: []'), 'native 入口不需要 args')
+  assert.ok(!block.includes('command: node'), 'native 入口不应经 node 执行')
+  const parsed = parseMcpRowBlock(block)
+  assert.equal(parsed!.serverDist, shim)
+})
+
+test('mcpRowBlock:脚本入口经 node 执行(args 承载路径),parse 可往返', () => {
+  const bridge = 'D:/repo/GodotMCP/adapters/dsh/godot-http-bridge.mjs'
+  const block = mcpRowBlock({ ...baseOptions(), serverDist: bridge })
+  assert.ok(block.includes('        command: node'))
+  assert.ok(block.includes(`          - '${bridge}'`))
+  assert.equal(parseMcpRowBlock(block)!.serverDist, bridge)
+})
+
 test('mcpRowBlock 生成合法 YAML 形态且 parseMcpRowBlock 可往返', () => {
   const block = mcpRowBlock({ ...baseOptions(), readOnly: true, rateLimit: 5, timeoutMs: 90000, unsafe: true })
   assert.ok(block.startsWith(ROW_BEGIN))

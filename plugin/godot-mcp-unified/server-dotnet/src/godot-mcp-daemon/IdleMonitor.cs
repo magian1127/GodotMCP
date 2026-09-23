@@ -1,7 +1,9 @@
 namespace GodotMcp.Daemon;
 
 /// <summary>
-/// 空闲状态监控(ADR-0004):无在途请求、无已连接 Godot 实例,且距最后一次活动超过阈值即视为空闲。
+/// 空闲状态监控(ADR-0004,2026-09-23 修订):无在途请求、无已连接 Godot 实例,
+/// 且距最后一次活动超过阈值即视为空闲 —— 但**仅在启用空闲自退时**才有意义:
+/// <see cref="IdleExitEnabled"/> 为 false(阈值非正,即默认)时本监控恒不空闲,进程常驻。
 /// 每个已完成的请求都会重置计时;启动时刻即初始活动时刻 —— 从未有连接的
 /// daemon 同样在阈值后退出,与"全部连接断开后"的语义一致。
 /// spec US12 的另一半(所有 Godot 实例断开)经 <see cref="SetConnectedInstances"/> 计量:
@@ -9,7 +11,7 @@ namespace GodotMcp.Daemon;
 /// </summary>
 public sealed class IdleMonitor
 {
-    /// <summary>空闲退出阈值,构造时固定。</summary>
+    /// <summary>空闲退出阈值,构造时固定;非正值表示禁用自退。</summary>
     private readonly TimeSpan _timeout;
 
     /// <summary>在途请求数:中间件 Enter/Exit 维护,Interlocked 保证跨请求线程安全。</summary>
@@ -33,6 +35,9 @@ public sealed class IdleMonitor
 
     /// <summary>空闲退出阈值,供 IdleExitService 计算轮询间隔与日志文案。</summary>
     public TimeSpan Timeout => _timeout;
+
+    /// <summary>是否启用空闲自退;false(阈值非正,默认)= 进程常驻,本监控恒不空闲。</summary>
+    public bool IdleExitEnabled => _timeout > TimeSpan.Zero;
 
     /// <summary>是否没有任何在途请求(供退出前复核,收窄竞态窗口)。</summary>
     public bool HasNoRequestsInFlight => Interlocked.Read(ref _inFlight) == 0;
@@ -69,13 +74,19 @@ public sealed class IdleMonitor
     /// <summary>
     /// 当前是否空闲,IdleExitService 每个轮询周期读取。
     /// </summary>
-    /// <returns>在途请求为零、已连接实例为零、且距最后活动超过阈值三者同时成立时为 true。</returns>
-    /// <para>逻辑链:在途计数非零 → 不空闲 → 已连接实例非零 → 不空闲 →
-    /// 比较 UTC ticks 与阈值得出结论;三步全部无锁(Volatile/Interlocked 读)。</para>
+    /// <returns>禁用自退时恒为 false;否则在途请求为零、已连接实例为零、且距最后活动超过阈值
+    /// 三者同时成立时为 true。</returns>
+    /// <para>逻辑链:未启用自退 → 直接 false → 在途计数非零 → 不空闲 → 已连接实例非零 → 不空闲 →
+    /// 比较 UTC ticks 与阈值得出结论;四步全部无锁(Volatile/Interlocked 读)。</para>
     public bool IsIdle
     {
         get
         {
+            if (!IdleExitEnabled)
+            {
+                return false;
+            }
+
             if (Interlocked.Read(ref _inFlight) != 0)
             {
                 return false;

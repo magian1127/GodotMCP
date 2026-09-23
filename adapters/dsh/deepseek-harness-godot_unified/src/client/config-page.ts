@@ -12,7 +12,10 @@ import { api, type ProjectEntry } from './api.js'
 
 const h = React.createElement
 
-export const SETTINGS_NAMESPACE = 'godot'
+// DSH 0.1.7 起 settings 命名空间退役,配置值挂在插件行 config 上;configForms
+// 服务按入口 id(profile 行 id)取 ConfigForm——与旧 settings 命名空间 'godot'
+// 不同名,迁移时必须同步改绑定 id。
+export const CONFIG_ENTRY_ID = 'dsh-godot'
 const LOCALE_NAMESPACE = 'settings.godot'
 
 /** plugins.bundle.config 槽位的键:profile 中本包的 npm 包名(非 settings 命名空间)。 */
@@ -39,8 +42,8 @@ const zh = {
   promptGuidanceDesc: '在系统提示中说明 Godot 桥接的按需扩面、FIFO 串行与错误恢复。仅对会注入工具的会话生效（Godot 预设或原版模式）。',
   zhPrompt: '提示词中文化',
   zhPromptDesc: '开启后注入的系统提示词、工具说明及其错误消息使用中文（默认英文，与内置工具一致）。',
-  godotServerDist: 'Server dist 路径',
-  godotServerDistDesc: 'GodotMCP server 的 dist/index.js 完整路径。为空时工具调用提示未配置；填写后首次调用自动启动桥接（空闲 10 分钟自动关闭）。',
+  godotServerDist: 'Server 入口路径',
+  godotServerDistDesc: 'GodotMCP server 入口的完整路径：随包 shim 可执行文件（标准形态，server-dotnet/publish/<rid>/godot-mcp-shim.exe，由它自举 daemon）。为空时工具调用提示未配置；填写后首次调用自动启动桥接（空闲 10 分钟自动关闭）。',
   godotProjectPath: 'Godot 项目路径',
   godotProjectPathDesc: '目标 Godot 项目（含 project.godot）的完整路径，作为桥接的项目上下文。',
   inherited: '继承默认值',
@@ -51,9 +54,9 @@ const zh = {
   saveTimeout: '保存超时：写入可能已生效，刷新页面后请核对开关状态；若反复出现请反馈。',
   saveNotApplied: '主程序未接受全部设置，已保留草稿。',
   pathTitle: '相关路径',
-  pathDesc: 'server dist 为全局单值；项目路径按工作目录（cwd）批量条目，切换会话时按其工作目录匹配。未设置时回退 CLI 解析链。',
-  pathServerDist: 'Server dist（全局）',
-  pathServerDistPlaceholder: '.../dist/index.js',
+  pathDesc: 'server 入口为全局单值；项目路径按工作目录（cwd）批量条目，切换会话时按其工作目录匹配。未设置时回退 CLI 解析链。',
+  pathServerDist: 'Server 入口（全局）',
+  pathServerDistPlaceholder: '.../server-dotnet/publish/<rid>/godot-mcp-shim.exe',
   pathProjects: '项目路径（按工作目录）',
   pathProjectsDesc: '每条 { cwd, projectPath }，可多条并存、按 cwd 唯一；重复/空 cwd 标红不保存。',
   pathAddProject: '添加',
@@ -75,8 +78,8 @@ const en = {
   promptGuidanceDesc: 'Explain on-demand group activation, editor FIFO ordering, and error recovery in the system prompt. Applies only to sessions that inject tools (Godot preset or legacy mode).',
   zhPrompt: 'Localize prompt',
   zhPromptDesc: 'When on, the injected system prompt, tool descriptions, and error messages use Chinese (English by default, matching built-in tools).',
-  godotServerDist: 'Server dist path',
-  godotServerDistDesc: 'Full path to the GodotMCP server dist/index.js. Empty = tool calls report "not configured"; once set, the bridge starts on the first call (auto-closes after 10 idle minutes).',
+  godotServerDist: 'Server entry path',
+  godotServerDistDesc: 'Full path to the GodotMCP server entry: the bundled shim executable (standard form, server-dotnet/publish/<rid>/godot-mcp-shim.exe, which bootstraps the daemon). Empty = tool calls report "not configured"; once set, the bridge starts on the first call (auto-closes after 10 idle minutes).',
   godotProjectPath: 'Godot project path',
   godotProjectPathDesc: 'Full path of the target Godot project (containing project.godot), used as the bridge project context.',
   inherited: 'Inherited',
@@ -87,9 +90,9 @@ const en = {
   saveTimeout: 'Save timed out: the write may have landed; refresh and re-check the toggles. If it repeats, please report.',
   saveNotApplied: 'The host did not accept all settings; the draft was kept.',
   pathTitle: 'Related paths',
-  pathDesc: 'Server dist is a single global value; project paths are batch entries keyed by workspace (cwd), matched when you switch sessions. Falls back to the CLI resolve chain when unset.',
-  pathServerDist: 'Server dist (global)',
-  pathServerDistPlaceholder: '.../dist/index.js',
+  pathDesc: 'The server entry is a single global value; project paths are batch entries keyed by workspace (cwd), matched when you switch sessions. Falls back to the CLI resolve chain when unset.',
+  pathServerDist: 'Server entry (global)',
+  pathServerDistPlaceholder: '.../server-dotnet/publish/<rid>/godot-mcp-shim.exe',
   pathProjects: 'Project paths (by workspace)',
   pathProjectsDesc: 'Each entry is { cwd, projectPath }; multiple allowed, unique by cwd; empty/duplicate cwd is marked red and not saved.',
   pathAddProject: 'Add',
@@ -505,7 +508,12 @@ function createForm(scope: any, t: (key: string) => string): (props: { view?: st
 
 /** 注册插件页配置表单(侧栏插件页 → 本组合包页面)。 */
 export function registerConfigPage(ctx: Record<string, any>): void {
-  const scope = ctx.settingsScope.bind({ namespace: SETTINGS_NAMESPACE })
+  // DSH 0.1.7 起 settingsScope 退役:经 configForms 按入口 id(profile 行 id,
+  // 与旧 settings 命名空间 'godot' 不同名)取 ConfigForm;snapshot/subscribe/
+  // set 面与旧 settingsScope 同构。缺失时跳过(工作台不受影响)。
+  const configForms = ctx.configForms
+  if (configForms === undefined || configForms === null || typeof configForms.get !== 'function') return
+  const scope = configForms.get(CONFIG_ENTRY_ID)
   const t = ctx.locale.bind(LOCALE_NAMESPACE)
   const ConfigPage = createForm(scope, t)
   ctx.effect(function () {

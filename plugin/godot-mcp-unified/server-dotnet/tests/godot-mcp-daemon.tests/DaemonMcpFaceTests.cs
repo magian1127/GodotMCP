@@ -172,6 +172,30 @@ public class DaemonMcpFaceTests
     }
 
     /// <summary>
+    /// 默认不自退:空闲自退未启用时,即使无任何连接也不退出(全 HTTP 接入的宿主
+    /// 不会周期性发请求,默认自退会让服务"悄悄消失")。
+    /// <para>断言链:Arrange —— Start(IdleSeconds=0,显式禁用) 后 WaitReady。Act —— 等 6s
+    /// (大于旧默认阈值量级里最容易误判的窗口)。Assert —— HasExited=false,且日志落了
+    /// "空闲自退未启用"一行。</para>
+    /// </summary>
+    [Fact]
+    public async Task daemon_with_idle_exit_disabled_stays_up()
+    {
+        using var daemon = DaemonProcess.Start(new DaemonSpawnOptions { IdleSeconds = 0 });
+        daemon.WaitReady(DaemonProcess.ReadyTimeout);
+
+        await Task.Delay(TimeSpan.FromSeconds(6));
+        Assert.False(daemon.HasExited, "禁用空闲自退后,无连接的 daemon 不应退出");
+
+        // daemon 仍持有 daemon.log（写句柄），故必须以 FileShare.ReadWrite 打开。
+        using var logStream = new FileStream(
+            Path.Combine(daemon.StateDir, "daemon.log"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var logReader = new StreamReader(logStream);
+        var log = await logReader.ReadToEndAsync();
+        Assert.Contains("空闲自退未启用", log);
+    }
+
+    /// <summary>
     /// 活动重置空闲计时:持续请求跨两个完整阈值周期不退出,停止活动后在阈值内退出。
     /// <para>断言链:Arrange —— IdleSeconds=10(满载机器放宽阈值,语义不变:活动重置计时)。
     /// Act —— 4 轮"连接 → list_instances → 断开 → 等 2s"(共约 8s 活动)。Assert —— 每轮后

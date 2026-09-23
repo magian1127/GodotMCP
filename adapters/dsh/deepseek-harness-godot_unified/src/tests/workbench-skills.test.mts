@@ -43,6 +43,15 @@ test('resolveSkillsRoot:优先 godotMcpRoot;否则从 serverDist 向上推导工
     resolveSkillsRoot({ serverName: 'godot', serverDistPath: 'D:/repo/GodotMCP/plugin/godot-mcp-unified/server/dist/index.js' } as never),
     'D:/repo/GodotMCP',
   )
+  // 标准入口(随包 shim):RID 段随平台变化,按入口模式推导。
+  assert.equal(
+    resolveSkillsRoot({ serverName: 'godot', serverDistPath: 'D:/repo/GodotMCP/plugin/godot-mcp-unified/server-dotnet/publish/win-x64/godot-mcp-shim.exe' } as never),
+    'D:/repo/GodotMCP',
+  )
+  assert.equal(
+    resolveSkillsRoot({ serverName: 'godot', serverDistPath: 'D:\\repo\\GodotMCP\\plugin\\godot-mcp-unified\\server-dotnet\\publish\\linux-arm64\\godot-mcp-shim' } as never),
+    'D:/repo/GodotMCP',
+  )
   // 反斜杠路径同义。
   assert.equal(
     resolveSkillsRoot({ serverName: 'godot', serverDistPath: 'D:\\repo\\GodotMCP\\plugin\\godot-mcp-unified\\server\\dist\\index.js' } as never),

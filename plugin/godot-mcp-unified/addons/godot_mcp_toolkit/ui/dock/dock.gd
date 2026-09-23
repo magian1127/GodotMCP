@@ -7,7 +7,7 @@ extends VBoxContainer
 ## 使其无需服务器事件即可更新。
 
 const Modules := preload("res://addons/godot_mcp_toolkit/core/modules.gd")
-const NodejsCheck = Modules.NodejsCheck
+const MCPJsonSync = Modules.MCPJsonSync
 const MCPJsonWriteFlow := preload("res://addons/godot_mcp_toolkit/ui/mcp_json_write_flow.gd")
 const ToolkitDialogPresenter := preload("res://addons/godot_mcp_toolkit/ui/toolkit_dialog_presenter.gd")
 const DockSectionCard := preload("res://addons/godot_mcp_toolkit/ui/dock/dock_section_card.gd")
@@ -39,8 +39,8 @@ var _unfocused_control: DockUnfocusedControl = null
 # 审计日志分区——设置 + 查看/清空 + 延迟创建的日志查看器（独立子面板）。
 var _audit_section: DockAuditSection = null
 
-# Node.js 警告。
-var _nodejs_status_warning: Label = null
+# 服务入口(shim)缺失警告——缺失时写入 .mcp.json 必然失败、宿主条目会指向死路径。
+var _shim_status_warning: Label = null
 
 # 注入的横切协作者（由组装器(composer)持有）：共享的 .mcp.json 写入流程
 # 与编辑器全局对话框呈现器(presenter)。停靠面板只是消费它们——
@@ -118,43 +118,14 @@ func _build_ui() -> void:
 	_mcp_json_panel = DockMcpJsonPanel.new(mcp_json_btn, Callable(self, "_toast"), _write_flow)
 	_status_panel.insert_warning_panel(_mcp_json_panel)
 
-	# Node.js 可用性——共享检测。
-	var node_check := NodejsCheck.check()
-	var nodejs_msg := ""
-	if not node_check["found"]:
-		var _path_hint := ""
-		if OS.get_name() == "Windows":
-			_path_hint = EditorLocale.pick(
-				"\nIf Node.js is installed, ensure it is on your system PATH.",
-				"\n如果已经安装 Node.js，请确认它已加入系统 PATH。")
-		elif OS.get_name() == "macOS":
-			# 从 Finder/Dock 启动的应用可能找不到版本管理器安装的 Node
-			# （不在 PATH 中）；从终端启动则会继承 shell 的 PATH。
-			_path_hint = EditorLocale.pick(
-				"\nIf Node.js is installed, ensure it is on your PATH. A "
-					+ "version-manager Node (nvm/fnm/Homebrew) may need you to launch the "
-					+ "editor and MCP client from a terminal. See the bundled local "
-					+ "advanced-configuration guide.",
-				"\n如果已经安装 Node.js，请确认它已加入 PATH。通过 nvm、fnm 或 Homebrew "
-					+ "安装的 Node 可能需要从终端启动编辑器和 MCP 客户端。"
-					+ "详情见随插件提供的本地高级配置文档。")
-		nodejs_msg = EditorLocale.pick(
-			"Node.js not found — the local MCP server bridge requires Node.js 22+. "
-				+ "See the bundled advanced-configuration guide.",
-			"未找到 Node.js — 本地 MCP 服务器桥接需要 Node.js 22 或更高版本。"
-				+ "请查看随插件提供的高级配置文档。") + _path_hint
-	elif not node_check["meets_minimum"]:
-		nodejs_msg = EditorLocale.pick(
-			"Node.js %s found but 22+ is required. See the bundled local setup guide.",
-			"检测到 Node.js %s，但需要 22 或更高版本。请查看随插件提供的本地安装说明。"
-		) % str(node_check["version"])
-	_nodejs_status_warning = Label.new()
-	_nodejs_status_warning.text = nodejs_msg
-	_nodejs_status_warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_nodejs_status_warning.add_theme_color_override("font_color", EditorLocale.warning_color())
-	_nodejs_status_warning.add_theme_font_size_override("font_size", 11)
-	_nodejs_status_warning.visible = nodejs_msg != ""
-	sc.add_child(_nodejs_status_warning)
+	# 服务入口(shim)产物缺失警告——面板绝不给失效配置背书，因此这里与
+	# .mcp.json 面板的"失效条目"判定同源：只看产物是否真实存在。
+	_shim_status_warning = Label.new()
+	_shim_status_warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_shim_status_warning.add_theme_color_override("font_color", EditorLocale.warning_color())
+	_shim_status_warning.add_theme_font_size_override("font_size", 11)
+	sc.add_child(_shim_status_warning)
+	_refresh_shim_warning()
 
 	# 失焦响应模式——可选开启的开关 + 三态指示器子面板。
 	# （位于编辑器设置而非项目设置——这是一项按用户、全机器范围的偏好，
@@ -288,11 +259,30 @@ func _on_port_status_changed() -> void:
 # 试玩测试结束）与 .mcp.json 面板的文件有效性刷新
 # （文件存在 / 格式错误 → 按钮模式 + 警告）。二者都是可安全轮询的实时事实(FACT)；
 # 只读始终保持服务器同步（见 _on_client_connected），绝不在该定时器上处理。
+## 服务入口(shim)缺失警告的刷新——由定时器驱动，因此"发布产物后自动消失"，
+## 不需要重载插件。文案里的路径指引与 MCPJsonSync 的写入前置保持一致。
+func _refresh_shim_warning() -> void:
+	if _shim_status_warning == null:
+		return
+	if not MCPJsonSync.shim_path().is_empty():
+		_shim_status_warning.visible = false
+		return
+	_shim_status_warning.text = EditorLocale.pick(
+		"MCP server shim not found — the service executable .mcp.json points at is absent. "
+			+ "Publish the bundled service (server-dotnet/publish/<rid>/) or set "
+			+ "GODOT_MCP_SHIM_EXE. See the bundled advanced-configuration guide.",
+		"未找到 MCP 服务入口（shim）— .mcp.json 指向的服务程序不存在。"
+			+ "请发布随包服务（server-dotnet/publish/<rid>/）或设置 GODOT_MCP_SHIM_EXE，"
+			+ "详情见随插件提供的高级配置文档。")
+	_shim_status_warning.visible = true
+
+
 func _on_runtime_timer_timeout() -> void:
 	if _status_panel != null:
 		_status_panel.refresh_runtime()
 	if _mcp_json_panel != null:
 		_mcp_json_panel.refresh()
+	_refresh_shim_warning()
 
 
 # ---------------------------------------------------------------------------

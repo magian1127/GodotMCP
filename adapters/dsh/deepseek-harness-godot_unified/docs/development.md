@@ -25,7 +25,7 @@ src/
     skills.ts         技能文件读取 + systemPrompt 组装
   client/             工作台 client 半边(仅 src/client/index.ts 被 tsdown 打包为 lib/client.js)
     index.ts          入口:conversation.view slot 注册(id godot/order 15) + plugins.bundle.config 配置表单 + 样式注入 + locale 检测
-    config-page.ts    插件页配置表单(注入原版模式/工作流提示词/中文提示 + 路径区;settingsScope 命名空间 godot)
+    config-page.ts    插件页配置表单(注入原版模式/工作流提示词/中文提示 + 路径区;DSH 0.1.7+ 经 configForms 读行 config,入口 id dsh-godot)
     Workbench.ts      主组件(状态条 + 三栏 + 确认弹窗;React.createElement,非 JSX)
     ToolTree.ts       工具树(搜索/分组/组激活;description 截断 100/60 字符防 DOM 膨胀)
     CallPanel.ts      schema→表单生成 + 原始 JSON 模式 + 确认对话框
@@ -49,7 +49,13 @@ src/
       probes.mts      bundles/注册表/端口/pid 探测
       main.mts        参数解析与命令分发(install/uninstall/status;v0.4 写 paths.json,不写 mcp-client 行)
   tests/              node:test 单元测试(patch-row/resolve/plugin-smoke/client 纯逻辑/工作台)
-cordis.patch.yml      bundle patch:insert 行 dsh-godot(本包自身)
+cordis.patch.yml      bundle patch:insert 行 dsh-godot(本包自身) + preset-godot
+                      (Godot agent preset 声明行;DSH 0.1.6+ 起 preset 只能由
+                      @deepseek-ai/dsh-agent-preset 声明行注册,legacy 的
+                      $DSH_HOME/.agent-presets/<id>/ 目录已不再被读取)
+skills/               → 上游 GodotMCP plugin/godot-mcp-unified/skills 的 junction
+                      (单一真身在上游,改上游即时生效;npm pack 不跟随 junction,
+                      发布前需物化或由 CI 快照)
 tsdown.config.ts      client 单文件经典脚本打包配置
 verify-build.mjs      产物存在性/语法/patch 行形状/client bundle 格式/CLI usage 冒烟
 ```

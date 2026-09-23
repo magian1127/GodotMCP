@@ -7,15 +7,20 @@ namespace GodotMcp.Daemon;
 /// GODOT_MCP_DAEMON_PORT —— loopback 监听端口,默认 6590。
 /// GODOT_MCP_DAEMON_STATE_DIR —— 单例锁与稳定 token 所在的机器级状态目录;
 /// 默认与 GDScript 注册表目录同一配方(registry_paths.gd registry_dir)。
-/// GODOT_MCP_DAEMON_IDLE_SECONDS —— 全部连接断开后的空闲退出阈值,默认 600(10 分钟)。
+/// GODOT_MCP_DAEMON_IDLE_SECONDS —— 空闲自退阈值,**默认未设置即不自退**(常驻);
+/// 显式给 0 同样禁用,给正数(秒,支持小数)才启用(见 <see cref="ReadIdleTimeout"/>)。
 /// </summary>
 public sealed class DaemonOptions
 {
     /// <summary>默认监听端口,未设置 GODOT_MCP_DAEMON_PORT 时生效。</summary>
     public const int DefaultPort = 6590;
 
-    /// <summary>默认空闲退出阈值(10 分钟),未设置 GODOT_MCP_DAEMON_IDLE_SECONDS 时生效。</summary>
-    public static readonly TimeSpan DefaultIdleTimeout = TimeSpan.FromMinutes(10);
+    /// <summary>
+    /// 禁用空闲自退的哨兵值(<see cref="IdleTimeout"/> 取此值即常驻)。
+    /// 2026-09-23 起这是**默认值**:全 HTTP 接入的宿主不会发请求,若默认自退,
+    /// 用户会陷入"服务悄悄消失、必须手动开 exe"的境地。
+    /// </summary>
+    public static readonly TimeSpan NoIdleExit = TimeSpan.Zero;
 
     /// <summary>环境变量名集中在此:读取(DaemonOptions)与测试注入(DaemonProcess)共用,避免改名时双文件漂移。</summary>
     public const string PortEnvVar = "GODOT_MCP_DAEMON_PORT";
@@ -23,7 +28,7 @@ public sealed class DaemonOptions
     /// <summary>机器级状态目录的环境变量名;缺省时按平台配方推导(见 <see cref="ReadStateDir"/>)。</summary>
     public const string StateDirEnvVar = "GODOT_MCP_DAEMON_STATE_DIR";
 
-    /// <summary>空闲退出阈值(单位秒,支持小数)的环境变量名。</summary>
+    /// <summary>空闲退出阈值(单位秒,支持小数;0 = 禁用自退)的环境变量名。</summary>
     public const string IdleSecondsEnvVar = "GODOT_MCP_DAEMON_IDLE_SECONDS";
 
     /// <summary>loopback 监听端口(1-65535)。</summary>
@@ -32,8 +37,11 @@ public sealed class DaemonOptions
     /// <summary>机器级状态目录:单例锁(daemon.lock)、稳定 token(daemon-token)与日志(daemon.log)均落于此。</summary>
     public required string StateDir { get; init; }
 
-    /// <summary>空闲退出阈值:全部连接断开且持续空闲超过该时长后进程自退。</summary>
+    /// <summary>空闲退出阈值;<see cref="NoIdleExit"/>(零值)表示**禁用自退**、进程常驻。</summary>
     public required TimeSpan IdleTimeout { get; init; }
+
+    /// <summary>是否启用空闲自退(false = 常驻)。</summary>
+    public bool IdleExitEnabled => IdleTimeout > TimeSpan.Zero;
 
     /// <summary>
     /// 从当前进程环境变量构造运行参数。
@@ -76,24 +84,34 @@ public sealed class DaemonOptions
     /// <summary>
     /// 解析空闲退出阈值。
     /// </summary>
-    /// <returns>阈值;环境变量未设置/空白时返回 <see cref="DefaultIdleTimeout"/>。</returns>
-    /// <para>逻辑链:读 <see cref="IdleSecondsEnvVar"/> → 空白则取默认 → 用 InvariantCulture 解析秒数,
-    /// 非正数或无法解析时抛 <see cref="InvalidOperationException"/>。</para>
+    /// <returns>阈值;**环境变量未设置/空白或显式 0 时返回 <see cref="NoIdleExit"/>(禁用自退)**。</returns>
+    /// <para>逻辑链:读 <see cref="IdleSecondsEnvVar"/> 后交给 <see cref="ParseIdleTimeout"/>。</para>
     private static TimeSpan ReadIdleTimeout()
     {
-        var raw = Environment.GetEnvironmentVariable(IdleSecondsEnvVar);
+        return ParseIdleTimeout(Environment.GetEnvironmentVariable(IdleSecondsEnvVar));
+    }
+
+    /// <summary>
+    /// 空闲阈值解析的纯函数形式(不读环境,便于单测覆盖各分支)。
+    /// </summary>
+    /// <param name="raw">环境变量原始值;null/空白视为未设置。</param>
+    /// <returns>阈值;未设置/空白或 0 返回 <see cref="NoIdleExit"/>(禁用自退)。</returns>
+    /// <para>逻辑链:空白 → 禁用 → 用 InvariantCulture 解析秒数:0 禁用、正数(支持小数)为阈值、
+    /// 负数或无法解析时抛 <see cref="InvalidOperationException"/>。</para>
+    internal static TimeSpan ParseIdleTimeout(string? raw)
+    {
         if (string.IsNullOrWhiteSpace(raw))
         {
-            return DefaultIdleTimeout;
+            return NoIdleExit;
         }
 
-        if (!double.TryParse(raw, CultureInfo.InvariantCulture, out var seconds) || seconds <= 0)
+        if (!double.TryParse(raw, CultureInfo.InvariantCulture, out var seconds) || seconds < 0)
         {
             throw new InvalidOperationException(
-                $"GODOT_MCP_DAEMON_IDLE_SECONDS 无效: \"{raw}\"(需要正数,单位秒)。");
+                $"GODOT_MCP_DAEMON_IDLE_SECONDS 无效: \"{raw}\"(需要 0 或正数,单位秒;0 或未设置 = 不自退)。");
         }
 
-        return TimeSpan.FromSeconds(seconds);
+        return seconds == 0 ? NoIdleExit : TimeSpan.FromSeconds(seconds);
     }
 
     /// <summary>

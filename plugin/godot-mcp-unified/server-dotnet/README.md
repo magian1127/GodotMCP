@@ -25,7 +25,7 @@
 - **按需工具组(issue 12)**:`discover_tools` 元工具——31 组目录、关键词匹配(Node groupMatch 同算式)、激活/reset 语义;激活状态为 daemon 全局(跨会话一致),每个请求会话经 `ConfigureSessionOptions` 对齐工具面;未激活组工具不出现在 `tools/list`。`tools/list_changed` 经 `subscriptions/listen` 长流投递(SEP-2575 / 2026-07-28 修订——无状态 HTTP 下 SDK 内建 listen 按设计不授予通知,daemon 自持该流:唯一 acknowledged + 标注订阅 id 的变更扇出,幂等操作不推送)。代表性组 `cleanup`(`scene_close`/`project_delete`,含 dry_run 计划)端到端可用。
 - **全量工具面(issue 13)**:31 组 / 64 个按需工具 + 常驻面 = 与 Node 桥全激活 `tools/list` 逐条对齐(名称 84/84、schema 逐字节一致——由 `server/scripts/dump-group-tools.ts` 从 Node 定义以 SDK 同源转换导出为嵌入表 `NodeToolTable.json`,常驻工具的 schema 亦经该表覆盖);64 工具调用路由(含 11 个特例处理器:双方法分支/键名映射/channel 路由/dry_run 计划)对 fake 编辑器与运行时替身全绿;unsafe 组经 `GODOT_MCP_UNSAFE=1` 门控(默认隐藏)。已记录差异:daemon 注入 `instance` 寻址参数;附加 `list_instances`/`list_operations`;zod 字符串强转未复制。
 - **扩展投影 + 版本门控(issue 14)**:addon 动态扩展经 `discover_tools(refresh_extensions:true)`(extensions.refresh,回退 list)与 `extensions.changed` 广播两条路径投影进工具面——未分组即时可见、分组经扩展组激活,`tools/list_changed` 照常投递;实例间引擎版本不一致时 `tools/list` 呈现并集(任一实例可提供即可见,单实例/版本未知时隐藏——Node 注册门控同规),对不支持的实例调用返回 `UNSUPPORTED` + `(connected: 4.4)` + `Requires Godot 4.5 or newer.` 明确错误(Node 调用期门控同文案);扩展命令的 `min/max_godot_version` 同样门控。
-- 空闲退出:全部 host 请求结束**且全部 Godot 实例断开**超过阈值后自退;最后一个实例断开的那一刻重置计时(spec US12)。
+- 空闲退出:**默认关闭**(daemon 常驻)。显式设置 `GODOT_MCP_DAEMON_IDLE_SECONDS` 为正数才启用——此时"全部 host 请求结束**且全部 Godot 实例断开**超过阈值"后自退,最后一个实例断开的那一刻重置计时(spec US12;ADR-0004 2026-09-23 修订:全 HTTP 接入的宿主不会周期性发请求,默认自退会让服务在无人察觉时消失)。
 - 日志落 stderr 与注册表目录下的 `daemon.log`(不含接入令牌);stdout 保留给协议通道。
 
 ## 环境变量
@@ -34,7 +34,7 @@
 | --- | --- | --- |
 | `GODOT_MCP_DAEMON_PORT` | `6590` | loopback 监听端口 |
 | `GODOT_MCP_DAEMON_STATE_DIR` | 机器级注册表目录(Windows `%APPDATA%\godot-mcp-toolkit`;macOS `~/Library/Application Support/godot-mcp-toolkit`;Linux `$XDG_DATA_HOME`(缺省 `~/.local/share`)+ `/godot-mcp-toolkit`) | 单例锁与 token 所在目录 |
-| `GODOT_MCP_DAEMON_IDLE_SECONDS` | `600` | 全部连接断开后的空闲退出阈值(秒) |
+| `GODOT_MCP_DAEMON_IDLE_SECONDS` | 未设置(不自退) | 空闲自退阈值(秒,支持小数);**未设置或 0 = 禁用自退、进程常驻**,正数才启用 |
 
 ## 退出码
 

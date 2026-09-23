@@ -31,7 +31,7 @@ v0.4 起 `install` 不再写官方 mcp-client 行（自研桥接）：校验后�
 
 - 判定时机：`agent/created`、`agent-preset/selected`（会话中途换预设）、设置变更（live 重装全部既有 agent）；门面注册/组激活新增的工具由 `tools/change` **合并窗口（150ms）** 增量补进 deny 名单（幂等，无 diff 不调用 restrict，避免事件回声）。
 - deny 只是模型可见性控制：桥接 server 子进程与工具注册不受影响，Godot 工作台也不受影响。
-- Godot preset（`~/.dsh/.agent-presets/godot/`，显示名 Godot）是空组合——它只作为"本会话需要 Godot"的标记；工具与提示词由本插件的 per-agent 策略提供。
+- Godot preset（id `godot`，显示名 Godot）由本包 bundle patch 的 `preset-godot` 行声明（DSH 0.1.6+ 起 preset **只**能由 bundle patch 的 `@deepseek-ai/dsh-agent-preset` 声明行注册；`$DSH_HOME/.agent-presets/<id>/` 目录已不再被读取）。它的 plugins 是 standard 的完整副本 + 本包技能目录，只作为"本会话需要 Godot"的标记；工具与提示词由本插件的 per-agent 策略提供。
 
 ## 失败模式
 
@@ -41,6 +41,7 @@ v0.4 起 `install` 不再写官方 mcp-client 行（自研桥接）：校验后�
 | `dsh-godot status` 显示"server dist 缺失" | GodotMCP server 未构建 | 在 server 目录 `npm run build` 后 reinstall |
 | status 显示"编辑器注册表: 无条目" | 编辑器未开或项目未装 addon | 装 addon（上游 install-godot-project.ps1）并开编辑器 |
 | 重启后工具未出现 | 尚未创建 Godot preset 会话（预热未触发）或 server dist 未配置 | 打开 Godot preset 会话；在插件页配置表单「Godot 路径」填写 server dist 后重试 |
+| 模式选择器里没有「Godot」 | DSH 升级后旧 `~/.dsh/.agent-presets/godot/` 目录不再被读取（历史目录残留不影响） | 确认 profile 里有 `preset-godot` 行（`dsh --profile <p> --dump-config`）；缺则重装本 bundle 使 patch 声明生效 |
 | 工具出现但调用返回"server dist 未配置" | 预发生在路径存储为空且设置卡路径为空 | 在插件页配置表单配置路径（保存即生效,无需重启桥接行） |
 | 编辑器端口固定后连接失败 | 只固定了一端 | 两端同值固定，或都不固定走注册表发现 |
 
@@ -72,7 +73,7 @@ v0.4 起 `install` 不再写官方 mcp-client 行（自研桥接）：校验后�
 
 ### 组激活即元工具调用
 
-- **技能/提示词面板（右侧「技能/提示词面」）**：技能数据源为 GodotMCP 工作区根（`<根>/plugin/godot-mcp-unified/skills/*/SKILL.md`）。工作区根**优先取组合行 `godotMcpRoot`；v0.4 后安装只写 serverDist 完整路径、不再存 godotMcpRoot，此时从生效 serverDist 向上推导**——serverDist 形如 `<根>/adapters/dsh/godot-http-bridge.mjs`（daemon 桥，候选优先）或旧 `<根>/plugin/godot-mcp-unified/server/dist/index.js`（legacy 兼容），去掉命中的固定相对后缀即得工作区根（仅当确实以候选后缀之一结尾时才推导，避免误判）。因此仅配置 serverDist（+projects）的场景也能读到技能，不会因缺 `godotMcpRoot` 显示空白。
+- **技能/提示词面板（右侧「技能/提示词面」）**：技能数据源为 GodotMCP 工作区根（`<根>/plugin/godot-mcp-unified/skills/*/SKILL.md`）。工作区根**优先取组合行 `godotMcpRoot`；v0.4 后安装只写 serverDist 完整路径、不再存 godotMcpRoot，此时从生效 serverDist 向上推导**——serverDist 形如 `<根>/plugin/godot-mcp-unified/server-dotnet/publish/<rid>/godot-mcp-shim[.exe]`（随包 shim，候选优先）、`<根>/adapters/dsh/godot-http-bridge.mjs`（stdio 兜底桥）或旧 `<根>/plugin/godot-mcp-unified/server/dist/index.js`（legacy 兼容），去掉命中的入口段即得工作区根（shim 的 RID 段可变，按入口模式匹配；其余按固定后缀匹配，仅当确实命中候选形态时才推导，避免误判）。因此仅配置 serverDist（+projects）的场景也能读到技能，不会因缺 `godotMcpRoot` 显示空白。
 
 - 点击某个未激活组的「激活」按钮 = 前端选中 `discover_tools` 元工具并预填组名（**不直接触发**）；用户再点「执行」即正常发起一次 `discover_tools` 的 `POST /call`（激活即工具调用）。激活成功后 `tools/change` 事件触发工具面刷新，树随之重拉。
 - 工具集刷新的时机：Tab 获得焦点时（会话/视图切换会重挂载工作台）、每次调用执行成功后、以及组激活响应后；前端不轮询。

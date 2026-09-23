@@ -11,7 +11,8 @@
   - `templates/` —— 项目模板（empty/default/2d-platformer/3d-fps）；
   - `.codex-plugin/`、`.zcode-plugin/` —— 客户端加载契约目录，必须留在插件根（客户端按固定相对路径读取）；
   - `scripts/` —— 面向用户的安装器与负载体检（见下"脚本归属"）。
-- `adapters/` —— 各客户端接入管理层；其中 `dsh/deepseek-harness-godot_unified` 是独立 git 仓库（Windows junction 指入本仓库），有自己的 AGENTS.md 与铁律，构建产物（`lib/`、`bin/`、`.tsbuild/`）不入库。
+- `adapters/` —— 各客户端接入管理层；其中 `dsh/deepseek-harness-godot_unified` 是一套自带完整度较高的接入层实现，有自己的 `AGENTS.md`、铁律与测试，构建产物（`lib/`、`bin/`、`.tsbuild/`）不入库。
+  **注意（2026-09-23 实测）**：该目录在当前工作副本里是**普通目录、不是 junction**，也没有自己的 `.git` —— `git rev-parse --show-toplevel` 回到本仓库，其改动以 `adapters/dsh/…` 出现在**本仓库**的 `git status` 里。因此"独立 git 仓库 / 独立提交域"不成立，一次提交会同时覆盖两边。它的 `skills/` 才是 junction（→ `plugin/godot-mcp-unified/skills`，单一真源，已在 `.gitignore` 排除）。
 - `test-project/` —— 验收项目：`tests/*.gd` 为 Godot 回归脚本（SceneTree 脚本，headless 运行）；`addons/` 为指向真源的 junction。
 - `docs/` —— 维护文档、ADR、客户端安装指南；`docs/agents/` 定义 issue tracker / triage / domain docs 约定。
 - `scripts/` —— 仓库级开发/验证工具。

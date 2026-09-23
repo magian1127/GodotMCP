@@ -5,11 +5,12 @@
 
 ## 项目定位
 
-本仓库是 GodotMCP 工作区（Godot 4 MCP 桥接工具集）与 DSH 的**接入层**：它不实现 Godot 桥接逻辑（那是 GodotMCP server 与编辑器 addon 的职责），而是提供**自研桥接 + 动态工具**接入——插件自己 spawn GodotMCP server 并经内嵌极简 MCP client 桥接，工具清单由 server 的 `tools/list` 动态提供（不写死工具），桥接按调用会话 cwd 解析并传参项目路径。本包提供三样东西：
+本仓库是 GodotMCP 工作区（Godot 4 MCP 桥接工具集）与 DSH 的**接入层**：它不实现 Godot 桥接逻辑（那是 GodotMCP server 与编辑器 addon 的职责），而是提供**自研桥接 + 动态工具**接入——插件自己 spawn GodotMCP server 并经内嵌极简 MCP client 桥接，工具清单由 server 的 `tools/list` 动态提供（不写死工具），桥接按调用会话 cwd 解析并传参项目路径。本包提供四样东西：
 
 1. **路径配置 CLI**（`dsh-godot`）：校验 server dist/Godot 项目，把路径写入 `$DSH_HOME/godot/paths.json`（host 侧 PathStore 同源；不再写官方 mcp-client 行），并做体检（status）。
 2. **Godot 工作流提示词 section**（host 插件，行 id `dsh-godot`）：教模型按需扩面、理解编辑器 FIFO 串行语义与错误恢复。蒸馏自 GodotMCP 的 godot-control / godot-playtest 技能。
 3. **注入策略 + Godot 工作台**（host/client,行 id `dsh-godot`）：默认仅 Godot preset 会话注入 `godot_*` 工具（其余会话 Agent 作用域 deny）；工作台是旁路调试面（浏览/手动调用/状态），带目录缓存与在线判定防卡死（详见 `docs/behavior.md` 与 `docs/development.md`）。
+4. **Godot agent preset 声明**（bundle patch 行 id `preset-godot`）：DSH 0.1.6+ 起 preset 只能由 bundle patch 的 `@deepseek-ai/dsh-agent-preset` 声明行注册（`$DSH_HOME/.agent-presets/<id>/` 目录已废弃）；该行 plugins 是 shipped `standard` 的完整副本 + 本包技能目录（`skills/` 为指向上游 GodotMCP 的 junction，`customSkillDirs` 从本包 realpath 解析）。
 
 上游事实（工具目录、分组、env 变量、注册表）以 GodotMCP 仓库 `plugin/godot-mcp-unified/server/` 的源码与文档为准；本仓库文档只写接入语义，不复制上游目录。
 

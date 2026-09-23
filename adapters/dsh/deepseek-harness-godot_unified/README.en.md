@@ -14,7 +14,7 @@ Connect [GodotMCP](https://github.com/) (a Godot 4 editor & game MCP control too
 ## Prerequisites
 
 1. DSH (the CLI ships `@deepseek-ai/dsh-mcp-client`; nothing extra to install).
-2. A ready GodotMCP workspace: `<GodotMCP>/adapters/dsh/godot-http-bridge.mjs` in place (bundled with the repo; it boot-spawns the machine-level daemon — the daemon is published by GodotMCP's `adapters/zcode/install-http-face.ps1` or auto-spawned by the editor sidecar; the Node bridge was retired with plugin 1.1.0).
+2. A ready GodotMCP workspace: the bundled shim in place — `<GodotMCP>/plugin/godot-mcp-unified/server-dotnet/publish/<rid>/godot-mcp-shim[.exe]` (produced by the repo's publish step: `dotnet publish plugin/godot-mcp-unified/server-dotnet/src/godot-mcp-shim -c Release -p:PublishProfile=<rid>`). The host spawns that shim directly; the shim makes sure the machine-level daemon is running (the sibling `godot-mcp-daemon[.exe]`) and forwards stdio to the daemon's HTTP face, so the daemon need not be started elsewhere first. Only for an stdio fallback/rollback use `<GodotMCP>/adapters/dsh/godot-http-bridge.mjs` (a Node script, run through node; the Node bridge was retired with plugin 1.1.0).
 3. The target Godot project has the `godot_mcp_toolkit` addon installed (use GodotMCP's `install-godot-project.ps1`) and the **editor is running** (headless works: `godot --headless --editor --path <project>`). The server never launches the editor; when it is absent, tool calls return actionable errors.
 
 ## Requirements
@@ -35,12 +35,12 @@ node bin/dsh-godot.mjs install --profile web \
 # Or without the bundle (bridge only, no prompt section/workbench):
 node bin/dsh-godot.mjs install --profile web \
   --project <absolute Godot project path> \
-  --server-dist <GodotMCP>/adapters/dsh/godot-http-bridge.mjs
+  --server-dist <GodotMCP>/plugin/godot-mcp-unified/server-dotnet/publish/<rid>/godot-mcp-shim.exe
 ```
 
 Server dist resolution order: `--server-dist` > `$GODOT_MCP_SERVER_DIST` > `--godot-mcp-root` / `$GODOT_MCP_ROOT`.
 
-Since v0.4 `install` **no longer writes an official mcp-client row** (self-hosted bridge): it writes `serverDist` and a `{cwd, projectPath}` entry into `$DSH_HOME/godot/paths.json` (and cleans up any historical official bridge row). Paths take effect without a restart — the bridge loads them when a **Godot-preset session** (`~/.dsh/.agent-presets/godot/`) is created; you can also edit per-cwd paths in "Settings → Plugins → Godot Workbench" (immediate). Different sessions may target different Godot projects.
+Since v0.4 `install` **no longer writes an official mcp-client row** (self-hosted bridge): it writes `serverDist` and a `{cwd, projectPath}` entry into `$DSH_HOME/godot/paths.json` (and cleans up any historical official bridge row). Paths take effect without a restart — the bridge loads them when a **Godot-preset session** (the `Godot` mode, declared by this package's bundle patch row `preset-godot`; no hand-installed preset directory) is created; you can also edit per-cwd paths in "Settings → Plugins → Godot Workbench" (immediate). Different sessions may target different Godot projects.
 
 ### Common options
 

@@ -3,9 +3,11 @@
 # 重新部署，重启 Codex（新开任务）即可加载。
 #
 # 背景：Codex 在 ~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/ 维护
-# 完整工作副本（含 server/node_modules，约 121MB），每次改动都需重新安装才能
-# 生效；插件的 .codex-plugin/mcp.json 通过 ${PLUGIN_ROOT} 相对引用 server，
-# 因此缓存目录换成联接后，Codex 直接运行仓库里的服务器。
+# 完整工作副本，每次改动都需重新安装才能生效；插件的 .codex-plugin/mcp.json
+# 以 ${PLUGIN_ROOT} 相对引用**仓库内唯一的服务产物**
+# (server-dotnet/publish/<rid>/godot-mcp-shim[.exe])，因此缓存目录换成联接后，
+# Codex 直接 spawn 仓库里的 shim——由 shim 确保机器级单例 daemon 在跑再把
+# stdio 转发到 daemon 的 HTTP 面，不再需要环境变量 token 与"daemon 已在运行"的前提。
 #
 # 用法（需 PowerShell 7+）：
 #   pwsh adapters/codex/link-codex-plugin.ps1            建立链接（幂等）
@@ -32,6 +34,15 @@ Set-StrictMode -Version Latest
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $sourceDir = Join-Path $repoRoot "plugin\godot-mcp-unified"
 $codexCachePluginRoot = Join-Path $env:USERPROFILE ".codex\plugins\cache\personal\godot-mcp-unified"
+
+# 当前平台的 .NET RID（与 addon 侧 paths/platform_rid.gd、发布档同名同义）。
+function Get-CurrentRid {
+    if ($IsWindows) { return "win-x64" }
+    if ($IsMacOS) { return $(if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq "Arm64") { "osx-arm64" } else { "osx-x64" }) }
+    return "linux-x64"
+}
+$rid = Get-CurrentRid
+$shimRelative = "server-dotnet\publish\$rid\godot-mcp-shim" + $(if ($IsWindows) { ".exe" } else { "" })
 
 if (-not (Test-Path -LiteralPath (Join-Path $sourceDir ".codex-plugin\plugin.json"))) {
     throw "Plugin manifest missing under $sourceDir"
@@ -109,9 +120,14 @@ if ($existingType -eq "Junction") {
     Write-Host "Created junction: $cacheTarget -> $sourceDir"
 }
 
-# 校验：联接必须能透出 Codex 加载契约所需的清单与 MCP 配置。
-foreach ($required in @(".codex-plugin\plugin.json", ".codex-plugin\mcp.json", "server\dist\index.js")) {
+# 校验：联接必须能透出 Codex 加载契约所需的清单、MCP 配置，以及 Codex 要
+# spawn 的服务入口本身（缺入口则 Codex 起不来，必须在这里就报出来）。
+foreach ($required in @(".codex-plugin\plugin.json", ".codex-plugin\mcp.json", $shimRelative)) {
     if (-not (Test-Path -LiteralPath (Join-Path $cacheTarget $required))) {
+        if ($required -eq $shimRelative) {
+            throw ("服务入口缺失：$required —— 先发布该平台产物，例如`n" +
+                "  dotnet publish plugin/godot-mcp-unified/server-dotnet/src/godot-mcp-shim -c Release -p:PublishProfile=$rid")
+        }
         throw "Junction created but required file not visible through it: $required"
     }
 }

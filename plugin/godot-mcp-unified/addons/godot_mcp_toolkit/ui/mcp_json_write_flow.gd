@@ -69,12 +69,18 @@ func _localized_result_message(message: String) -> String:
 		return ".mcp.json 已存在 — 尚未确认覆盖"
 	if message.begins_with("Failed to write .mcp.json"):
 		return message.replace("Failed to write .mcp.json", "写入 .mcp.json 失败")
+	if message.begins_with("Shim executable missing: "):
+		return "缺少 shim 可执行文件：" + message.trim_prefix("Shim executable missing: ")
 	if message == "MCP: .mcp.json written":
 		return "MCP：已写入 .mcp.json"
 	return message
 
 
+## 结果提示(tooltip)的中文化：写入成功的绝对路径,以及 shim 产物缺失时的补救指引
+## （该指引是英文句子,故按前缀匹配而非等值匹配）。
 func _localized_result_tooltip(tooltip: String) -> String:
 	if EditorLocale.is_chinese_editor() and tooltip.begins_with("Wrote to "):
 		return "已写入：" + tooltip.trim_prefix("Wrote to ")
+	if EditorLocale.is_chinese_editor() and tooltip.begins_with("Publish the server"):
+		return "请先发布服务，或把构建产物同步到 addon 的 bin 目录后重试。"
 	return tooltip

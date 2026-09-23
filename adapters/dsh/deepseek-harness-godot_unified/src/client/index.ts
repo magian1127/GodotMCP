@@ -9,10 +9,10 @@ import { registerConfigPage } from './config-page.js'
 const PKG = 'deepseek-harness-godot_unified'
 
 // fiber 注入声明:浏览器端 Loader 从 bundle exports 读 inject 构建 fiber 的
-// 服务注入集(hashline 同款通道);缺了它 ctx.slots/ctx.settingsScope 访问会抛
+// 服务注入集(hashline 同款通道);缺了它 ctx.slots/ctx.configForms 访问会抛
 // "cannot get property ... without inject" 并让 boot 页把插件判为加载失败。
 // 注意与 package.json 的 dsh.client.inject(包名级 factory 先行边)是两回事。
-export const inject = ['slots', 'locale', 'connection', 'remote', 'settingsScope']
+export const inject = ['slots', 'locale', 'connection', 'configForms']
 
 export function apply(ctx: Record<string, unknown>): void {
   const slots = ctx.slots as
@@ -36,7 +36,7 @@ export function apply(ctx: Record<string, unknown>): void {
       label: () => 'Godot',
     }, GodotWorkbenchRoot) as () => void
   })
-  // 插件页配置表单:settingsScope/locale/connection/remote 缺失时跳过(工作台不受影响)。
+  // 插件页配置表单:configForms/locale/connection 缺失时跳过(工作台不受影响)。
   try {
     registerConfigPage(ctx)
   } catch (error) {

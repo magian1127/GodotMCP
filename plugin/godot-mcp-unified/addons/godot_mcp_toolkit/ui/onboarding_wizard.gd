@@ -161,7 +161,7 @@ func _spec_mcp_json(mcp_exists: bool) -> Dictionary:
 		var intro_zh := (
 			".mcp.json 是一种可选的项目 MCP 配置。"
 			+ "Codex 等客户端也可以使用插件或全局 MCP 配置。\n\n"
-			+ "MCP 服务器桥接需要本机安装 Node.js 22 或更高版本。"
+			+ "写入的条目指向随插件提供的服务入口（shim），因此需先发布服务产物。"
 			+ "安装说明见 addons/godot_mcp_toolkit/docs/advanced_configuration.zh-CN.md。\n\n")
 		if mcp_exists:
 			return {
@@ -180,7 +180,7 @@ func _spec_mcp_json(mcp_exists: bool) -> Dictionary:
 	var intro := (
 		".mcp.json is an optional project MCP configuration. "
 		+ "Clients such as Codex can also use plugin or global MCP configuration.\n\n"
-		+ "The local MCP server bridge requires Node.js 22+ to run. "
+		+ "The entry written points at the bundled service shim, so the service must be published first. "
 		+ "See addons/godot_mcp_toolkit/docs/advanced_configuration.md for local setup.\n\n")
 	if mcp_exists:
 		return {

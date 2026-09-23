@@ -2,15 +2,15 @@
 
 # Godot MCP Unified
 
-一个 Godot 4.7+ 编辑器插件。它运行本地主机 WebSocket 服务器，让 AI 编码助手或任何兼容 MCP 的客户端能够在编辑器中创建场景、编辑脚本、检查节点并运行试玩。插件只是整个技术栈的一半；机器级 daemon(`http://127.0.0.1:6590/`)才是助手实际连接的接入面——由编辑器的 auto-spawn 边车或宿主安装器拉起，并经机器注册表回连这个 WebSocket 服务器。
+一个 Godot 4.2+ 编辑器插件。它运行本地主机 WebSocket 服务器，让 AI 编码助手或任何兼容 MCP 的客户端能够在编辑器中创建场景、编辑脚本、检查节点并运行试玩。插件只是整个技术栈的一半：真正干活的是机器级 daemon，而助手是通过 MCP 客户端自己 spawn 的**随包 stdio shim**（`server-dotnet/publish/<rid>/godot-mcp-shim`）连上它的。daemon 尚未运行时由 shim 自举拉起，daemon 再经机器注册表回连这个 WebSocket 服务器。
 
 所有操作都在本地完成，不会有任何内容离开你的计算机。
 
 ## 快速开始
 
 1. **启用插件：**Project Settings → Plugins → **Godot MCP Unified** → 勾选 **Active**。MCP 工具坞会出现在底部面板，输出日志会打印 `[MCPServer] listening on 127.0.0.1:6550`（端口可能位于 6550–6560；工具坞会显示实际端口）。这一行来自编辑器内插件自己的 WebSocket 服务器，daemon 经注册表发现后回连它。
-2. **写入客户端配置：**运行整合包随附的 `scripts/install-godot-project.ps1`。它会在项目根目录写入 `.mcp.json`，把 MCP 客户端指向机器级 daemon 的回环 HTTP 接入面(`type: "http"`，`http://127.0.0.1:6590/`)。本机不再需要 Node.js（随包 Node 桥已随插件 1.1.0 退役）；各宿主的认证 token 由其安装器统一布线。
-3. **连接：**从项目根目录启动 MCP 客户端。它会自动发现 daemon 并完成身份验证；连接后 dock 中的对等端计数会递增。
+2. **写入客户端配置：**运行整合包随附的 `scripts/install-godot-project.ps1`。它会在项目根目录写入 `.mcp.json`，条目为 `type: "stdio"`，指向随包 shim（`server-dotnet/publish/<rid>/godot-mcp-shim`），首次使用时由 shim 自举拉起 daemon。本机不再需要 Node.js（随包 Node 桥已随插件 1.1.0 退役），也不再需要宿主侧认证 token——token 由 shim 自己从机器级注册表读取。
+3. **连接：**从项目根目录启动 MCP 客户端。它会 spawn shim，由 shim 拉起 daemon 并完成鉴权；连接后 dock 中的对等端计数会递增。
 
 如果某一步没有按预期工作，请先查看随插件提供的[高级配置指南](docs/advanced_configuration.md)。
 
