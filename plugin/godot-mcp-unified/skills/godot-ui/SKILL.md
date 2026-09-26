@@ -145,6 +145,41 @@ $MyControl.theme = theme
 - 可在多个场景间共享
 - 支持继承（基础主题 + 覆盖）
 
+# 场景组织：多个小场景 + C# 动态实例化
+
+搭建或修改界面时必须按这套组织方式（项目 AGENTS.md 另有同类约定时以项目为准并保持一致）：
+
+1. **一个场景只做一件事**：界面按组件拆成多个小 `.tscn`——部件（格子、卡片、棋子、选项按钮、列表项）与面板（账本、详情、设置……）各自成场景。父场景只放骨架与容器，不预摆 N 份相同节点；不要维持几千行的巨型 TSCN。
+2. **重复节点必须抽成子场景**：同一结构出现两次以上就抽成一个可复用 `.tscn`；修改某个场景时顺手把里面的重复块抽出来。每个实例的差异（位置、文字、图标）留在实例节点上或由脚本设置。
+3. **每个场景配专属 C# 脚本**：`public partial class ChoiceCard : Button`（类名＝文件名），对外暴露类型化接口（如 `Present(...)`/`Show(...)`）和事件；父脚本只调用接口，子节点路径（`GetNode("Content/Detail")`）只出现在部件脚本内部。
+4. **数量随数据变化的部分由 C# 实例化**：
+   ```csharp
+   private static readonly PackedScene CardScene = GD.Load<PackedScene>("res://game/scenes/parts/ChoiceCard.tscn");
+
+   private void Render(IReadOnlyList<CardData> options)
+   {
+       // 复用已有实例：少则补、多则隐藏（或 QueueFree）；信号只在实例化时连接一次。
+       while (_cards.GetChildCount() < options.Count)
+       {
+           var card = CardScene.Instantiate<ChoiceCard>();
+           int index = _cards.GetChildCount();
+           card.Pressed += () => OnCardPressed(index);
+           _cards.AddChild(card);
+       }
+       for (int i = 0; i < _cards.GetChildCount(); i++)
+       {
+           var card = _cards.GetChild<ChoiceCard>(i);
+           card.Visible = i < options.Count;
+           if (card.Visible) card.Present(options[i]);
+       }
+   }
+   ```
+5. **视觉结构仍写在 TSCN**：禁止 `new Button()`、`new Panel()` 这类代码拼界面；样式（StyleBox、字体、颜色）放在部件场景或 Theme 资源里。
+6. **TSCN 不写注释**：`#` 注释行可能吞掉其后的节点块，说明写进脚本或文档。
+7. **唯一名(`%Name`)只在同一场景(owner)内有效**：节点被抽进子场景后，父脚本不能再用 `%Name` 访问其内部节点——改由子场景脚本提供接口。
+8. **项目登记**：若项目有场景登记表或架构门禁（如 `references.whitelist.json` 的 scenes），新场景与脚本同批登记；被脚本动态实例化的模板还要登记获准调用者（如秘境项目条目里的 `instantiatedBy: ["game/bindings/panels/FooterBar.cs"]`），模板路径写成 `GD.Load<PackedScene>("res://…tscn")` 字面量，不在运行时拼路径。
+9. **一次性搭建与复用**：固定清单（导航项、神通槽）在绑定时按数据实例化一次，之后只改状态；数量随数据变化的列表复用实例（多退少补），不要每帧/每次刷新销毁重建。
+
 # 常见 UI 模式
 
 ### 主菜单
@@ -487,3 +522,4 @@ func _ready():
 - **信号连接**是处理 UI 交互的首要方式
 - **Tween** 补间动画让 UI 过渡更顺滑精致
 - **在多种分辨率下测试** —— 使用 项目设置(Project Settings) > 显示(Display) > 窗口(Window)
+- **不预摆重复节点**：重复结构抽成子场景，由 C# 按数据实例化（见「场景组织」）

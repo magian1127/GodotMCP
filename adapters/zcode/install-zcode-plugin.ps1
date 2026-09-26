@@ -15,6 +15,13 @@
 #      并刷新用户环境变量 GODOT_MCP_DAEMON_TOKEN（HTTP 型消费者用，例如 DSH 的
 #      adapters/dsh/godot-http-bridge.mjs 兜底桥）。
 #
+# 注意（2026-09-23 实测）：第 4 步预热拉起的 daemon 会**继承本进程的作业对象(Job)**，
+# 而 Job 成员身份在创建后无法脱离。若从 IDE 的内置终端运行本脚本（VS Code 集成终端等，
+# 它通常是 IDE 那个 Job 的成员），而该 Job 带 KILL_ON_JOB_CLOSE，那么 daemon 会随 IDE
+# 关闭一起被杀 —— 其他宿主会突然失去服务。**请从普通终端运行本脚本**，或改由编辑器边车
+# （daemon_sidecar.gd，autostart 默认开启）与机器级开机自启拉起 daemon。
+# daemon 启动时会做只读自检，命中该情况会在 daemon.log 记一条 Warning，可用它确认。
+#
 # 用法（需 PowerShell 7+）：
 #   pwsh adapters/zcode/install-zcode-plugin.ps1
 #   pwsh adapters/zcode/install-zcode-plugin.ps1 -SkipPublish

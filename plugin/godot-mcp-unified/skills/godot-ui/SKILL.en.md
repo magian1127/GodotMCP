@@ -145,6 +145,41 @@ Best practice: create `.tres` theme files and keep them under `resources/themes/
 - Shareable across scenes
 - Support inheritance (base theme + overrides)
 
+# Scene organization: many small scenes + C# instancing
+
+Follow this organization whenever you build or modify UI (if the project's AGENTS.md states a similar convention, the project wins and both stay consistent):
+
+1. **One scene, one job**: split the UI into many small `.tscn` files — parts (cells, cards, tokens, option buttons, list items) and panels (ledger, details, settings…) each get their own scene. Parent scenes hold only the skeleton and containers, never N pre-placed copies of the same node; do not keep multi-thousand-line TSCN files.
+2. **Repeated nodes must become a sub-scene**: any structure appearing twice or more is extracted into one reusable `.tscn`; when you touch a scene, extract its repeated blocks along the way. Per-instance differences (position, text, icon) live on the instance node or are set by script.
+3. **Each scene gets its own C# script**: `public partial class ChoiceCard : Button` (class name = file name) exposing a typed API (e.g. `Present(...)`/`Show(...)`) and events; parent scripts call that API, and child paths (`GetNode("Content/Detail")`) appear only inside the part's own script.
+4. **Data-driven counts are instantiated from C#**:
+   ```csharp
+   private static readonly PackedScene CardScene = GD.Load<PackedScene>("res://game/scenes/parts/ChoiceCard.tscn");
+
+   private void Render(IReadOnlyList<CardData> options)
+   {
+       // Reuse instances: add when short, hide (or QueueFree) extras; connect signals once at instantiation.
+       while (_cards.GetChildCount() < options.Count)
+       {
+           var card = CardScene.Instantiate<ChoiceCard>();
+           int index = _cards.GetChildCount();
+           card.Pressed += () => OnCardPressed(index);
+           _cards.AddChild(card);
+       }
+       for (int i = 0; i < _cards.GetChildCount(); i++)
+       {
+           var card = _cards.GetChild<ChoiceCard>(i);
+           card.Visible = i < options.Count;
+           if (card.Visible) card.Present(options[i]);
+       }
+   }
+   ```
+5. **Visual structure still lives in TSCN**: never assemble UI with `new Button()`, `new Panel()` and the like; styles (StyleBox, fonts, colors) belong in the part scene or a Theme resource.
+6. **No comments inside TSCN**: a `#` comment line can swallow the node block that follows; put explanations in scripts or docs.
+7. **Unique names (`%Name`) are scoped to one scene (owner)**: once nodes move into a sub-scene the parent script can no longer reach them via `%Name` — expose an API from the sub-scene's script instead.
+8. **Project registration**: if the project keeps a scene registry or architecture gate (e.g. `scenes` in `references.whitelist.json`), register new scenes and scripts in the same batch; templates instantiated from scripts also register their approved callers (e.g. `instantiatedBy: ["game/bindings/panels/FooterBar.cs"]` in the MiJing project), and template paths are written as `GD.Load<PackedScene>("res://…tscn")` literals, never assembled at runtime.
+9. **Build once, then reuse**: fixed lists (nav items, ability slots) are instantiated from data once at bind time and only change state afterwards; data-sized lists reuse instances (add when short, hide extras) instead of destroying and rebuilding on every refresh.
+
 # Common UI patterns
 
 ### Main menu
@@ -487,3 +522,4 @@ The `unsafe` group (`execute_code`, `node_call_method`) is absent unless the ser
 - **Signal connections** are the primary way to handle UI interaction
 - **Tweens** make UI transitions feel smooth and polished
 - **Test at multiple resolutions** — via Project Settings > Display > Window
+- **Never pre-place repeated nodes**: extract a sub-scene and instantiate it from C# per data item (see "Scene organization")
