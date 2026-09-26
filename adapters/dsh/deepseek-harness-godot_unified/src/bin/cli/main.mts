@@ -164,14 +164,20 @@ async function cmdInstall(argv: string[]): Promise<number> {
 
   // 可选:开发安装 bundle 行(link: 直连工作区目录)。
   if (args.link !== null) {
-    const spec = `link:${args.link.replace(/[\\/]+$/, '')}`
-    console.log(`[${PKG}] dsh plugin --profile ${args.profile} add ${spec}`)
-    // dsh 的选项解析要求 --profile 跟在 plugin 子命令之后。
-    const res = spawnCommand('dsh', ['plugin', '--profile', args.profile, 'add', spec], { stdio: 'inherit' })
-    if (res.status !== 0) {
-      console.error(`[${PKG}] bundle 安装失败(退出码 ${res.status ?? 'null'});可稍后手动安装 bundle`)
-    } else if (!bundlesHasPlugin(args.profile)) {
-      console.warn(`[${PKG}] 警告: bundles 未包含本插件(链接可能未解析),提示词 section 不会挂载`)
+    // desktop profile 由桌面应用独占管理:dsh CLI 按名拒绝,CLI 不得代装;
+    // 路径配置($DSH_HOME/godot/paths.json)是 home 级共享,照常继续。
+    if (args.profile.toLowerCase() === 'desktop') {
+      console.error(`[${PKG}] desktop profile 由桌面应用独占管理,CLI 不能改动其 bundles:请在桌面应用侧栏「插件」页安装本插件(--link 已忽略)`)
+    } else {
+      const spec = `link:${args.link.replace(/[\\/]+$/, '')}`
+      console.log(`[${PKG}] dsh plugin --profile ${args.profile} add ${spec}`)
+      // dsh 的选项解析要求 --profile 跟在 plugin 子命令之后。
+      const res = spawnCommand('dsh', ['plugin', '--profile', args.profile, 'add', spec], { stdio: 'inherit' })
+      if (res.status !== 0) {
+        console.error(`[${PKG}] bundle 安装失败(退出码 ${res.status ?? 'null'});可稍后手动安装 bundle`)
+      } else if (!bundlesHasPlugin(args.profile)) {
+        console.warn(`[${PKG}] 警告: bundles 未包含本插件(链接可能未解析),提示词 section 不会挂载`)
+      }
     }
   }
 
@@ -183,7 +189,8 @@ async function cmdInstall(argv: string[]): Promise<number> {
   projects.push({ cwd, projectPath: project.path })
   writeGodotPaths({ serverDist: dist.path, projects })
   // 清理历史官方 mcp-client 受管块(自研桥接不使用;残留会双轨)。
-  if (removeManagedRow(args.profile)) {
+  // desktop profile 的 patch 文件由桌面应用管理,CLI 不触碰。
+  if (args.profile.toLowerCase() !== 'desktop' && removeManagedRow(args.profile)) {
     console.log(`[${PKG}] 已清理旧的官方 mcp-client 桥接行(自研桥接不再需要)`)
   }
   console.log(`[${PKG}] 路径配置已写入 $DSH_HOME/godot/paths.json:serverDist + cwd=${cwd} → ${project.path}`)
@@ -207,12 +214,18 @@ async function cmdUninstall(argv: string[]): Promise<number> {
   }
   writeGodotPaths({ projects: [] })
   console.log(`[${PKG}] 已清空 $DSH_HOME/godot/paths.json 路径配置(桥接下次调用起不再生效)`)
-  const removed = removeManagedRow(profile)
-  console.log(removed
-    ? `[${PKG}] 已删除历史官方 MCP 桥接行`
-    : `[${PKG}] 无历史官方 MCP 桥接行`)
+  const removed = profile.toLowerCase() === 'desktop'
+    ? false
+    : removeManagedRow(profile)
+  if (profile.toLowerCase() !== 'desktop') {
+    console.log(removed
+      ? `[${PKG}] 已删除历史官方 MCP 桥接行`
+      : `[${PKG}] 无历史官方 MCP 桥接行`)
+  }
   if (bundlesHasPlugin(profile)) {
-    console.log(`[${PKG}] 提示: bundle 行仍在(提示词 section/工作台);移除用 dsh plugin --profile ${profile} remove ${PKG}`)
+    console.log(profile.toLowerCase() === 'desktop'
+      ? `[${PKG}] 提示: bundle 行仍在(提示词 section/工作台);移除请在桌面应用侧栏「插件」页操作`
+      : `[${PKG}] 提示: bundle 行仍在(提示词 section/工作台);移除用 dsh plugin --profile ${profile} remove ${PKG}`)
   }
   return 0
 }

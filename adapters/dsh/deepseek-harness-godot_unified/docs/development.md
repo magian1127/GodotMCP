@@ -13,7 +13,9 @@ src/
   section-text.ts     section 内容(双语,zhPrompt 设置切换;蒸馏自上游 godot-control/playtest 技能)
   injection.ts        注入策略纯函数(resolveSettings/godotToolNames/shouldHideAgent/needsScopedPrompt/
                      resolveToolDescription/toolFailureMessage;node --test)
-  profile-modules.ts  loadSchemastery(profile require 上下文解析,hashline 同款)
+  profile-modules.ts  loadSchemastery(profile 解析上下文加载,hashline 同款;0.1.7-rc 起
+                     require.resolve+exports import 条目+异步 import 预载(TLA),同步
+                     require(esm) 会撞宿主 hooks 管线「not yet fully loaded」死锁)
   constants.ts        host 侧常量(PKG/BUNDLE_ROW_ID/SECTION_NAME/SECTION_ORDER)
   types.ts            最小类型面(Disposer/SystemPromptService/HostContext/Tools/WebServer 形状)
   workbench/          工作台 host 半边路由与数据源(只读 tools 面;不 spawn server)
@@ -144,6 +146,14 @@ Mimosa 深扫 0 findings；人工全源码审计发现并修复（77 tests 全�
 - paths.json 全局 serverDist + 按 cwd 项目条目；host 侧 PathStore 惰性加载、原子写、cwd 去重、上限 100。
 - `discover_tools` 参数契约（实测 2026-09）：组名/关键词走 `request`（string|string[]），`activate` 是 boolean（默认 true 自动激活，false 仅浏览），`reset` 接受 boolean 或组名数组，`include_schemas` 布尔。既往 agent 误把组名传给 `activate`（expected boolean 报错）；section-text 提示词已写明该签名防复发。
 - 按需工具组的工具参数契约：必填参数（如 classdb_query 的 `mode`）以每个工具自己的 schema 为准——不确定参数名/类型/必填项时先用 `include_schemas=true` 查看，凭记忆猜参数会导致 Invalid option。section-text 已加入该引导（中英双语）。
+
+## 桌面版 DSH 适配（2026-09-27）
+
+- `src/profile-modules.ts`：`profileName()` 拆出纯函数 `profileNameFrom(argv, electronVersion)`——桌面 Host（Electron RunAsNode）argv 不带 `--profile`，`process.versions.electron` 有值时判 `desktop`；显式 `--profile` 仍最优先。
+- `src/bin/cli/main.mts`：`--profile desktop` 时 install 跳过 bundle 安装与 patch 行清理（paths.json 是 home 级共享、照常写入），uninstall 跳过 patch 行操作，提示走桌面应用插件页。
+- `verify-build.mjs`：fiber 注入断言从已退役的 `settingsScope` 更正为 `configForms`（0.1.7 迁移遗留的陈旧校验）。
+- 回归：`src/tests/patch-row.test.mjs` 新用例（profile 探测矩阵）。桥接 spawn 的 shim 为原生 exe，不依赖 PATH 上的 node，无需适配。
+- 共性事实与验收记录见工作区根 `docs/dsh-desktop-support.md`。
 
 ## 路线图（未实现）
 

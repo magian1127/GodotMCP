@@ -41,6 +41,15 @@ node bin/dsh-godot.mjs install --profile web \
 
 server dist 解析顺序：`--server-dist` > `$GODOT_MCP_SERVER_DIST` > `--godot-mcp-root`/`$GODOT_MCP_ROOT`。
 
+**桌面版 DSH（Electron 应用）**：本插件兼容桌面版（桌面 Host 端口 19387）。路径配置 `$DSH_HOME/godot/paths.json` 是机器级共享——`install` 在桌面场景照常写入（`--profile desktop` 时仅跳过 bundle 安装）；桥接 spawn 的 shim 是原生 exe，不依赖 PATH 上的 node。bundle（提示词 section/工作台）的 link 开发安装（桌面应用**未运行**时执行）——编辑 `~/.dsh/profiles/desktop/package.json`：
+
+```jsonc
+"dependencies": { "deepseek-harness-godot_unified": "link:<本仓库绝对路径>" },
+"dsh": { "profile": { "bundles": [ /* 官方 bundle 保持原样，末尾追加 */ "deepseek-harness-godot_unified" ] } }
+```
+
+在 profile 目录内执行 `pnpm install` 物化链接，启动桌面应用即挂载；改源码后 `npm run build` 并重启桌面应用；卸载移除两处条目后重新 `pnpm install`。
+
 v0.4 起 install **不再写官方 mcp-client 行**（自研桥接）：把 `serverDist` 与 `{cwd, projectPath}` 条目写入 `$DSH_HOME/godot/paths.json`（并清理历史官方桥接行）。路径生效无需重启——在 **Godot preset 会话**（`Godot` 模式，由本包 bundle patch 的 `preset-godot` 行声明，无需手工安装 preset 目录）中首次创建时桥接自动加载；也可在侧栏「插件」页 → deepseek-harness-godot_unified 页面按 cwd 增改路径（保存即时生效，DSH 0.1.6+）。不同会话工作区可以配置不同 Godot 项目。
 
 ### 常用选项

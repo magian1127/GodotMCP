@@ -9,9 +9,9 @@ export const VERSION: string = (() => {
   try {
     const requireSelf = createRequire(import.meta.url)
     const pkg = requireSelf('../package.json') as { version?: string } | undefined
-    return typeof pkg?.version === 'string' && pkg.version !== '' ? pkg.version : '0.4.0'
+    return typeof pkg?.version === 'string' && pkg.version !== '' ? pkg.version : '0.4.1'
   } catch {
-    return '0.4.0'
+    return '0.4.1'
   }
 })()
 

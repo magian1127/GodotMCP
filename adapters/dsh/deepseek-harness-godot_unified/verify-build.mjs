@@ -38,7 +38,7 @@ console.log('[verify-build] client bundle 格式(经典脚本,禁 ESM)')
 const clientText = existsSync(join(root, 'lib/client.js')) ? readFileSync(join(root, 'lib/client.js'), 'utf8') : ''
 check('window.__ModuleLoader__.load 头', clientText.includes('window.__ModuleLoader__.load'))
 check('包 id', /id:\s*['"]deepseek-harness-godot_unified['"]/.test(clientText))
-check("fiber 注入声明含 slots 与 settingsScope", /(?:const|var|let)\s+inject\s*=\s*\[[^\]]*["']slots["'][^\]]*\]/.test(clientText) && /["']settingsScope["']/.test(clientText) && /exports\.inject\s*=\s*inject/.test(clientText))
+check("fiber 注入声明含 slots 与 configForms", /(?:const|var|let)\s+inject\s*=\s*\[[^\]]*["']slots["'][^\]]*\]/.test(clientText) && /["']configForms["']/.test(clientText) && /exports\.inject\s*=\s*inject/.test(clientText))
 check('注册 conversation.view', clientText.includes('conversation.view'))
 check('注册插件页配置表单(plugins.bundle.config,键为包名)', clientText.includes('plugins.bundle.config') && /BUNDLE_PACKAGE_NAME\s*=\s*["']deepseek-harness-godot_unified["']/.test(clientText))
 check('Tab id godot / order 15', /id:\s*["']godot["']/.test(clientText) && /order:\s*15/.test(clientText))

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Godot MCP Unified",
+    "description": "Godot MCP Unified bridge row + workflow prompt section for DSH, with an install/uninstall/status CLI."
+  }
+}

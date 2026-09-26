@@ -40,6 +40,15 @@ node bin/dsh-godot.mjs install --profile web \
 
 Server dist resolution order: `--server-dist` > `$GODOT_MCP_SERVER_DIST` > `--godot-mcp-root` / `$GODOT_MCP_ROOT`.
 
+**DSH Desktop (the Electron app)**: supported (desktop Host port 19387). The path config `$DSH_HOME/godot/paths.json` is machine-wide and shared, so `install` still writes it in the desktop scenario (`--profile desktop` only skips the bundle install); the bridge spawns the shim as a native exe and does not depend on node being on PATH. For a link dev install of the bundle (prompt section/workbench; while the app is **not running**), edit `~/.dsh/profiles/desktop/package.json`:
+
+```jsonc
+"dependencies": { "deepseek-harness-godot_unified": "link:<absolute path to this repo>" },
+"dsh": { "profile": { "bundles": [ /* keep official bundles, append */ "deepseek-harness-godot_unified" ] } }
+```
+
+then `pnpm install` inside the profile directory; start the app to mount, `npm run build` + restart after source changes, remove both entries + `pnpm install` to uninstall.
+
 Since v0.4 `install` **no longer writes an official mcp-client row** (self-hosted bridge): it writes `serverDist` and a `{cwd, projectPath}` entry into `$DSH_HOME/godot/paths.json` (and cleans up any historical official bridge row). Paths take effect without a restart — the bridge loads them when a **Godot-preset session** (the `Godot` mode, declared by this package's bundle patch row `preset-godot`; no hand-installed preset directory) is created; you can also edit per-cwd paths in "Settings → Plugins → Godot Workbench" (immediate). Different sessions may target different Godot projects.
 
 ### Common options
