@@ -141,18 +141,10 @@ func _start_server() -> void:
 	_transport.set_handlers(_handle_message, Callable(), Callable(), Callable(),
 		_on_bound)
 	# 运行时与编辑器服务器使用同一个令牌文件,这样桥接读一次就能对两者鉴权。
-	# 编辑器服务器先写入(插件启用先于游戏启动)。如果文件尚不存在
-	# (边界情况:插件未启用时独立启动游戏),则生成我们自己的令牌。
-	var token := ""
-	var token_path := MCPAuth.get_token_path()
-	var file := FileAccess.open(token_path, FileAccess.READ)
-	if file != null:
-		token = file.get_as_text().strip_edges()
-		file.close()
-	if token.is_empty():
-		token = MCPAuth.generate_token()
-		MCPAuth.write_token(token)
-	_transport.set_token(token)
+	# 编辑器服务器先写入(插件启用先于游戏启动);如果文件尚不存在(边界
+	# 情况:插件未启用时独立启动游戏),则生成我们自己的令牌。与编辑器侧
+	# 共用 load_or_create_token,保证两侧对"复用现有值"的语义永不漂移。
+	_transport.set_token(MCPAuth.load_or_create_token())
 	_transport.ensure_listening()
 
 

@@ -78,8 +78,10 @@ Two Godot editors opening the same project directory simultaneously causes:
   **last-registering** instance — it's last-writer-wins, *not* a guaranteed
   newest-wins, so the second editor clobbers the first's entry (port, token
   path) and which instance the bridge resolves to is undefined.
-- **Token collision:** same absolute path produces the same hashed token
-  filename, so auth fails on reconnect.
+- **Token file sharing:** both editors resolve to the same per-instance token
+  file. The token is stable (reused across editor restarts), so sharing it no
+  longer breaks auth by itself — but the registry collision above already
+  makes this pattern unsupported.
 - **Godot-level issues:** metadata lock warnings, `user://` cache corruption
   risk. This is also a Godot anti-pattern — the engine itself does not
   officially support opening one project path in two editors (the GDScript

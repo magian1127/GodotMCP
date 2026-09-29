@@ -287,17 +287,16 @@ func start() -> void:
 	_init_router()
 	_wire_scene_lease_to_lanes()
 	_init_lsp_publisher()
-	var token := MCPAuth.generate_token()
+	# 稳定令牌(stable token):复用令牌文件中的现有值,仅在缺失/为空时生成
+	# 新值写盘。绝不能在每次编辑器启动时轮换 — 运行中的游戏只在自己的启动
+	# 时读一次令牌并常驻内存,轮换会把跨编辑器重启存活的游戏永久挡在鉴权
+	# 之外(daemon 与探活始终读文件,三者必须保持一致)。
+	var token := MCPAuth.load_or_create_token()
 	# 端口配置错误会让 _transport 保持 null(start() 仍会接线其余部分,让
 	# 停靠面板 + LSP 监视启动并能暴露错误);跳过监听路径。
 	if _transport != null:
 		_transport.set_token(token)
-	var write_err := MCPAuth.write_token(token)
-	if write_err != OK:
-		push_warning("[MCPServer] failed to write token (err %d); auth will still be enforced but bridge may not find the file" % write_err)
-	else:
-		var token_path := MCPAuth.get_token_path()
-		print("[MCPServer] session token written to %s" % token_path)
+	print("[MCPServer] session token at %s" % MCPAuth.get_token_path())
 	if _transport != null:
 		_transport.ensure_listening()
 	else:

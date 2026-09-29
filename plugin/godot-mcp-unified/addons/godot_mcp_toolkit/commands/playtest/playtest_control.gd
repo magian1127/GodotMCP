@@ -176,7 +176,7 @@ static func cmd_game_start(parameters: Dictionary) -> Dictionary:
 			"ws_connect_timeout":
 				response["hint"] = "Port %d found but WebSocket connection failed — the runtime server may have crashed on startup. Check log_read(channel:'editor') for errors." % runtime_port
 			"auth_timeout":
-				response["hint"] = "WebSocket connected but auth handshake timed out — the token may be stale. Re-enable the plugin in Project Settings > Plugins to regenerate it."
+				response["hint"] = "WebSocket connected but auth handshake timed out — the running game holds an older token than the token file (typical when the editor restarted or the plugin was re-enabled while the game was already running). Stop the game (game_stop) and start it again so it reloads the current token; re-enabling the plugin will NOT fix a running game."
 			"ping_timeout":
 				response["hint"] = "Authenticated but ping/pong timed out — the runtime server may be overloaded. Use runtime_poll:true to retry without restarting the game."
 			_:

@@ -2,10 +2,15 @@
 extends RefCounted
 ## 上下文协议(MCP)WebSocket 传输层的会话令牌(session token)鉴权。
 ##
-## 每次服务器启动时都会生成一个全新的 32 字节十六进制令牌,写入
+## 令牌按项目实例持久化(稳定令牌,stable token):首次生成一个 32 字节
+## 十六进制令牌,写入
 ## user://addons/godot_mcp_toolkit/project_instance_<hash>/mcp_token
-## (或 GODOT_MCP_TOKEN_PATH),并要求每个连接的客户端将其作为
-## 首条 WebSocket 消息发送。
+## (或 GODOT_MCP_TOKEN_PATH),此后每次服务器启动都复用文件中的现有值
+## (见 load_or_create_token)。跨编辑器重启复用是刻意的:运行中的游戏只在
+## 自己启动时读一次令牌并常驻内存,若编辑器每次重启都轮换文件值,跨会话
+## 存活的游戏将永远无法通过鉴权。每个连接的客户端都要把令牌作为首条
+## WebSocket 消息发送。显式轮换只经 regenerate_token(菜单/停靠面板),
+## 轮换后仍在运行的游戏需要重启才能重新鉴权。
 
 const ProjectPaths := preload("res://addons/godot_mcp_toolkit/paths/project_paths.gd")
 
@@ -48,6 +53,23 @@ static func write_token(token: String) -> int:
 	# 仅属主可访问;在 Windows 上 %APPDATA% 也是按用户隔离的。
 	# 此处记录为已知限制 — 敏感数据不会泄漏到当前操作系统用户边界之外。
 	return OK
+
+
+## 读取现有令牌文件;缺失/为空时生成新令牌并写盘。返回最终生效的令牌。
+## 编辑器服务器与运行时服务器共用的"读或建"入口:令牌按项目实例持久化,
+## 跨编辑器重启复用,让存活的运行中游戏、编辑器与外部桥接始终读到同一份。
+static func load_or_create_token() -> String:
+	var file := FileAccess.open(get_token_path(), FileAccess.READ)
+	if file != null:
+		var token := file.get_as_text().strip_edges()
+		file.close()
+		if not token.is_empty():
+			return token
+	var token := generate_token()
+	var write_err := write_token(token)
+	if write_err != OK:
+		push_warning("[MCPAuth] failed to write token (err %d); auth will still be enforced but the bridge may not find the file" % write_err)
+	return token
 
 
 ## 校验解析后的鉴权消息。令牌匹配时返回 true。
