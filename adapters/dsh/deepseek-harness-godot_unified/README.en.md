@@ -19,7 +19,7 @@ Connect [GodotMCP](https://github.com/) (a Godot 4 editor & game MCP control too
 
 ## Requirements
 
-- DeepSeek Harness ≥ `0.1.5-rc.1`; the full UI uses `web`, and Godot preset sessions use the same `web` profile
+- DeepSeek Harness `>=0.2.0-rc.2 <0.3.0-0` (declared as `engines.dsh` in `package.json`; DSH enforces it from 0.2.1 on, so 0.1.x and 0.3.x refuse to load this plugin); the full UI uses `web`, and Godot preset sessions use the same `web` profile
 - Node.js `^22.19.0 || >=24.0.0`
 
 ## Install
@@ -67,6 +67,11 @@ dsh --profile web --dump-config | grep godot  # composition check (no boot)
 ```
 
 In the GUI: create a session with the Godot preset → the model sees `godot_*` tools; you can also browse/call manually in the "Godot" workbench tab. The target project's Godot editor must be running.
+
+**DSH 0.2.1 behavior changes** (already adapted here; no user action needed):
+
+- **The `{{cwd}}` prompt variable is gone**: the persona row no longer declares a `suffix`; the working directory now arrives as user context from DSH's working-directory service. `{{model}}` is still a registered variable.
+- **Delegation is no longer foreground/background**: every `subagent` / `subagent_fork` call returns an activation and the final answer arrives through the parent completion notice; `job_output` / `job_kill` no longer collect child results. This package's preset no longer sets `backgroundMode`.
 
 ## Uninstall
 

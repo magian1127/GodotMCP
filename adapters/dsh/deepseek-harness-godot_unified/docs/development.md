@@ -124,7 +124,28 @@ verify-build.mjs      产物存在性/语法/patch 行形状/client bundle 格�
 - client 纯逻辑（node --test，直接编译进 client bundle）：工具树分组、schema→表单映射、历史上限/摘要截断。
 - 组件与 bundle 形状：由 `verify-build.mjs` 断言（client 产物存在、经典脚本格式、注册 `conversation.view`/`id godot`/`order 15`、工作台组件在场、未打包 react）；交互与视觉效果由 GUI 验收覆盖。
 - 路由冒烟（真实 Node http + mock tools/webServer）：同源校验、JSON 错误形状、`/call` 取消/超时/错误投影、路径设置读写。
+- **preset patch 形状**（`src/tests/preset-patch.test.mts`）：`preset-godot` 行存在且仍是 `@deepseek-ai/dsh-agent-preset` 声明、id/显示名/description 非空、关键能力行在场、`isolate` realm 在场、`customSkillDirs` 从本包 realpath 解析；**DSH 0.2.1 起另加三条**——非注释行里不得出现 `{{cwd}}`、persona 行不得声明 `suffix`、subagent 行不得出现 `backgroundMode`/`enableRunInBackground`，且 `time-context`/`tool-schedule` 两行必须在场。
 - 运行期验证（不重启 web）：`dsh-godot status` + `dsh --profile <p> --dump-config`（组合校验）；一次性会话（`dsh --profile <p> --patch <行文件> "任务"`）验证桥接进程链（spawn → MCP 握手 → tools=20 → WS 认证）。
+
+## DSH 0.2.1 适配（2026-10）
+
+改动性质：**加载门禁 + preset 形状对齐**，桥接与工作台逻辑未动。
+
+- `package.json` 新增 `engines.dsh: ">=0.2.0-rc.2 <0.3.0-0"`（`engines.node` 原样保留，`engines` 仍是对象）。
+  DSH 0.2.1 的 `packages/boot/app-boot/src/plugin-compatibility.ts` 里 `unmetRequirements()` 规则是：**有 `engines.dsh` 就单独决定，`peerDependencies` 全被忽略**；判定用 `semver.satisfies(version, range, { includePrerelease: true })`（不带该选项时 `0.2.1-rc.2` 这类预发布会被误判不通过）；`engines` 非对象或 `engines.dsh` 非字符串会抛错并拒绝加载；`engines.dsh` 里写 `workspace:*` 一律视为不兼容。
+- 验证命令（在 DSH 检出目录跑，用官方实现判定，不复刻 semver）：
+  `npx tsx <workspace>/temp/check-engines-dsh.mjs deepseek-harness-godot_unified` → 退出码 0；
+  负向 `--runtime 0.1.7-alpha.2` / `0.2.0-rc.1` / `0.3.0` → 退出码 1。
+  **`0.2.0-rc.2` 是区间下界本身，判定为兼容，不能当负向样本。**
+- `cordis.patch.yml` 的 `preset-godot`：
+  - persona 行去掉 `suffix`（0.2.1 移除 `{{cwd}}` 提示词变量，残留会在请求准入前被严格插值直接拒绝；目录改由 working-directory 服务以用户上下文供给）。`{{model}}` 仍注册，保留。
+  - 补 `time-context` 与 `tool-schedule` 两行（shipped `standard` 在 0.2.1 已含，preset 是它的副本必须跟随）。
+  - 删除四处 `backgroundMode`（`continuable` ×2、`one-shot` ×2）：0.2.1 移除该键、`enableRunInBackground` 与模型参数 `run_in_background`，改由 activation + 父级完成通知交付结果。**实测 Schemastery 不拒绝未知键**（用官方 `Config` schema 验证 `backgroundMode` 仍被原样接受），所以残留不会报错、只会无声失效——因此必须靠测试锁住。
+- 逐个核对的官方包（0.2.1 全部仍在、未改名、未拆包）：`dsh-agent-preset`、`dsh-persona`、`dsh-agent-instructions`、`dsh-time-context`、`dsh-tool-fs`、`dsh-tool-present`、`dsh-tool-skill`、`dsh-tool-subagent`、`dsh-tool-web`、`dsh-skill-filesystem`、`dsh-mcp-client`、`dsh-tool-schedule`。各包 `Config` 键逐一用官方 schema 实跑验证。
+- **`dshHome` 已从 `agent-instructions` 行移除**（`docs/upgrade-guide/v0.2.1-alpha.1/instruction-home-override`）：该插件改用 `resolveDshHome()` 统一解析，profile/patch 行上残留的 `dshHome` 会保留但被忽略。实测官方 schema 仍接受该键（Schemastery 不拒绝未知键），所以只能靠"本包 patch 从未设置它"这一事实保证无影响——本包 `agent-instructions` 行只有 `maxBytes`。注意 `dsh-skill-filesystem` **保留**了自己的 `dshHome`/`agentsHome`/`customSkillDirs` 字段，本次删除只覆盖指令加载器。
+- **`{{cwd}}` 的注册事实**：0.2.1 里 `systemPrompt.variable()` 的注册点只剩 `provider` 与 `model`（`packages/core/agent-loop/src/index.ts`），`cwd` 已无任何注册点，工作目录改由 working-directory 服务以用户上下文供给。`Session.header.cwd` **仍然存在**（本包按 cwd 解析 Godot 项目路径依赖它，逻辑不受影响）。
+- **`presentation` 与本包无关**：本包没有 `presentation`/`both` 配置（0.2.1 只接受 `native`/`ptc`，`both` 被拒），工具注册走 `output.schema` + `render`，未用 `presentationMeta`。
+- **skills 契约与本包无关**：`SkillDoc`/`readSkills()`/`SkillsPanel` 是工作台 UI 概念（读 GodotMCP 的 `skills/` 目录做面板展示），不是官方 `SkillCandidate`/`SkillProvider`。**不要**为"对齐"改成官方 skill provider，那会破坏工作台。本包没有 `ctx.skills` 调用点。
 
 ## 安全审计加固（2026-09 第二轮，本仓库首审）
 

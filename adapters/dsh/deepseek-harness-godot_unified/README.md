@@ -20,7 +20,7 @@
 
 ## 环境要求
 
-- DeepSeek Harness ≥ `0.1.5-rc.1`；完整 UI 使用 `web`，Godot preset 会话使用同一 `web` profile
+- DeepSeek Harness `>=0.2.0-rc.2 <0.3.0-0`（`package.json` 的 `engines.dsh` 声明，0.2.1 起由 DSH 加载器据此判定；0.1.x 与 0.3.x 会被拒绝加载）；完整 UI 使用 `web`，Godot preset 会话使用同一 `web` profile
 - Node.js `^22.19.0 || >=24.0.0`
 
 ## 安装
@@ -70,6 +70,11 @@ dsh --profile web --dump-config | grep godot  # 组合校验(不启动)
 GUI 里：用 Godot preset 新建会话 → 模型即可看到 `godot_*` 工具；也可在「Godot」工作台 Tab 浏览/手动调用。前提是目标项目的 Godot 编辑器在运行。
 
 **技能目录**：本包的 6 个 Godot 工作流技能（godot-control / godot-debug / godot-mcp-extension / godot-playtest / godot-project-setup / godot-ui）随 Godot preset 提供，来源是包内 `skills/`——它是指向上游 GodotMCP `plugin/godot-mcp-unified/skills` 的 junction，**改上游即时生效**（无需重建本包）。历史 `~/.dsh/.agent-presets/godot/skills/` 目录已废弃（DSH 0.1.6+ 不再读取该目录）。
+
+**DSH 0.2.1 起的两处行为变化**（本包已适配，无需用户操作）：
+
+- **`{{cwd}}` 提示词变量已移除**：persona 行不再声明 `suffix`，工作目录改由 DSH 的 working-directory 服务以用户上下文供给。`{{model}}` 仍是注册变量。
+- **委派不再分前台/后台**：`subagent` / `subagent_fork` 每次委派都返回 activation，最终答案经父级完成通知交付；`job_output` / `job_kill` 不再用于子代理结果。本包 preset 已移除 `backgroundMode`。
 
 ## 卸载
 

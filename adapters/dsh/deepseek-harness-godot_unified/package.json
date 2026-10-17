@@ -1,6 +1,6 @@
 {
   "name": "deepseek-harness-godot_unified",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "type": "module",
   "description": "Godot MCP Unified for DSH：把 GodotMCP 桥接服务器接入 DSH 的 @deepseek-ai/dsh-mcp-client 行与 Godot 工作流提示词 section，附安装/卸载/体检 CLI。Godot MCP Unified bridge row + workflow prompt section for DSH, with an install/uninstall/status CLI.",
   "repository": {
@@ -71,7 +71,8 @@
   ],
   "license": "MIT",
   "engines": {
-    "node": "^22.19.0 || >=24.0.0"
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": ">=0.2.0-rc.2 <0.3.0-0"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

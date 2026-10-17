@@ -59,6 +59,40 @@ test('preset plugins 非空且保留 standard 的关键能力行', () => {
   assert.ok(row.includes('workflowEngine: true'), 'workflow realm 在场')
 })
 
+test('persona 行不携带 suffix/模板变量:DSH 0.2.1 起移除 {{cwd}} prompt 变量', () => {
+  // 0.2.1 升级指南:persona 模板残留 {{cwd}} 会在请求准入前被严格插值拒绝
+  // (报错 "unknown prompt variable {{cwd}} in section deployment:persona-suffix")。
+  // 官方 shipped standard 的 persona 行已不带 suffix;目录由 working-directory
+  // 服务以用户上下文供给。{{model}} 仍是注册变量,允许保留。只查非注释行:
+  // 注释里教学性地提及 {{cwd}} 不是 YAML 值,不得误报。
+  const row = presetRowText().split('\n').filter(line => !/^\s*#/.test(line)).join('\n')
+  assert.ok(!row.includes('{{cwd}}'), 'patch 值里不得引用已移除的 {{cwd}} 变量')
+  assert.ok(!/^ {16}suffix:/m.test(row), 'persona 行不得再声明 suffix(官方 0.2.1 已删)')
+})
+
+test('subagent 行不携带已移除的 backgroundMode/enableRunInBackground(DSH 0.2.1)', () => {
+  // 0.2.1 升级指南(subagent-activations):tool-subagent 移除 backgroundMode、
+  // enableRunInBackground 与模型参数 run_in_background,改为每次委派返回
+  // { kind: 'activation', subagentId }、最终答案走父级完成通知。残留这两个键
+  // 不会加载失败(Schemastery 不拒绝未知键),只会成为无声无效配置——正因如此
+  // 必须靠本测试锁住,否则下次照抄旧 patch 也没人发现。
+  const row = presetRowText().split('\n').filter(line => !/^\s*#/.test(line)).join('\n')
+  assert.ok(!row.includes('backgroundMode:'), 'subagent 行不得再声明 backgroundMode')
+  assert.ok(!row.includes('enableRunInBackground:'), 'subagent 行不得再声明 enableRunInBackground')
+})
+
+test('preset 跟随 shipped standard 的 0.2.1 能力行(time-context / tool-schedule)', () => {
+  // 本 preset 是 shipped `standard` 的副本 + 本包技能目录,standard 增行后
+  // 不跟就会让 Godot 会话少能力(时间上下文、提醒工具)。0.2.1 的 standard
+  // 含 time-context 与 tool-schedule,二者都是无 config 的行。
+  const row = presetRowText()
+  assert.ok(row.includes("name: '@deepseek-ai/dsh-time-context'"), 'time-context 行在场')
+  assert.ok(row.includes("name: '@deepseek-ai/dsh-tool-schedule'"), 'tool-schedule 行在场')
+  // 官方包名仍在 0.2.1 存在,拆包/改名会让这两行静默失效。
+  assert.ok(row.includes('- id: time-context'), 'time-context 行 id 与 standard 一致')
+  assert.ok(row.includes('- id: tool-schedule'), 'tool-schedule 行 id 与 standard 一致')
+})
+
 test('customSkillDirs 从本包 realpath 解析 skills(不得回退 preset 目录)', () => {
   const row = presetRowText()
   assert.ok(row.includes('customSkillDirs:'), 'skills 目录已挂载')

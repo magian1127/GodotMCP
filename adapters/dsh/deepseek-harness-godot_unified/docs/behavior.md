@@ -1,5 +1,11 @@
 # 用户可见行为
 
+## 环境门禁
+
+- `package.json` 声明 `engines.dsh: ">=0.2.0-rc.2 <0.3.0-0"`（`engines.node` 保持独立键）。DSH 0.2.1 起加载器用 `engines.dsh` **单独**判定插件兼容性（此时 `peerDependencies` 被忽略），且判定带 `includePrerelease`——所以 `0.2.1-rc.2` 这类预发布运行时能正常装载。
+- 区间含义：覆盖整个 0.2.x（含 `0.2.0-rc.2`、`0.2.1-alpha.*`、`0.2.1-rc.*`、`0.2.1`），拒绝 0.1.x 及更早，也拒绝 0.3.x。被拒绝时 DSH 不装载本包并在插件诊断里报 `requirements: {"engines.dsh":"…"}`。
+- 注意：`0.2.0-rc.2` 是区间**下界本身**，因此它判定为**兼容**——它是支持范围内的版本，不能当作"旧版被拒"的负向样本。真正的负向样本用 `0.1.7-alpha.2`、`0.2.0-rc.1`、`0.3.0`。
+
 ## 安装行为
 
 | 项 | 默认 | 语义 |
@@ -32,6 +38,7 @@ v0.4 起 `install` 不再写官方 mcp-client 行（自研桥接）：校验后�
 - 判定时机：`agent/created`、`agent-preset/selected`（会话中途换预设）、设置变更（live 重装全部既有 agent）；门面注册/组激活新增的工具由 `tools/change` **合并窗口（150ms）** 增量补进 deny 名单（幂等，无 diff 不调用 restrict，避免事件回声）。
 - deny 只是模型可见性控制：桥接 server 子进程与工具注册不受影响，Godot 工作台也不受影响。
 - Godot preset（id `godot`，显示名 Godot）由本包 bundle patch 的 `preset-godot` 行声明（DSH 0.1.6+ 起 preset **只**能由 bundle patch 的 `@deepseek-ai/dsh-agent-preset` 声明行注册；`$DSH_HOME/.agent-presets/<id>/` 目录已不再被读取）。它的 plugins 是 standard 的完整副本 + 本包技能目录，只作为"本会话需要 Godot"的标记；工具与提示词由本插件的 per-agent 策略提供。
+- **跟随 shipped `standard` 的 0.2.1 形状**：preset 的 plugins 含 `time-context`（时间上下文）与 `tool-schedule`（提醒工具）两行——standard 在 0.2.1 已包含它们，缺行会让 Godot 会话少这两项能力。`src/tests/preset-patch.test.mts` 锁住这两行在场。任何 `backgroundMode` / `enableRunInBackground` 都不该再出现（0.2.1 已从 `dsh-tool-subagent` 移除；残留不报错但是无声无效配置），同一测试也锁住这一点。
 
 ## 失败模式
 

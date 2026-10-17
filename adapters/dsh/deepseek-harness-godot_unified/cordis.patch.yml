@@ -29,16 +29,19 @@
         plugins:
           # 该 preset 继承 shipped `standard` 的全部能力;发布服务(inject)的行
           # 必须落在带 isolate realm 的 group 内,否则与第二个 preset 冲突。
+          # persona 行不带 suffix:DSH 0.2.1 起移除 {{cwd}} 模板变量(目录改由
+          # working-directory 服务以用户上下文供给),persona 模板里残留
+          # {{cwd}} 会在请求准入前被严格插值直接拒绝(报错指向本段)。
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              prefix: |-
-                You are a coding agent powered by the {{model}} model.
-              suffix: Your working directory is {{cwd}}.
+              prefix: You are a coding agent powered by the {{model}} model.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
               maxBytes: 65536
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
           - id: tool-bash
             name: '@deepseek-ai/dsh-tool-bash'
             disabled: !!js process.platform === 'win32'
@@ -53,6 +56,10 @@
               sampleOverCapGlobResults: false
           - id: tool-jobs
             name: '@deepseek-ai/dsh-tool-jobs'
+          # 提醒工具(schedule_*)随 shipped standard 由 preset 作用域提供,0.2.1 起
+          # 才列入 standard;缺这一行 Godot 会话就没有提醒能力。
+          - id: tool-schedule
+            name: '@deepseek-ai/dsh-tool-schedule'
           # Godot 工作流技能随本 preset 提供:skills/ 是指向上游的 junction,
           # 从本包 realpath 解析(不依赖 preset 目录,patch 内亦无机器路径)。
           - id: skill-filesystem
@@ -120,20 +127,22 @@
                   provider: spawn
                   toolName: subagent
                   modelSelectionSettings: true
-                  backgroundMode: continuable
               - id: tool-subagent-fork
                 name: '@deepseek-ai/dsh-tool-subagent'
                 config:
                   provider: fork
                   toolName: subagent_fork
-                  backgroundMode: continuable
+              # 委派不再分前台/后台:DSH 0.2.1 移除了 tool-subagent 的 backgroundMode、
+              # enableRunInBackground 与模型参数 run_in_background——每次委派都在接纳子
+              # agent 后返回 { kind: 'activation', subagentId },最终答案经父级完成通知交付
+              # (见 docs/upgrade-guide/v0.2.1-alpha.1/subagent-activations)。残留这两个键
+              # 不会报错(Schemastery 不拒绝未知键)但已成为无声无效配置,故一并删除。
               - id: tool-subagent-codex
                 name: '@deepseek-ai/dsh-tool-subagent'
                 disabled: true
                 config:
                   provider: codex
                   toolName: subagent_codex
-                  backgroundMode: one-shot
                   maxDepth: provider-managed
               - id: tool-subagent-claude-code
                 name: '@deepseek-ai/dsh-tool-subagent'
@@ -141,7 +150,6 @@
                 config:
                   provider: claude-code
                   toolName: subagent_claude_code
-                  backgroundMode: one-shot
                   maxDepth: provider-managed
               - id: workflow-ptc
                 name: '@deepseek-ai/dsh-workflow-ptc'

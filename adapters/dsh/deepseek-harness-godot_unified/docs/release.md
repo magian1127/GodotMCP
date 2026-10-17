@@ -65,6 +65,20 @@ npx -y deepseek-harness-godot_unified ...                      # CLI(需要本�
 - 环境要求：DeepSeek Harness ≥ `0.1.5-rc.1`；Node.js `^22.19.0 || >=24.0.0`。
 - 验证状态：typecheck/build/test/verify 随提交执行；运行时 GUI 验收（工作台交互、Godot preset 会话工具调用）待用户环境。
 
+### 0.4.1（2026-09-29）
+
+- **DSH 桌面版（Electron）支持**：profile 探测识别 Electron Host，CLI 对 desktop 只做 home 级操作。
+- 环境要求不变。
+
+### 0.4.2（2026-10-18）
+
+- **适配 DSH 0.2.1-rc.2**（加载门禁 + preset 形状对齐，桥接与工作台逻辑未动）：
+  - `package.json` 新增 `engines.dsh: ">=0.2.0-rc.2 <0.3.0-0"`（`engines.node` 原样保留）。0.2.1 起加载器用 `engines.dsh` 单独判定插件兼容性，旧版运行时（0.1.x）与 0.3.x 会被拒绝加载。
+  - `cordis.patch.yml` 的 `preset-godot`：persona 行去掉 `suffix`（0.2.1 移除 `{{cwd}}` 提示词变量，残留会在请求准入前被严格插值直接拒绝）；补 `time-context` 与 `tool-schedule` 两行以跟随 shipped `standard`；删除四处已移除的 `backgroundMode`（残留不报错但无声失效）。
+  - `src/tests/preset-patch.test.mts` 新增两条守护（不得有 `{{cwd}}`/`suffix`/`backgroundMode`；`time-context`+`tool-schedule` 必须在场）。
+- 环境要求：DeepSeek Harness `>=0.2.0-rc.2 <0.3.0-0`；Node.js `^22.19.0 || >=24.0.0`。
+- 验证状态：`npm run typecheck` / `npm test`（90 例）/ `npm run verify` 全绿；`dsh --profile web --dump-config` 组合校验通过（`preset-godot` 含新增两行、subagent 行已无 `backgroundMode`）；`check-engines-dsh.mjs` 正向退出 0、负向（`0.1.7-alpha.2`/`0.2.0-rc.1`/`0.3.0`）退出 1。**未执行**：GUI 内 Godot preset 会话的实际工具调用验收（需用户环境，且本包运行于已启动的 `dsh web`）。
+
 ### 未发布：preset 迁移（legacy 目录 → bundle 声明行）
 
 - **背景**：DSH 0.1.6+ 起不再读取 `$DSH_HOME/.agent-presets/<id>/` 目录，Godot preset 因此从模式选择器消失（用户报障）。preset 现在只能由 bundle patch 里的 `@deepseek-ai/dsh-agent-preset` 声明行注册。
