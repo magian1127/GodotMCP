@@ -354,6 +354,153 @@ public class RegistryConsumptionTests
         Assert.Equal(revived.ProjectKey, rows[0].Path);
     }
 
+    // ── 纯运行时条目(port <= 0)不得被建成编辑器通道 ────────────────
+
+    /// <summary>
+    /// 正例:注册表里的纯运行时条目(port = -1)不得让 daemon 为它们建编辑器通道。
+    /// <para>
+    /// Arrange:8 条纯运行时条目(port=-1、pid 已消失,模拟历史 worktree 的残留)+ 1 个真实假实例;
+    /// 拉起 daemon 并接入。
+    /// Act:轮询 list_instances 至真实例连上,再静置让 reconcile 跑多轮。
+    /// Assert:① 实例表恰 1 行(只有真实例);② daemon.log 里对这些幽灵键没有任何
+    /// "实例进程已消失"记录(修复前每条幽灵行都会建通道并被判死,日志必然出现);
+    /// ③ 幽灵条目文件未被删除(daemon 是只读消费方)。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task runtime_only_entries_with_negative_port_are_not_turned_into_editor_channels()
+    {
+        var stateDir = TestPaths.NewStateDir();
+        var deadPid = FindDeadPid();
+
+        // 8 条幽灵条目:与真实 projects.json 里积累的历史 worktree 行同形。
+        var ghostKeys = new List<string>();
+        for (var i = 0; i < 8; i++)
+        {
+            var ghostPath = $@"D:\proj\ghost-{i}";
+            ghostKeys.Add(JsonMatch.CanonicalProjectKey(ghostPath));
+            FakeGodotRegistry.WriteRuntimeOnlyEntry(
+                stateDir, ghostPath, runtimePort: 6570, pid: deadPid);
+        }
+
+        using var healthy = FakeGodotInstance.Start(
+            new FakeGodotOptions { ProjectPath = @"D:\proj\healthy-real", StateDir = stateDir });
+        using var daemon = DaemonProcess.StartReady(
+            new DaemonSpawnOptions { StateDir = stateDir, IdleSeconds = 120 });
+        await using var client = await SessionConnector.ConnectAsync(daemon.Port, daemon.Token);
+
+        var rows = await WaitUntilAsync(
+            () => GetInstancesAsync(client),
+            r => r.Count == 1 && r[0].Path == healthy.ProjectKey && r[0].Connected,
+            TimeSpan.FromSeconds(20));
+
+        // ① 实例表恰 1 行 —— 幽灵条目一个都不能出现。
+        Assert.Single(rows);
+
+        // 静置:让 1s 轮询与文件监视跑多轮(修复前每轮都会为 8 条幽灵各建一次通道)。
+        await Task.Delay(TimeSpan.FromSeconds(6));
+
+        // ② 日志里不得出现针对幽灵键的"实例进程已消失"(那是建通道后被判死的痕迹)。
+        var logPath = Path.Combine(stateDir, "daemon.log");
+        Assert.True(File.Exists(logPath), $"状态目录应有 daemon.log:{logPath}");
+        var logText = ReadFileShared(logPath);
+        var ghostLogLines = logText.Split('\n')
+            .Where(line => ghostKeys.Any(key => line.Contains(key, StringComparison.Ordinal))
+                && line.Contains("实例进程已消失", StringComparison.Ordinal))
+            .ToList();
+        Assert.True(
+            ghostLogLines.Count == 0,
+            $"纯运行时条目不得被建成编辑器通道,但日志里出现了 {ghostLogLines.Count} 条判死记录:\n"
+                + string.Join("\n", ghostLogLines.Take(5)));
+
+        // ③ 只读消费:幽灵条目文件保持原样。
+        foreach (var key in ghostKeys)
+        {
+            var hash = JsonMatch.ProjectHashOf(key);
+            Assert.True(
+                File.Exists(Path.Combine(stateDir, "entries", hash + ".runtime.json")),
+                $"纯运行时条目文件应保持原样:{hash}.runtime.json");
+        }
+    }
+
+    /// <summary>
+    /// 反例:过滤不得误伤正常实例 —— 注册表里只有真实例时,它必须正常连上。
+    /// <para>
+    /// Arrange:仅一个真实假实例(port &gt; 0),无任何幽灵条目。拉起 daemon 并接入。
+    /// Act/Assert:实例表恰 1 行、connected 为 true、port 等于假实例端口。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task real_instance_still_connects_when_no_runtime_only_entries_exist()
+    {
+        var stateDir = TestPaths.NewStateDir();
+        using var healthy = FakeGodotInstance.Start(
+            new FakeGodotOptions { ProjectPath = @"D:\proj\only-real", StateDir = stateDir });
+        using var daemon = DaemonProcess.StartReady(
+            new DaemonSpawnOptions { StateDir = stateDir, IdleSeconds = 120 });
+        await using var client = await SessionConnector.ConnectAsync(daemon.Port, daemon.Token);
+
+        var rows = await WaitUntilAsync(
+            () => GetInstancesAsync(client),
+            r => r.Count == 1 && r[0].Connected,
+            TimeSpan.FromSeconds(20));
+
+        Assert.Single(rows);
+        Assert.Equal(healthy.ProjectKey, rows[0].Path);
+        Assert.Equal(healthy.Port, rows[0].Port);
+        Assert.True(rows[0].Connected);
+    }
+
+    /// <summary>
+    /// 边界(反例 2):判据是 "Port &lt;= 0",不是 "Port &lt;= 0 且没有 runtime_port"。
+    /// <para>
+    /// 纯运行时条目**天生带 runtime_port**(游戏进程就是靠它发布端口的),因此一条
+    /// <c>port = -1 且 runtime_port = 活端口</c> 的条目,是"看起来该满足"一切条件的幽灵行。
+    /// 只有"只看 Port"这一种写法能把它过滤掉;若改成"Port&lt;=0 且 runtime_port 为空才过滤",
+    /// 这类行会漏过去并重新建出必败通道。
+    /// </para>
+    /// <para>
+    /// Arrange:1 条纯运行时条目 port=-1 但 runtime_port 指向一个**真实在听**的 FakeGodot 端口
+    /// (即 runtime_port 绝非空值,也绝非指向死端口)+ 2 个真实编辑器实例。
+    /// Act/Assert:实例表恰 2 行(两个真实例);幽灵行不得借 runtime_port 溜进实例表。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task negative_port_entry_with_live_runtime_port_is_still_not_an_editor_channel()
+    {
+        var stateDir = TestPaths.NewStateDir();
+        var deadPid = FindDeadPid();
+
+        // 先起一个真实假实例,拿它真实在听的端口当作"活的 runtime_port"。
+        using var runtimeHost = FakeGodotInstance.Start(
+            new FakeGodotOptions { ProjectPath = @"D:\proj\runtime-host", StateDir = stateDir });
+
+        FakeGodotRegistry.WriteRuntimeOnlyEntry(
+            stateDir,
+            @"D:\proj\ghost-with-runtime",
+            runtimePort: runtimeHost.Port,   // 真实在听的端口 —— 不是空值,也不是死端口
+            pid: deadPid);
+
+        using var editor = FakeGodotInstance.Start(
+            new FakeGodotOptions { ProjectPath = @"D:\proj\editor-real", StateDir = stateDir });
+        using var daemon = DaemonProcess.StartReady(
+            new DaemonSpawnOptions { StateDir = stateDir, IdleSeconds = 120 });
+        await using var client = await SessionConnector.ConnectAsync(daemon.Port, daemon.Token);
+
+        var rows = await WaitUntilAsync(
+            () => GetInstancesAsync(client),
+            // 必须等到两条都 connected:只等 Count == 2 会在"行已入表但 WS 尚未鉴权完成"
+            // 时提前返回,让下面的 Connected 断言在满负载下随机变红(实测在全量套件里挂过)。
+            r => r.Count == 2 && r.All(row => row.Connected),
+            TimeSpan.FromSeconds(25));
+
+        Assert.Equal(2, rows.Count);
+        Assert.DoesNotContain(rows, r => r.Path == JsonMatch.CanonicalProjectKey(@"D:\proj\ghost-with-runtime"));
+        // 幽灵行即便带着活的 runtime_port,也不得以 port = -1 的形态出现在实例表里。
+        Assert.DoesNotContain(rows, r => r.Port <= 0);
+        Assert.All(rows, r => Assert.True(r.Connected));
+    }
+
     /// <summary>以共享读方式读取文件(daemon 持有日志句柄时不阻塞)。</summary>
     /// <param name="path">文件路径。</param>
     /// <returns>文件全文。</returns>

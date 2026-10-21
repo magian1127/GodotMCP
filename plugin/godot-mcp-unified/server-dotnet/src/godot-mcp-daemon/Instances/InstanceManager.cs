@@ -699,6 +699,34 @@ public sealed class InstanceManager : BackgroundService
         {
             present.Add(entry.Key);
             _missingSince.TryRemove(entry.Key, out _);
+
+            // 纯运行时条目(port <= 0)没有编辑器通道可连,不为它建编辑器通道。
+            //
+            // 这类行是 addon 的合法产物:游戏进程(模式 B)写 entries/<hash>.runtime.json,
+            // 该文件自身即满足完整 schema(port = -1、token_path 为空),投影层在"没有编辑器
+            // 基础条目"时整行顶替(registry_projection.gd:202-209)。而 addon 侧不做 PID 回收
+            // (registry_projection.gd:91-98:Windows 上 OS.is_process_running 不可靠),
+            // 端口冲突剪枝又对 port <= 0 的行无条件保留(同文件 :148-149)
+            // ⇒ 这类行会长期驻留注册表。
+            //
+            // 若在此为它们 StartConnection,只会去连 ws://127.0.0.1:-1/
+            // (InstanceConnection.cs:258 用 entry.Port),必然失败,下一轮判 Dead、记 tombstone、
+            // 再被 DeadIdentityCap 清空压制后重来 —— 纯粹的日志与连接抖动。实测注册表里已
+            // 积累 8 条此类历史 worktree 行,daemon 每次启动为它们各建一次必败通道。
+            //
+            // present.Add 在过滤之前执行:这些键仍算"出现在注册表里",所以下方"键消失 → 拆除"
+            // 的分支不会把它们误判为下线。
+            //
+            // ⚠ 刻意未修(留给后续单独立项,勿在此顺手改):纯运行时条目目前**不能被寻址** ——
+            // 运行时通道的 reconcile 遍历的是编辑器通道快照(下方 Snapshot()),而这些条目从不
+            // 进入 _connections。改成遍历 entries 会让 list_instances 出现 port=-1 且 connected
+            // 为真的行,那是"同一项目多开游戏进程"的展示与寻址语义变更(见 docs/multi-instance.md
+            // 的 Pattern B),属于新功能而非本次缺陷修复,需要先有真实的"多开游戏"用例。
+            if (entry.Port <= 0)
+            {
+                continue;
+            }
+
             if (_connections.TryGetValue(entry.Key, out var existing))
             {
                 var previous = existing.Entry;

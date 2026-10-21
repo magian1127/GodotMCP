@@ -806,6 +806,78 @@ internal static class FakeGodotRegistry
             new Dictionary<string, object?> { ["by_path"] = byPath }, TabIndented));
     }
 
+    /// <summary>
+    /// 写入一条"纯运行时"条目:只有 entries/&lt;hash&gt;.runtime.json,没有 entries/&lt;hash&gt;.json。
+    /// <para>
+    /// 这是 addon 的真实形态之一:游戏进程(模式 B)在绑定端口后调 RegistryClient.set_runtime,
+    /// 写 <c>entries/&lt;hash&gt;.runtime.json</c>(port 为 -1、token_path 为空串),而投影层在没有
+    /// 编辑器基础条目时整行顶替 —— 于是 projects.json 里出现一条 port = -1 的行
+    /// (registry_projection.gd:202-209)。addon 不做 PID 回收且端口剪枝跳过 port &lt;= 0,
+    /// 因此这类行会长期驻留,daemon 每次 reconcile 都会看到它们。
+    /// </para>
+    /// </summary>
+    /// <param name="stateDir">注册表根目录。</param>
+    /// <param name="projectPath">项目根路径(决定 _key 与条目文件名)。</param>
+    /// <param name="runtimePort">运行时 WS 端口(通常 6570 起)。</param>
+    /// <param name="pid">运行时进程 id(通常传一个已消失的 pid,模拟游戏早已退出)。</param>
+    /// <param name="alsoProjectIntoAggregate">
+    /// true 时同步把该行写进 projects.json 的 by_path(等价于投影层重建);
+    /// false 时只写条目文件,便于单独验证 RegistryReader 对聚合视图的读取。
+    /// </param>
+    public static void WriteRuntimeOnlyEntry(
+        string stateDir,
+        string projectPath,
+        int runtimePort,
+        int pid,
+        bool alsoProjectIntoAggregate = true)
+    {
+        var key = JsonMatch.CanonicalProjectKey(projectPath);
+        var hash = JsonMatch.ProjectHashOf(key);
+        var entriesDir = Path.Combine(stateDir, "entries");
+        Directory.CreateDirectory(entriesDir);
+
+        // 与 registry_client.gd:169-180 set_runtime 的字段集逐字段一致。
+        var entry = new Dictionary<string, object?>
+        {
+            ["_key"] = key,
+            ["port"] = -1,
+            ["token_path"] = "",
+            ["pid"] = pid,
+            ["started_at"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            ["godot_version"] = "4.5",
+            ["runtime_port"] = runtimePort,
+            ["runtime_pid"] = pid,
+            ["lsp_host"] = "127.0.0.1",
+            ["lsp_port"] = null,
+        };
+        AtomicWrite(Path.Combine(entriesDir, hash + ".runtime.json"), JsonSerializer.Serialize(entry, TabIndented));
+
+        if (!alsoProjectIntoAggregate)
+        {
+            return;
+        }
+
+        var projectsPath = Path.Combine(stateDir, "projects.json");
+        var byPath = new Dictionary<string, Dictionary<string, object?>>();
+        if (File.Exists(projectsPath))
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(projectsPath));
+            if (doc.RootElement.TryGetProperty("by_path", out var existing) && existing.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var p in existing.EnumerateObject())
+                {
+                    byPath[p.Name] = JsonSerializer.Deserialize<Dictionary<string, object?>>(p.Value.GetRawText())
+                        ?? new Dictionary<string, object?>();
+                }
+            }
+        }
+        var row = new Dictionary<string, object?>(entry);
+        row.Remove("_key");
+        byPath[key] = row;
+        AtomicWrite(projectsPath, JsonSerializer.Serialize(
+            new Dictionary<string, object?> { ["by_path"] = byPath }, TabIndented));
+    }
+
     /// <summary>原子写入口:单次尝试 + 100ms 后一次性重试(重试纪律见方法体内注释)。</summary>
     /// <param name="path">目标文件路径。</param>
     /// <param name="json">要写入的 JSON 文本。</param>
