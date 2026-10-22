@@ -26,7 +26,7 @@
   <ItemGroup>
     <!-- Node 工具表(ALL_TOOL_DEFS 83 + discover_tools;schema 与 tools/list 同源)——
          NodeToolTable.cs 以嵌入资源加载。基准已冻结:Node 桥 2026-09-14 退役
-         (tag node-bridge-final 保存全量前身),生成脚本 dump-group-tools.ts 随之移除;
+         (退役前全量前身见提交 2bff02a,e7ca81e 的父提交),生成脚本 dump-group-tools.ts 随之移除;
          后续工具变更直接编辑本表,由 GroupParityTests 的名称/schema/描述断言锚定。 -->
     <EmbeddedResource Include="Groups\NodeToolTable.json" />
   </ItemGroup>
