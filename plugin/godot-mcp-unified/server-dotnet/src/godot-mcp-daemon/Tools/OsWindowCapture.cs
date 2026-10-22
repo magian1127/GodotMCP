@@ -129,7 +129,7 @@ internal static class OsWindowCapture
                 "path. Read the file to inspect it; restore/unminimize the window and retry the " +
                 "in-engine capture for viewport-exact output.",
         };
-        return envelope.ToJsonString();
+        return envelope.ToJsonString(ToolResults.Output);
     }
 
     /// <summary>兜底 PNG 的落盘目录:%LOCALAPPDATA%\godot-mcp-daemon\screenshots

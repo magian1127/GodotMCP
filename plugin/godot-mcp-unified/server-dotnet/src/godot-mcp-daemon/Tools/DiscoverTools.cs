@@ -243,6 +243,6 @@ public sealed class DiscoverTools(GroupService groups, ExtensionService extensio
                 "请优先仅激活当前任务需要的组，使用 reset 停用不再需要的组。";
         }
 
-        return ToolResults.Json(response.ToJsonString());
+        return ToolResults.Json(response.ToJsonString(ToolResults.Output));
     }
 }

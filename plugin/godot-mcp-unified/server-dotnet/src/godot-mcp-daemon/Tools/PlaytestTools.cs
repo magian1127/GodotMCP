@@ -86,7 +86,7 @@ public sealed class PlaytestTools(InstanceManager instances)
                     "Call game_start with wait_for_runtime:true to block until ready, " +
                     "or poll with game_start(if_running:'return', runtime_poll:true).";
             }
-            return ToolResults.Json(payload.ToJsonString());
+            return ToolResults.Json(payload.ToJsonString(ToolResults.Output));
         }
         catch (InstanceCallException ex)
         {
@@ -329,7 +329,7 @@ public sealed class PlaytestTools(InstanceManager instances)
                 }
                 output["script"] = JsonNode.Parse(script.GetRawText());
             }
-            return ToolResults.Json(output.ToJsonString());
+            return ToolResults.Json(output.ToJsonString(ToolResults.Output));
         }
         catch (InstanceCallException ex)
         {
@@ -453,7 +453,7 @@ public sealed class PlaytestTools(InstanceManager instances)
         var total = GetNumberOrNull(result, "total_lines") ?? returned;
         var node = JsonNode.Parse(result.GetRawText())!.AsObject();
         node["_summary"] = $"{returned} line{(returned != 1 ? "s" : "")} (of {total} total)";
-        return node.ToJsonString();
+        return node.ToJsonString(ToolResults.Output);
     }
 
     /// <summary>给回退读取的结果注入 _summary:区分调试桥 error_buffer 条数与日志文件缓存行数,两者皆空时注明上次会话无输出。</summary>
@@ -477,7 +477,7 @@ public sealed class PlaytestTools(InstanceManager instances)
         var summary = parts.Count > 0 ? string.Join(", ", parts) : "no output from last game session";
         var node = JsonNode.Parse(result.GetRawText())!.AsObject();
         node["_summary"] = summary;
-        return node.ToJsonString();
+        return node.ToJsonString(ToolResults.Output);
     }
 
     /// <summary>截图响应构建器(Node screenshotResponse.ts 同形):图像优先;仅磁盘时返回精简文本信封。</summary>
@@ -503,7 +503,7 @@ public sealed class PlaytestTools(InstanceManager instances)
             AddIfPresent(envelope, "hint", GetStringOrNull(result, "hint"));
             AddIfPresent(envelope, "image_detail", GetStringOrNull(result, "image_detail"));
             AddIfPresent(envelope, "returned", GetStringOrNull(result, "returned"));
-            return ToolResults.Json(envelope.ToJsonString());
+            return ToolResults.Json(envelope.ToJsonString(ToolResults.Output));
         }
 
         byte[] imageBytes;
@@ -530,7 +530,7 @@ public sealed class PlaytestTools(InstanceManager instances)
             [
                 // Data 期望"已编码 base64"(BinaryData);FromBytes 工厂才负责 原始字节→base64 的编码。
                 ImageContentBlock.FromBytes(imageBytes, GetStringOrNull(result, "mime_type") ?? "image/png"),
-                new TextContentBlock { Text = meta.ToJsonString() },
+                new TextContentBlock { Text = meta.ToJsonString(ToolResults.Output) },
             ],
         };
     }

@@ -324,7 +324,7 @@ internal sealed class GroupToolInvoker(InstanceManager instances)
                 plan["recursive"] = args.TryGetValue("recursive", out var recursiveEl) && recursiveEl.ValueKind == JsonValueKind.True;
             }
             plan["note"] = "The actual call may still be refused by active-use and editor-version safety checks.";
-            return Task.FromResult(ToolResults.Json(plan.ToJsonString()));
+            return Task.FromResult(ToolResults.Json(plan.ToJsonString(ToolResults.Output)));
         }
 
         var parameters = kind == "folder"
@@ -433,7 +433,7 @@ internal sealed class GroupToolInvoker(InstanceManager instances)
         {
             var payload = JsonNode.Parse(result.GetRawText())!.AsObject();
             payload["hint"] = hint;
-            return payload.ToJsonString();
+            return payload.ToJsonString(ToolResults.Output);
         }
         return result.GetRawText();
     }

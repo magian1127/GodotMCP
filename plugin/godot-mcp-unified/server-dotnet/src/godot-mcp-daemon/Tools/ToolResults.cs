@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using GodotMcp.Daemon.Instances;
 using ModelContextProtocol.Protocol;
@@ -12,10 +13,20 @@ namespace GodotMcp.Daemon.Tools;
 /// </summary>
 internal static class ToolResults
 {
-    /// <summary>错误信封的序列化策略:payload 键统一小驼峰(与 Node 桥 JSON 输出一致)。</summary>
-    private static readonly JsonSerializerOptions CamelCase = new()
+    /// <summary>daemon 侧重建 JSON 时的统一序列化策略:payload 键小驼峰(与 Node 桥一致)
+    /// + 不转义非 ASCII。
+    /// <para>Encoder 必须显式设为 UnsafeRelaxedJsonEscaping:System.Text.Json 的默认
+    /// encoder 会把每个非 ASCII 字符转成 \uXXXX 转义序列,而 Node/GDScript 的
+    /// JSON.stringify 不转义。缺了它,中文项目路径/日志/错误消息到达模型时是字面量
+    /// 转义文本 — 既数倍放大词元占用,又让模型拿到无法直接读取的路径。注意这只会
+    /// 放行非 ASCII 与 HTML 敏感字符,JSON 必需字符(引号/反斜杠/控制字符)仍被转义,
+    /// 输出仍是合法 JSON。</para>
+    /// <para>仅用于 daemon 自行重建的载荷;toolkit 原样透传的文本
+    /// (JsonElement.GetRawText)不经过这里,也无需经过。</para></summary>
+    internal static readonly JsonSerializerOptions Output = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
     /// <summary>transport 错误码 → 恢复提示的兜底映射;异常未携带 hint 时按码取用。</summary>
@@ -67,7 +78,7 @@ internal static class ToolResults
         }
         return new CallToolResult
         {
-            Content = [new TextContentBlock { Text = JsonSerializer.Serialize(payload, CamelCase) }],
+            Content = [new TextContentBlock { Text = JsonSerializer.Serialize(payload, Output) }],
             IsError = true,
         };
     }

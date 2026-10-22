@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using GodotMcp.Daemon.Groups;
+using GodotMcp.Daemon.Tools;
 
 namespace GodotMcp.Daemon.Instances;
 
@@ -102,7 +103,8 @@ public sealed class InstanceManager : BackgroundService
                 ["connected"] = c.Connected,
             })
             .ToList();
-        return JsonSerializer.Serialize(new Dictionary<string, object?> { ["instances"] = rows });
+        return JsonSerializer.Serialize(
+            new Dictionary<string, object?> { ["instances"] = rows }, ToolResults.Output);
     }
 
     /// <summary>无活跃实例(NO_INSTANCE)时的英文修复提示。</summary>
@@ -600,7 +602,7 @@ public sealed class InstanceManager : BackgroundService
                            "Only daemon-observable facts are reported.",
             },
         };
-        return JsonSerializer.Serialize(payload);
+        return JsonSerializer.Serialize(payload, ToolResults.Output);
     }
 
     /// <summary>

@@ -65,7 +65,7 @@ public sealed partial class LspTools(InstanceManager instances)
                 ["diagnostics"] = new JsonArray(),
                 ["count"] = 0,
                 ["note"] = ShaderDiagnosticsNote,
-            }.ToJsonString());
+            }.ToJsonString(ToolResults.Output));
         }
 
         var doc = await WithLspDocAsync(file_path, instance);
@@ -83,7 +83,7 @@ public sealed partial class LspTools(InstanceManager instances)
                 ["diagnostics"] = new JsonArray(),
                 ["count"] = 0,
                 ["note"] = "no diagnostics notification within 5 s — status unknown, retry",
-            }.ToJsonString());
+            }.ToJsonString(ToolResults.Output));
         }
         var formatted = new JsonArray();
         foreach (var diagnostic in diagnostics.Value.EnumerateArray())
@@ -96,7 +96,7 @@ public sealed partial class LspTools(InstanceManager instances)
             ["file_path"] = file_path,
             ["diagnostics"] = formatted,
             ["count"] = formatted.Count,
-        }.ToJsonString());
+        }.ToJsonString(ToolResults.Output));
     }
 
     /// <summary>
@@ -144,7 +144,7 @@ public sealed partial class LspTools(InstanceManager instances)
             ["file_path"] = file_path,
             ["symbols"] = symbols,
             ["count"] = symbols.Count,
-        }.ToJsonString());
+        }.ToJsonString(ToolResults.Output));
     }
 
     /// <summary>
@@ -205,7 +205,7 @@ public sealed partial class LspTools(InstanceManager instances)
                 ["file_path"] = file_path,
                 ["position"] = new JsonObject { ["line"] = line, ["column"] = column },
                 ["contents"] = null,
-            }.ToJsonString());
+            }.ToJsonString(ToolResults.Output));
         }
 
         // 悬停 markdown 中的项目内 file:// 链接转回 res://(与 lsp_navigate 一致)。
@@ -218,7 +218,7 @@ public sealed partial class LspTools(InstanceManager instances)
             ["file_path"] = file_path,
             ["position"] = new JsonObject { ["line"] = line, ["column"] = column },
             ["contents"] = WrapUntrusted("hover", "godot-lsp", hoverText),
-        }.ToJsonString());
+        }.ToJsonString(ToolResults.Output));
     }
 
     /// <summary>
@@ -299,7 +299,7 @@ public sealed partial class LspTools(InstanceManager instances)
             ["completions"] = completions,
             ["count"] = completions.Count,
             ["total"] = all.Length,
-        }.ToJsonString());
+        }.ToJsonString(ToolResults.Output));
     }
 
     /// <summary>
@@ -371,7 +371,7 @@ public sealed partial class LspTools(InstanceManager instances)
                 ["position"] = new JsonObject { ["line"] = line, ["column"] = column },
                 ["references"] = locations,
                 ["count"] = locations.Count,
-            }.ToJsonString());
+            }.ToJsonString(ToolResults.Output));
         }
 
         JsonNode? definition = locations.Count switch
@@ -386,7 +386,7 @@ public sealed partial class LspTools(InstanceManager instances)
             ["file_path"] = file_path,
             ["position"] = new JsonObject { ["line"] = line, ["column"] = column },
             ["definition"] = definition,
-        }.ToJsonString());
+        }.ToJsonString(ToolResults.Output));
     }
 
     // ── 项目级扫描(Node lspProjectScan 语义) ────────────────────
@@ -594,7 +594,7 @@ public sealed partial class LspTools(InstanceManager instances)
         {
             payload["read_failed"] = new JsonArray(readFailed.Select(s => JsonValue.Create(s)).ToArray());
         }
-        return payload.ToJsonString();
+        return payload.ToJsonString(ToolResults.Output);
     }
 
     /// <summary>从项目根递归枚举全部 .gd 文件,返回 res:// 路径列表(供项目级扫描分块)。</summary>
