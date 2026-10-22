@@ -64,7 +64,7 @@ $legacyServerKey = "godot-mcp-unified"
 $daemonPort = 6590
 
 function Invoke-ServerPublish {
-    Write-Host "── 发布服务产物（$rid，自包含单文件）…"
+    Write-Host "── 发布服务产物（$rid：daemon 自包含单文件，shim NativeAOT）…"
     foreach ($project in @("godot-mcp-daemon", "godot-mcp-shim")) {
         dotnet publish (Join-Path $serverDotnet "src\$project") -c Release -p:PublishProfile=$rid --nologo -v minimal
         if ($LASTEXITCODE -ne 0) { throw "dotnet publish $project 失败: $LASTEXITCODE" }

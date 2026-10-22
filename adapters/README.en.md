@@ -28,7 +28,7 @@ This directory is the single home for every "agent client → Godot MCP Unified"
 
 Every client points at the **single copy** inside the repo; no client directory keeps its own duplicate:
 
-- Location: `plugin/godot-mcp-unified/server-dotnet/publish/<rid>/` (`godot-mcp-daemon[.exe]` + `godot-mcp-shim[.exe]`, self-contained single files). For local development each Godot project junctions the addon directory to the single source, so **one publish serves every project** — no copying step.
+- Location: `plugin/godot-mcp-unified/server-dotnet/publish/<rid>/` (`godot-mcp-daemon[.exe]` + `godot-mcp-shim[.exe]`, neither needs a .NET runtime; the daemon is a self-contained single file and the shim is NativeAOT when published on its own OS — see [server-dotnet publishing](../plugin/godot-mcp-unified/server-dotnet/README.md#发布)). For local development each Godot project junctions the addon directory to the single source, so **one publish serves every project** — no copying step.
 - To produce: `dotnet publish plugin/godot-mcp-unified/server-dotnet/src/godot-mcp-shim -c Release -p:PublishProfile=<rid>` (same for the daemon).
 - Copying the plugin wholesale to another machine is the only case that needs the artifacts inside the addon's `bin/<rid>/`: opt in with `-p:CopyPublishToAddonBin=true` (see `server-dotnet/Directory.Build.targets`).
 

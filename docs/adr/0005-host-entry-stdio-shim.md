@@ -33,9 +33,10 @@ stdio + shim 把这两件事一起解掉：凭据留在机器级注册表、由 
 
 ## Consequences
 
-- **进程模型**：每会话一个 shim + 一个机器级 daemon（N+1）；内存约 `79 MB + 36 MB × N`。
-- **产物形态**：机器上有**两个** exe（daemon 107 MB + shim 71 MB，自包含单文件），
-  同目录（shim 缺省从自身同目录解析 daemon）。
+- **进程模型**：每会话一个 shim + 一个机器级 daemon（N+1）；内存约 `79 MB + 36 MB × N`
+  （2026-10-06 修订：shim 改为 NativeAOT 后约 `79 MB + 14 MB × N`，见文末修订记录）。
+- **产物形态**：机器上有**两个** exe（daemon 107 MB + shim 71 MB，自包含单文件；2026-10-06 起
+  shim 在本机发布时为 NativeAOT，约 4 MB），同目录（shim 缺省从自身同目录解析 daemon）。
 - **插件只写这一种形态**：`mcp_json_sync.gd` 的写入口与各安装器（项目级 / Codex / VS Code /
   ZCode）一律产出 stdio + shim；发现逻辑把指向退役入口（`server/dist/index.js`）的旧配置
   判为"失效条目"，引导迁移而非沿用。面板不给出失效配置背书。
@@ -44,3 +45,21 @@ stdio + shim 把这两件事一起解掉：凭据留在机器级注册表、由 
 - **若日后要收敛进程/文件数**：减少到"一个 exe 文件"需让 daemon 支持 `--stdio` 双角色
   （先启动者持锁成为 daemon，其余退化为薄转发）；减少到"一个进程"必须放弃宿主自举、
   改由机器级开机自启常驻。两条路都不与本文冲突，但都要重开决策。
+
+## 修订记录
+
+### 2026-10-06：shim 改为 NativeAOT 发布（由用户要求）
+
+**背景**：shim 只做逐行转发，却以自包含单文件发布：71 MB 的 exe 内含完整运行时与 JIT，
+每个 shim 进程提交内存约 10 MB、工作集约 36 MB、16 个线程。宿主每开一个会话就多一个 shim，
+这部分开销随会话数线性增长。
+
+**新口径**：shim 的发布配置在目标系统本机发布时启用 NativeAOT（`PublishAot` +
+`InvariantGlobalization` + `OptimizationPreference=Size`），代码不改（AOT 编译零警告；csproj
+常开 AOT/裁剪分析器防回退）。win-x64 同负载实测（initialize + tools/list 后空闲）：exe 约 4.3 MB，
+提交内存约 4.7 MB、工作集约 14 MB、8 个线程，首个应答从约 180 ms 降到约 50 ms。daemon 不变。
+
+**代价与接受理由**：NativeAOT 不能跨系统编译，且需要本机 C/C++ 工具链（要求见
+[server-dotnet 发布](../../plugin/godot-mcp-unified/server-dotnet/README.md#发布)）。交叉发布
+（如在 Windows 上发布 osx-arm64）自动回退为自包含单文件，既有的交叉构建流程不受影响；
+要得到某系统的 AOT 产物，在该系统本机发布即可。

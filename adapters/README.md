@@ -28,7 +28,7 @@
 
 所有客户端都指向**仓库内唯一的一份**服务产物，不在各自目录里维护副本：
 
-- 落点：`plugin/godot-mcp-unified/server-dotnet/publish/<rid>/`（`godot-mcp-daemon[.exe]` + `godot-mcp-shim[.exe]`，自包含单文件）。本地开发下每个 Godot 工程把 addon 目录链接到真源，因此**一次发布即服务所有工程**，无需任何搬运。
+- 落点：`plugin/godot-mcp-unified/server-dotnet/publish/<rid>/`（`godot-mcp-daemon[.exe]` + `godot-mcp-shim[.exe]`，均不依赖 .NET runtime；daemon 为自包含单文件、shim 在本机发布时为 NativeAOT，见 [server-dotnet 发布](../plugin/godot-mcp-unified/server-dotnet/README.md#发布)）。本地开发下每个 Godot 工程把 addon 目录链接到真源，因此**一次发布即服务所有工程**，无需任何搬运。
 - 生产：`dotnet publish plugin/godot-mcp-unified/server-dotnet/src/godot-mcp-shim -c Release -p:PublishProfile=<rid>`（daemon 同理）。
 - 随包分发（把插件整份复制给别的机器）才需要把产物同步进 addon 的 `bin/<rid>/`：加 `-p:CopyPublishToAddonBin=true` 显式打开（见 `server-dotnet/Directory.Build.targets`）。
 

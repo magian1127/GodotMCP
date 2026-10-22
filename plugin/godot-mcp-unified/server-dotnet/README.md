@@ -72,16 +72,24 @@ dotnet test tests/godot-mcp-daemon.tests --filter "FullyQualifiedName~Acceptance
 完成后清空);生命周期四场景(addon/shim 双路拉起竞态 → 单例必然、防双开、空闲自退退出码 0、
 daemon 硬杀后 shim 自愈 + token 稳定)。失败信息携带 (client, round, instance, tool) 定位。
 
-## 发布(self-contained 单文件)
+## 发布
 
 ```bash
 dotnet publish src/godot-mcp-daemon -c Release -p:PublishProfile=<rid>
+dotnet publish src/godot-mcp-shim   -c Release -p:PublishProfile=<rid>
 ```
 
-发布参数固化在 `src/godot-mcp-daemon/Properties/PublishProfiles/*.pubxml`;产物不依赖
-目标机器的 .NET runtime,addon/shim 可无条件拉起。
+发布参数固化在各工程的 `Properties/PublishProfiles/*.pubxml`;两种产物都不依赖目标机器的
+.NET runtime,addon/shim 可无条件拉起。
 
-| RID | 状态 |
+- **daemon**:self-contained 单文件(约 107 MB),可在任一系统上交叉构建全部 RID。
+- **shim**:在目标系统本机发布时为 NativeAOT(win-x64 约 4 MB;同负载下每会话私有内存约为
+  单文件形态的一半、线程数减半、启动快约 3 倍)。NativeAOT 不能跨系统编译,交叉发布时自动回退为
+  self-contained 单文件(约 70 MB)。本机工具链:Windows 需 Visual Studio「使用 C++ 的桌面开发」
+  工作负载;macOS 需 Xcode 命令行工具;Linux 需 clang 与 zlib 开发包。没有工具链时加
+  `-p:PublishAot=false -p:SelfContained=true -p:PublishSingleFile=true` 即回到单文件形态。
+
+| RID | daemon 状态 |
 | --- | --- |
 | `win-x64` | 冒烟验证通过(可执行、idle 自退、stdout 干净、日志落盘) |
 | `linux-x64` / `osx-arm64` / `osx-x64` | 交叉构建验证通过;真机运行验证随验收 harness(issue 16/17) |
