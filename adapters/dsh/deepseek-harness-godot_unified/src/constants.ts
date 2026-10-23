@@ -21,5 +21,9 @@ export const BUNDLE_ROW_ID = 'dsh-godot'
 /** 提示词 section 名称(systemPrompt 命名空间内)。 */
 export const SECTION_NAME = 'godot-mcp-workflow'
 
-/** section 排序权重:与工具说明段同级(zhipu 的 tool:* 段用 110)。 */
+/**
+ * section 排序权重。本段是新增段(不是对官方段的同名替换),因此可以自定位置:
+ * 110 紧跟 persona 之后、早于工具说明区。替换型段(如 zh_pro/智谱的
+ * `tool:web_search`)必须改用官方 TOOL_WEB_SEARCH 的 order,不能借用本值。
+ */
 export const SECTION_ORDER = 110
