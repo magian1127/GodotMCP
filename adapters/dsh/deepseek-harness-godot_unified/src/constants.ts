@@ -22,8 +22,10 @@ export const BUNDLE_ROW_ID = 'dsh-godot'
 export const SECTION_NAME = 'godot-mcp-workflow'
 
 /**
- * section 排序权重。本段是新增段(不是对官方段的同名替换),因此可以自定位置:
- * 110 紧跟 persona 之后、早于工具说明区。替换型段(如 zh_pro/智谱的
- * `tool:web_search`)必须改用官方 TOOL_WEB_SEARCH 的 order,不能借用本值。
+ * section 排序权重。本段是新增段(不是对官方段的同名替换),按产品选择放在
+ * 110:紧跟 persona 之后、早于具体工具说明区,作为会话初始的 Godot 能力/工作流
+ * 总览。它不属于具体工具说明,因此不套用工具区(≥1000)的档位。
+ * 替换型段(zh_pro/智谱的 `tool:web_search`、hashline 的 `tool:read`/`tool:edit`)
+ * 必须沿用官方 TOOL_* 的 order,不能借用本值。
  */
 export const SECTION_ORDER = 110

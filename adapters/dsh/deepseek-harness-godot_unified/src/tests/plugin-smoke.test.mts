@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { apply, inject, name, parsePluginConfig, Config, GODOT_PRESET_ID } from '../index.js'
-import { SECTION_NAME } from '../constants.js'
+import { SECTION_NAME, SECTION_ORDER } from '../constants.js'
 
 interface SectionRecord { name: string; order?: number; text: () => string }
 
@@ -118,6 +118,10 @@ test('apply:原版模式注册全局 section,默认 serverName=godot;teardown �
   apply(ctx as never, ctx.configRef)
   assert.equal(ctx.sections.length, 1)
   assert.equal(ctx.sections[0]!.name, SECTION_NAME)
+  // Godot 工作流段是新增的能力/工作流总览段，按产品选择紧跟 persona（110），
+  // 不属于具体工具说明区。
+  assert.equal(ctx.sections[0]!.order, SECTION_ORDER)
+  assert.equal(SECTION_ORDER, 110)
   assert.ok(ctx.sections[0]!.text().includes('godot_discover_tools'))
   assert.ok(!ctx.sections[0]!.text().includes('myserver_'))
   // fiber teardown 执行后 section 注销。
