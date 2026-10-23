@@ -7,6 +7,13 @@ test-project/addons/godot_mcp_toolkit
   -> plugin/godot-mcp-unified/addons/godot_mcp_toolkit
 ```
 
+macOS / Linux 上改用符号链接。`.gitignore` 里以 `/` 结尾的规则只匹配目录、不匹配符号链接，因此用本地排除避免它出现在 `git status`：
+
+```bash
+ln -s ../../plugin/godot-mcp-unified/addons/godot_mcp_toolkit test-project/addons/godot_mcp_toolkit
+echo 'test-project/addons/godot_mcp_toolkit' >> .git/info/exclude
+```
+
 `addons/editor_ui_locale_test` 是本测试项目自己的 UI 测试插件。共享插件的旧副本备份与测试临时产物存放在 `test-project/.godot-mcp-unified-backups/` 等被 git 忽略的位置，避免 Godot 扫描两份插件源码或污染版本管理。
 
 | 文件 | 验证用途 |

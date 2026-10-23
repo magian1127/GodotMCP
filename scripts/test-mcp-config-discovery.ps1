@@ -33,11 +33,13 @@ $discovery = Join-Path $PluginRoot 'addons\godot_mcp_toolkit\ui\mcp_json_discove
 if (Test-Path -LiteralPath $discovery) {
     Copy-Item -LiteralPath $discovery -Destination (Join-Path $addonRoot 'ui\mcp_json_discovery.gd')
 }
-# mcp_json_sync.gd 的 shim 路径解析依赖它（路径工具与 RID 单一出处）。
-$platformRid = Join-Path $PluginRoot 'addons\godot_mcp_toolkit\paths\platform_rid.gd'
-if (Test-Path -LiteralPath $platformRid) {
-    New-Item -ItemType Directory -Path (Join-Path $addonRoot 'paths') -Force | Out-Null
-    Copy-Item -LiteralPath $platformRid -Destination (Join-Path $addonRoot 'paths\platform_rid.gd')
+# mcp_json_sync.gd 的 shim 路径解析依赖它们：server_bin.gd（落点解析）与 platform_rid.gd（RID），均为单一出处。
+New-Item -ItemType Directory -Path (Join-Path $addonRoot 'paths') -Force | Out-Null
+foreach ($pathModule in @('platform_rid.gd', 'server_bin.gd')) {
+    $pathModuleSource = Join-Path $PluginRoot ('addons\godot_mcp_toolkit\paths\' + $pathModule)
+    if (Test-Path -LiteralPath $pathModuleSource) {
+        Copy-Item -LiteralPath $pathModuleSource -Destination (Join-Path $addonRoot ('paths\' + $pathModule))
+    }
 }
 Copy-Item -LiteralPath (Join-Path $PluginRoot 'addons\godot_mcp_toolkit\.mcp.json.template') -Destination $addonRoot
 # 写入前置是"随附 shim 存在"（bin/<rid>/godot-mcp-shim[.exe]）。夹具只随附最小 addon，
@@ -71,7 +73,16 @@ function Invoke-IsolatedTest {
     $stdout = Join-Path $fixtureRoot ($Name + '.stdout.log')
     $stderr = Join-Path $fixtureRoot ($Name + '.stderr.log')
     $arguments = @('--headless', '--path', ('"' + $projectRoot + '"')) + $TestArguments
-    $process = Start-Process -FilePath $GodotExecutable -ArgumentList $arguments -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    $startArguments = @{
+        FilePath = $GodotExecutable
+        ArgumentList = $arguments
+        PassThru = $true
+        RedirectStandardOutput = $stdout
+        RedirectStandardError = $stderr
+    }
+    # -WindowStyle 只存在于 Windows 版 Start-Process（隐藏控制台窗口）；macOS/Linux 的 pwsh 不支持该参数。
+    if ($PSVersionTable.PSVersion.Major -lt 6 -or $IsWindows) { $startArguments.WindowStyle = 'Hidden' }
+    $process = Start-Process @startArguments
     if (-not $process.WaitForExit($TimeoutMs)) {
         $process.Kill()
         throw ('隔离测试超过 ' + [int]($TimeoutMs / 1000) + ' 秒，已停止本次测试进程：' + $Name)

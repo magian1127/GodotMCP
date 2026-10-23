@@ -92,4 +92,5 @@ dotnet publish src/godot-mcp-shim   -c Release -p:PublishProfile=<rid>
 | RID | daemon 状态 |
 | --- | --- |
 | `win-x64` | 冒烟验证通过(可执行、idle 自退、stdout 干净、日志落盘) |
-| `linux-x64` / `osx-arm64` / `osx-x64` | 交叉构建验证通过;真机运行验证随验收 harness(issue 16/17) |
+| `osx-arm64` | macOS 真机验证通过(Apple Silicon、Godot 4.7.2 mono):本机发布(daemon 单文件 + shim NativeAOT)、单元测试全绿、真实编辑器全链路(场景/节点/LSP/试玩/截图/输入模拟) |
+| `linux-x64` / `osx-x64` | 交叉构建验证通过;真机运行验证随验收 harness(issue 16/17) |
