@@ -4,14 +4,14 @@ import { createRequire } from 'node:module'
 export const PKG = 'deepseek-harness-godot_unified'
 
 /** 包版本:优先运行时读包内 package.json(发布后与真实版本恒一致);
- * 读不到(测试布局/异常环境)回退硬编码字面量,避免 MCP clientInfo 漂移。 */
+ * 读不到(测试布局/异常环境)回退硬编码字面量,避免版本号漂移。 */
 export const VERSION: string = (() => {
   try {
     const requireSelf = createRequire(import.meta.url)
     const pkg = requireSelf('../package.json') as { version?: string } | undefined
-    return typeof pkg?.version === 'string' && pkg.version !== '' ? pkg.version : '0.4.1'
+    return typeof pkg?.version === 'string' && pkg.version !== '' ? pkg.version : '0.5.0'
   } catch {
-    return '0.4.1'
+    return '0.5.0'
   }
 })()
 
@@ -29,3 +29,16 @@ export const SECTION_NAME = 'godot-mcp-workflow'
  * 必须沿用官方 TOOL_* 的 order,不能借用本值。
  */
 export const SECTION_ORDER = 110
+
+/**
+ * Godot agent preset id(显示名 Godot;bundle patch 的 `preset-godot` 行声明它)。
+ * 本插件据此判定"该会话是否需要 Godot MCP":命中才把官方 mcp-client 挂进
+ * 该 agent 的作用域。
+ */
+export const GODOT_PRESET_ID = 'godot'
+
+/**
+ * 默认 MCP serverName。工具名由官方 mcp-client 的固定约定给出:
+ * `mcp__<serverName>__<rawName>`(默认即 `mcp__godot__scene_get_tree` 这样的形状)。
+ */
+export const DEFAULT_SERVER_NAME = 'godot'

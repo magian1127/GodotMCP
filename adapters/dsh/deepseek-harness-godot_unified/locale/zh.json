@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Godot MCP 桥接",
-    "description": "把 GodotMCP 桥接服务器接入 DSH 的 MCP 客户端行与 Godot 工作流提示词 section，附安装/卸载/体检 CLI。"
+    "title": "Godot MCP Unified",
+    "description": "把 GodotMCP 接入 DSH：仅在 Godot 预设会话里挂载宿主官方 MCP 客户端，附 Godot 工作流提示词、路径配置 CLI 与插件页。"
   }
 }

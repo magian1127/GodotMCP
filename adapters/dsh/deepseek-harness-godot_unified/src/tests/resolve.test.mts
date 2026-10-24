@@ -6,7 +6,6 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { resolveServerDist, toForwardSlashes, validateGodotProject, validateServerDistFile } from '../bin/resolve.mjs'
 import { shimEntryRelative } from '../bin/cli/constants.mjs'
-import { buildSpawnPlan } from '../bridge/manager.js'
 
 /** 随包 shim 入口在该 RID 下的期望路径(RID 随平台变化,故与实现共用同一构造函数)。 */
 const shimExpected = (root: string): string => `${root}/${shimEntryRelative()}`
@@ -56,26 +55,7 @@ test('resolveServerDist 优先级:flag > env > root 推导(随包 shim 候选优
   assert.ok(none.reason.includes('--server-dist'))
 })
 
-test('buildSpawnPlan:脚本经 node 执行,其余按可执行文件直接 spawn', () => {
-  assert.deepEqual(buildSpawnPlan('D:/ws/GodotMCP/adapters/dsh/godot-http-bridge.mjs', 'NODE'), {
-    command: 'NODE',
-    args: ['D:/ws/GodotMCP/adapters/dsh/godot-http-bridge.mjs'],
-  })
-  assert.deepEqual(buildSpawnPlan('D:/ws/GodotMCP/plugin/godot-mcp-unified/server/dist/index.js', 'NODE'), {
-    command: 'NODE',
-    args: ['D:/ws/GodotMCP/plugin/godot-mcp-unified/server/dist/index.js'],
-  })
-  // 标准入口:随包 shim 是 native 可执行文件,直接 spawn、无 args。
-  assert.deepEqual(buildSpawnPlan(`D:/ws/GodotMCP/${shimEntryRelative('win-x64')}`, 'NODE'), {
-    command: `D:/ws/GodotMCP/${shimEntryRelative('win-x64')}`,
-    args: [],
-  })
-  // 非 Windows 平台入口不带 .exe 后缀,同样按可执行文件直连。
-  assert.deepEqual(buildSpawnPlan(`/ws/GodotMCP/${shimEntryRelative('linux-x64')}`, 'NODE'), {
-    command: `/ws/GodotMCP/${shimEntryRelative('linux-x64')}`,
-    args: [],
-  })
-})
+// buildSpawnPlan 的覆盖在 mcp-mount.test.mts(入口启动方案的唯一实现已迁到 src/mcp-mount.ts)。
 
 test('validateServerDistFile:存在普通文件才通过', () => {
   const dir = mkdtempSync(join(tmpdir(), 'dsh-godot-res-'))

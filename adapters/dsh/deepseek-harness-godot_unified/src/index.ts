@@ -1,49 +1,56 @@
 /**
- * deepseek-harness-godot_unified —— host 半边入口。
+ * deepseek-harness-godot_unified —— host 半边入口(v0.5:官方 MCP)。
  *
- * 职责(v0.4,自研桥接 + 动态工具):
- * 1. **特殊桥接**:插件自己 spawn GodotMCP server(stdio)+ 内嵌极简 MCP
- *    client(`src/bridge/manager.ts` 的 GodotBridge),按**调用会话 cwd**
- *    解析并传参(GODOT_MCP_PROJECT_PATH 等 env)——不同会话工作区可以是
- *    不同 Godot 项目,桥接按需重启切换,绝不绑死目录。
- * 2. **动态工具**(不写死):工具清单来自 server 的 `tools/list`(真实
- *    schema/描述),插件挂载后异步预热一次清单并注册 `godot_*`
- *    门面;server 空闲关闭/崩溃后工具保持在册,调用时 ensureStarted 自愈。
- *    插件内**没有任何写死的工具清单**(无离线占位)。
- * 3. **注入管控**(hashline 同款 per-agent 表面模式):默认仅 Godot preset
- *    会话注入工具与提示词;`injectLegacyMode` 开启恢复全局注入。deny 的
- *    tools/change 增量补丁经 150ms 合并窗口,防 re-sync 事件风暴。
- * 4. **Godot 工作台 HTTP 路由**(tools 服务在场时装配):浏览/手动调用/
- *    状态/路径;目录缓存 + 在线判定防「浏览即起动 server」。
+ * 本包**不实现 MCP 客户端**:连接、握手、工具发现、`tools/list_changed`、断线重连、
+ * 图片投影全部交给宿主自带的 `@deepseek-ai/dsh-mcp-client`(运行时从 profile 解析,
+ * 不写进 dependencies)。本插件只回答两个问题:**哪些会话需要它**、**它连哪个 server**。
  *
- * 配置走设置卡片(`godot` 命名空间):注入三开关 + server dist/项目路径
- * 参考值;per-cwd 路径经 `$DSH_HOME/godot/paths.json`(工作台可维护)。
+ * 1. **按会话挂载**(默认):只有加入 Godot preset 的会话,在 `agent/created` 时把
+ *    mcp-client 挂进该 agent 的作用域。其他会话里**根本没有**这些工具——不是
+ *    "注册后 deny",因此不再需要 restrict / tools/change 合并窗口 / 工具清单缓存。
+ *    工具名由官方约定给出:`mcp__<serverName>__<rawName>`。
+ * 2. **按会话传项目路径**:挂载时按**该会话的 cwd** 解析 Godot 项目路径,作为
+ *    `GODOT_MCP_PROJECT_PATH` 传给 server;会话 cwd 同时作为子进程工作目录
+ *    (shim 未拿到显式 env 时会按 cwd 查机器级注册表兜底)。同一台机器上不同会话
+ *    可以是不同 Godot 项目。
+ * 3. **原版模式**(`injectLegacyMode`):在 host 作用域挂一个**共享**连接,所有会话
+ *    可见;项目路径取全局设置(不再按会话切换)。该模式下不再按会话挂载,避免
+ *    同一份工具挂两遍、多起一个进程。
+ * 4. **不阻塞会话创建**:挂载本身不 await 连接(官方客户端自带重连),只给 Godot
+ *    会话一个上限为 `READY_GRACE_MS` 的宽限,让首条消息通常就能看到工具;
+ *    失败一律降级为日志,绝不向会话创建路径抛错。
+ * 5. **路径设置 HTTP 路由**(`/godot-config/api/path-settings`)不变。
+ *
+ * 配置走插件行(`dsh-godot` 行 config):注入两开关 + 提示词中文化 + server dist/
+ * 项目路径参考值;per-cwd 路径经 `$DSH_HOME/godot/paths.json`(插件页配置表单可维护)。
  */
-import { GodotBridge, type McpToolDef } from './bridge/manager.js'
-import { ToolsCacheStore } from './bridge/tools-cache.js'
-import { UPSTREAM_TOOL_ZH } from './bridge/upstream-zh.js'
 import { PKG, SECTION_NAME, SECTION_ORDER } from './constants.js'
-import { sectionText } from './section-text.js'
+import { resolveSettings, isGodotPreset, shouldInjectPrompt, type GodotSettings } from './injection.js'
+import { buildMountConfig, errorName, mountConfigKey, type GodotMcpConfig } from './mcp-mount.js'
+import { mountPathSettingsRoute } from './path-settings-route.js'
+import { PathStore, projectPathToDir } from './path-store.js'
+import { loadMcpClient, loadSchemastery } from './profile-modules.js'
+import { notConfiguredSectionText, sectionText } from './section-text.js'
 import type {
   AgentPresetsShape,
   AgentShape,
   Disposer,
   HostContext,
+  PluginFiberShape,
   SystemPromptService,
-  ToolsServiceShape,
 } from './types.js'
-import {
-  godotToolNames, needsScopedPrompt, resolveSettings, resolveToolDescription, shouldHideAgent, toolFailureMessage,
-  type GodotSettings,
-} from './injection.js'
-import { loadSchemastery } from './profile-modules.js'
-import { ToolsCatalogueCache } from './workbench/handlers.js'
-import { PathStore, projectPathToDir } from './workbench/path-store.js'
-import { mountWorkbenchRoutes } from './workbench/routes.js'
-import { WorkbenchExecutor } from './workbench/executor.js'
+
+export { GODOT_PRESET_ID } from './constants.js'
 
 export const name = PKG
-export const inject = ['systemPrompt', 'tools', 'agents']
+
+/**
+ * 同步依赖的宿主服务。
+ *
+ * `tools` 不在列表里:mcp-client 自己声明 `inject: ['tools']`,Cordis 会在它那一层
+ * 等工具服务就绪;本插件不再注册任何工具。
+ */
+export const inject = ['systemPrompt', 'agents']
 
 /** 插件 Config 的 schemastery 工厂形状(仅覆盖本插件用到的链式 API)。 */
 interface GodotSchemaField {
@@ -70,13 +77,17 @@ function markVolatile(field: GodotSchemaField): GodotSchemaField {
 }
 
 /**
- * 宿主(DSH 0.1.7+)读取的插件 Config。普通字段(serverName/godotMcpRoot/
- * projectPath/unsafe)变更触发重挂载,经 parsePluginConfig 消费;设置字段
- * (injectLegacyMode/promptGuidance/zhPrompt/godotServerDist/godotProjectPath)
- * 全 volatile:插件页实时编辑,值持久化在 profile 行 config,变更经
+ * 宿主(DSH 0.1.7+)读取的插件 Config。
+ *
+ * 只有 `serverName` 是普通字段(改它会让工具命名空间变化,宿主按重挂载处理);
+ * 其余全 volatile:插件页实时编辑,值持久化在 profile 行 config,变更经
  * loader/volatile-update 派发。schemastery 不可用时导出 undefined(不能是
  * null:宿主 settings 的 `'toJSON' in Config` 检查遇 null 会崩掉整页设置),
  * 宿主跳过 schema,config 以普通值传入(按默认注入策略工作)。
+ *
+ * 刻意不再声明 v0.4 的 `godotMcpRoot` / `projectPath` / `unsafe`:它们在 v0.5 没有
+ * 任何消费方(server 入口来自 paths.json 或 `godotServerDist`,项目路径来自
+ * `godotProjectPath`/按 cwd 条目),留着只会让用户在行 config 里填了却不生效。
  */
 const configSchemaFactory = loadSchemastery() as GodotSchemaFactory | null
 export const Config =
@@ -84,9 +95,6 @@ export const Config =
     ? undefined
     : configSchemaFactory.object({
         serverName: configSchemaFactory.string().default('godot'),
-        godotMcpRoot: configSchemaFactory.string().default(''),
-        projectPath: configSchemaFactory.string().default(''),
-        unsafe: configSchemaFactory.boolean().default(false),
         injectLegacyMode: markVolatile(configSchemaFactory.boolean().default(false)),
         promptGuidance: markVolatile(configSchemaFactory.boolean().default(true)),
         zhPrompt: markVolatile(configSchemaFactory.boolean().default(false)),
@@ -94,28 +102,61 @@ export const Config =
         godotProjectPath: markVolatile(configSchemaFactory.string().default('')),
       })
 
-/** Godot preset id(目录名 ~/.dsh/.agent-presets/godot;显示名 Godot)。 */
-export const GODOT_PRESET_ID = 'godot'
-
-/** 组合行 config 解析(兼容保留:serverName/unsafe 仍可由行覆盖;机器路径主要走设置/路径存储)。 */
-export function parsePluginConfig(config: Record<string, unknown> = {}): {
-  serverName: string; godotMcpRoot?: string; projectPath?: string; unsafe?: boolean
-} {
+/**
+ * 组合行 config 解析:只保留真正被消费的 `serverName`(MCP 命名空间)。
+ *
+ * v0.4 的 `godotMcpRoot` / `projectPath` / `unsafe` 已删除——host 侧从未消费它们,
+ * 保留解析只会制造"填了却无效"的假象。
+ */
+export function parsePluginConfig(config: Record<string, unknown> = {}): { serverName: string } {
   const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim().length > 0 ? v.trim() : undefined)
-  return {
-    serverName: str(config.serverName) ?? 'godot',
-    godotMcpRoot: str(config.godotMcpRoot),
-    projectPath: str(config.projectPath),
-    ...(config.unsafe === true ? { unsafe: true } : {}),
-  }
+  return { serverName: str(config.serverName) ?? 'godot' }
+}
+
+/**
+ * Godot 会话创建时的就绪宽限(ms)。
+ *
+ * 官方 mcp-client 的 `apply` 会 await 首次连接 + 工具发现;`agent/created` 是串行
+ * 且被 await 的事件,因此"等它"能让第一条用户消息就看到工具。但握手可能拖到
+ * SDK 的 60s 超时,所以只给一个有上限的宽限:连接更快就继续,超过上限就让
+ * 工具在后台就位(`tools/change` 会让模型在下一轮看到它们)。
+ *
+ * 取 10s:冷启动 daemon + editor 未开时的静默待命通常都在这个量级内,而会话创建
+ * 卡 10s 已是可接受的上限。
+ */
+const READY_GRACE_MS = 10_000
+
+/** 一个 agent 在插件侧的挂载记账。 */
+interface AgentMount {
+  /** 记账键:`agent.id`(SessionId),**不是** agent 对象引用。 */
+  key: string
+  /** 配置身份键(dist + 项目路径 + cwd);变化即重挂。 */
+  configKey: string
+  /** 挂载成功时的 fiber;未配置/失败时为 undefined。 */
+  fiber?: PluginFiberShape
+  /** scoped 提示词 section 的 disposer。 */
+  prompt?: Disposer
+  /** 当前是否处于"没有可挂载配置"状态(提示词走 notConfigured 文本)。 */
+  unconfigured: boolean
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-/** tools/change 合并窗口(ms):门面 re-sync/注册逐工具发出事件,合并成一次处理。 */
-const DENY_REFRESH_DEBOUNCE_MS = 150
+/** 等一个 fiber 就绪,但最多等 `ms`;永不抛错。 */
+async function withReadyGrace(work: PromiseLike<unknown>, ms: number = READY_GRACE_MS): Promise<void> {
+  let timer: NodeJS.Timeout | undefined
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, ms)
+    timer.unref?.()
+  })
+  try {
+    await Promise.race([Promise.resolve(work).then(() => undefined, () => undefined), timeout])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+}
 
 export function apply(ctx: HostContext, config: Record<string, unknown> = {}): void {
   // 宿主物化的 volatile 引用(带 .get())读成普通值快照;普通字段原样保留
@@ -130,21 +171,25 @@ export function apply(ctx: HostContext, config: Record<string, unknown> = {}): v
     }
     return snapshot
   }
-  const { serverName, godotMcpRoot, unsafe } = parsePluginConfig(readSettingsSnapshot())
-  const toolPrefix = `${serverName}_`
+  const { serverName } = parsePluginConfig(readSettingsSnapshot())
   const warn = (message: string): void => { try { ctx.logger?.warn(message) } catch { /* 日志不可用不致命 */ } }
 
   const systemPrompt = ctx.get('systemPrompt') as SystemPromptService | undefined | null
   const promptService: SystemPromptService | undefined = systemPrompt ?? undefined
 
-  // ---- 设置(0.1.7 起经插件 Config volatile 字段;值持久化在 profile 行 config)。 ----
+  // 宿主自带的 MCP 客户端(插件本体)。拿不到就整体降级为"不挂载"——绝不自建一份。
+  const mcpClient = loadMcpClient()
+  if (mcpClient === null || mcpClient === undefined) {
+    warn(`[${PKG}] 未能从 profile 解析到 @deepseek-ai/dsh-mcp-client:Godot MCP 不会挂载,工具不会出现`)
+  }
+
   let current: GodotSettings = resolveSettings(readSettingsSnapshot())
   let stopped = false
 
   // ---- 路径存储(跨会话持久):serverDist 全局单值 + 项目路径按 cwd 批量条目。 ----
   const pathStore = new PathStore()
-  /** 按「调用会话 cwd」解析生效路径:serverDist 全局单值,projectPath 按 cwd 查表,
-   *  无匹配时若 paths.json 只有**唯一**项目条目则以其兜底(常见:工作台 cwd 非 Godot
+  /** 按「会话 cwd」解析生效路径:serverDist 全局单值,projectPath 按 cwd 查表,
+   *  无匹配时若 paths.json 只有**唯一**项目条目则以其兜底(常见:会话 cwd 非 Godot
    *  项目目录但全机只配了一个项目),否则回退全局设置。 */
   function resolvePathsFor(cwd: string | undefined): { godotServerDist: string; godotProjectPath: string } {
     const projects = pathStore.getConfig().projects
@@ -159,398 +204,394 @@ export function apply(ctx: HostContext, config: Record<string, unknown> = {}): v
     }
   }
 
-  // ---- Godot 桥接管理器(懒启动 + per-cwd 传参;空闲自动关闭)。
-  // 工具清单缓存:连接成功后持久化,「打开 DSH 但无需 Godot」时零连接/零开销。 ----
-  const tools = ctx.get('tools') as (ToolsServiceShape & { register(definition: Record<string, unknown>): Disposer }) | undefined | null
-  const toolsCache = new ToolsCacheStore()
-  const bridge = new GodotBridge({
-    serverDist: (cwd?: string) => resolvePathsFor(cwd).godotServerDist,
-    projectPath: (cwd?: string) => resolvePathsFor(cwd).godotProjectPath,
-    onListChanged: () => { try { void resyncFacade() } catch { /* 重注册失败静默,下次再试 */ } },
-    onExit: () => { /* 动态模式:工具保留在册(清单已缓存),调用时 ensureStarted 自愈 */ },
-    idleCloseMs: 10 * 60_000,
-  })
-
-  // ---- 工具注册(动态清单;无离线占位/无写死清单)。 ----
-  interface FacadeState { names: string[]; defs: McpToolDef[] }
-  let facadeDisposers: Disposer[] = []
-  let facadeState: FacadeState | undefined
-
-  function registerFacade(defs: McpToolDef[]): void {
-    if (tools === undefined || tools === null) return
-    for (const dispose of facadeDisposers.splice(0)) {
-      try { dispose() } catch { /* 继续清理其余 */ }
+  /** 在把 config 交给 Cordis 之前先过一遍官方 schema。
+   *
+   * 为什么:Config 校验失败时 schemastery 的 union 错误会把**整个 config**
+   * (含 env 值)写进 Cordis 自己的日志;先自校验就能把这类输入挡在外面,
+   * 诊断只记错误类型名(与 project-mcp 同款口径)。 */
+  function validateMountConfig(configValue: GodotMcpConfig): boolean {
+    const factory = (mcpClient as { Config?: unknown } | null | undefined)?.Config
+    if (typeof factory !== 'function') return true
+    try {
+      (factory as (input: unknown) => unknown)(configValue)
+      return true
+    } catch (error) {
+      warn(`[${PKG}] Godot MCP 配置未通过官方 schema 校验,已跳过挂载(错误类型: ${errorName(error)})`)
+      return false
     }
-    facadeDisposers = []
-    for (const def of defs) {
-      const publicName = `${toolPrefix}${def.name}`
-      try {
-        facadeDisposers.push(tools.register({
-          name: publicName,
-          description: resolveToolDescription(
-            current.zhPrompt,
-            UPSTREAM_TOOL_ZH[def.name],
-            def.description,
-            `Godot tool (${def.name}). The bridge starts on demand; the first call may take a moment.`,
-          ),
-          parameters: def.inputSchema ?? { type: 'object' },
-          output: {
-            schema: { type: 'object' },
-            render: (_args: unknown, value: unknown) => {
-              const content = (value as { content?: unknown } | undefined)?.content
-              return Array.isArray(content) ? content : []
-            },
-          },
-          execute: async (rawArgs: unknown, exec?: unknown) => {
-            const args = typeof rawArgs === 'object' && rawArgs !== null ? rawArgs : {}
-            // 调用会话 cwd(per-cwd 桥接传参键):模型调用经 agent loop,exec.agent 带上会话。
-            const cwd = (exec as { agent?: { session?: { header?: { cwd?: string } } } } | undefined)?.agent?.session?.header?.cwd
-            const result = await bridge.callTool(def.name, args, cwd)
-            // 首次成功调用后(尚未同步过清单)补一次 tools/list → 注册 + 写缓存。
-            // 之后不再随调用刷新(有缓存时零往返),server 的 tools/list_changed 负责增量。
-            if (bridge.toolDefsCache === undefined) {
-              void syncFacadeFromServer().catch(() => { /* 清单同步失败静默:下次调用/连接重试 */ })
-            }
-            const content = Array.isArray(result.content) ? result.content : []
-            // MVP:图片块降级为文本占位(附件投影留待后续迭代);文本原样透传。
-            const projected = content.map(block => {
-              const record = block as Record<string, unknown>
-              return record.type === 'image'
-                ? { type: 'text', text: '[image result: attachment projection pending — see workbench for the image]' }
-                : block
-            })
-            const text = projected
-              .map(block => (block as { type?: string; text?: string }).text ?? '')
-              .filter(part => part !== '')
-              .join('\n')
-            if (result.isError === true) throw new Error(toolFailureMessage(current.zhPrompt, def.name, text))
-            return { content: projected }
-          },
-        }))
-      } catch (error) {
-        warn(`[${PKG}] 门面工具注册失败(${publicName}): ${errorMessage(error)}`)
-      }
-    }
-    facadeDisposers = facadeDisposers.filter(dispose => typeof dispose === 'function')
   }
 
-  /** 以 server 清单重注册门面。清单与在册一致时跳过(防 re-sync 风暴);zhPrompt 变化强制。 */
-  function applyDefs(defs: McpToolDef[], force = false): void {
-    if (stopped) return
-    const next = defs.map(def => def.name)
-    const state = facadeState
-    if (!force && state !== undefined
-      && next.length === state.names.length
-      && next.every((n, i) => n === state.names[i])) {
+  // ---- agent 维度记账(键是会话 id;见 AgentMount) ----
+  const mounts = new Map<string, AgentMount>()
+
+  function agentKeyOf(agent: AgentShape): string | undefined {
+    const id: unknown = agent.id ?? agent.session?.header?.id ?? agent.session?.id
+    return typeof id === 'string' && id !== '' ? id : undefined
+  }
+
+  function presetOf(agent: AgentShape): string | undefined {
+    try {
+      const presets = ctx.get('agentPresets') as AgentPresetsShape | undefined | null
+      if (presets === undefined || presets === null || typeof presets.composedPreset !== 'function') return undefined
+      return presets.composedPreset(agent.ctx)
+    } catch {
+      return undefined
+    }
+  }
+
+  function scopedPromptOf(agent: AgentShape): SystemPromptService | undefined {
+    const fromGet = agent.ctx?.get?.('systemPrompt')
+    if (fromGet !== undefined && fromGet !== null) return fromGet as SystemPromptService
+    return agent.ctx?.systemPrompt
+  }
+
+  function disposeFiber(label: string, fiber: PluginFiberShape | undefined): void {
+    if (fiber === undefined) return
+    try {
+      void Promise.resolve(fiber.dispose()).catch((error: unknown) => {
+        warn(`[${PKG}] 卸载 ${label} 失败(错误类型: ${errorName(error)})`)
+      })
+    } catch (error) {
+      warn(`[${PKG}] 卸载 ${label} 失败(错误类型: ${errorName(error)})`)
+    }
+  }
+
+  function disposePrompt(entry: AgentMount): void {
+    if (entry.prompt === undefined) return
+    try { entry.prompt() } catch { /* teardown 尽力而为 */ }
+    entry.prompt = undefined
+  }
+
+  function disposeMount(entry: AgentMount): void {
+    disposePrompt(entry)
+    disposeFiber(`会话 ${entry.key} 的 Godot MCP`, entry.fiber)
+    entry.fiber = undefined
+  }
+
+  /** 该 agent 的提示词 section 与设置对齐(文本函数动态读取 current,无需重注册)。 */
+  function syncPrompt(agent: AgentShape, entry: AgentMount, presetId: string | undefined): void {
+    const scoped = scopedPromptOf(agent)
+    const wanted = shouldInjectPrompt({
+      injectLegacyMode: current.injectLegacyMode,
+      presetId,
+      promptGuidance: current.promptGuidance,
+    }) && scoped !== undefined && typeof scoped.section === 'function'
+    if (!wanted) {
+      disposePrompt(entry)
       return
     }
-    registerFacade(defs)
-    facadeState = { names: next, defs }
-  }
-
-  /** 在线精确:tools/list 的真实 schema/description 注册全部工具(动态清单),成功后写缓存。 */
-  async function syncFacadeFromServer(): Promise<void> {
-    const defs: McpToolDef[] = await bridge.listTools()
-    if (stopped) return
-    applyDefs(defs)
-    toolsCache.save({
-      serverDist: resolvePathsFor(undefined).godotServerDist || undefined,
-      tools: defs.map(def => ({ name: def.name, description: def.description, inputSchema: def.inputSchema })),
-    })
-  }
-
-  /** server 通知 list_changed(组激活/扩展/重连)时重同步。 */
-  async function resyncFacade(): Promise<void> {
+    if (entry.prompt !== undefined) return
     try {
-      await syncFacadeFromServer()
+      entry.prompt = scoped!.section({
+        name: SECTION_NAME,
+        order: SECTION_ORDER,
+        text: () => (entry.unconfigured
+          ? notConfiguredSectionText(serverName, current.zhPrompt)
+          : sectionText(serverName, current.zhPrompt)),
+      })
     } catch (error) {
-      warn(`[${PKG}] 工具面重同步失败(保留在册清单): ${errorMessage(error)}`)
+      const message = errorMessage(error)
+      if (/duplicate|already/i.test(message)) {
+        warn(`[${PKG}] section 已由先到实例注册,本实例不重复注册`)
+      } else {
+        warn(`[${PKG}] 提示词 section 注册失败: ${message}`)
+      }
     }
   }
 
   /**
-   * 从持久缓存加载工具清单(不 spawn server、不连编辑器):
-   * 打开的 DSH 不一定要做 Godot 相关操作——有缓存时工具直接可见、零连接开销;
-   * 首次工具调用或工作台「连接 Godot」才拉起桥接(连接成功后刷新缓存)。
-   * 缓存只接受与**当前 server dist** 匹配的快照(同一 server 的工具面一致;
-   * 项目差异由调用时的 per-cwd 传参承担),不匹配视为陈旧,忽略待刷新。
+   * 让某个 agent 的 Godot MCP 状态与当前设置/preset 对齐(幂等)。
+   *
+   * 三条退出路径:不需要(非 Godot preset / 原版模式 / mcp-client 不可用)→ 拆;
+   * 已挂且配置键一致 → 只同步提示词;否则重挂。
    */
-  function loadFacadeFromCache(): void {
-    if (tools === undefined || tools === null) return
+  async function syncAgent(agent: AgentShape, options: { grace?: boolean } = {}): Promise<void> {
     try {
-      const dist = resolvePathsFor(undefined).godotServerDist
-      const cached = toolsCache.get()
-      if (cached === undefined || cached.tools.length === 0) return
-      if (dist === '' || cached.serverDist !== dist) {
-        warn(`[${PKG}] 工具清单缓存与当前 server dist 不匹配,忽略缓存(在工作台点「连接 Godot」刷新)`)
+      if (stopped) return
+      const key = agentKeyOf(agent)
+      if (key === undefined) {
+        // 会话身份缺失属于契约漂移:宁可少挂一次(用户重开会话即恢复),也不能
+        // 退回对象引用——同一 sessionId 的第二个 agent 对象会因此重复挂载。
+        warn(`[${PKG}] agent 缺少会话 id,无法按会话记账,跳过 Godot MCP 挂载`)
         return
       }
-      applyDefs(cached.tools.map(tool => ({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema })))
+
+      const existing = mounts.get(key)
+      const presetId = presetOf(agent)
+      const needed = isGodotPreset(presetId) && !current.injectLegacyMode
+        && mcpClient !== null && mcpClient !== undefined
+
+      if (!needed) {
+        if (existing !== undefined) {
+          mounts.delete(key)
+          disposeMount(existing)
+        }
+        return
+      }
+
+      const cwd = agent.session?.header?.cwd
+      const paths = resolvePathsFor(cwd)
+      const configKey = [paths.godotServerDist, paths.godotProjectPath, cwd ?? ''].join('\u0000')
+
+      const sameConfig = existing !== undefined && existing.configKey === configKey
+      const alive = existing !== undefined && (existing.unconfigured || existing.fiber !== undefined)
+      if (sameConfig && alive) {
+        syncPrompt(agent, existing!, presetId)
+        return
+      }
+      if (existing !== undefined) {
+        mounts.delete(key)
+        disposeMount(existing)
+      }
+
+      // server 入口未配置:不挂载,但给 Godot 会话一段"如何配置"的提示词——
+      // 否则模型会凭空调用不存在的工具。配置保存后经 loader/volatile-update 重挂。
+      if (paths.godotServerDist === '') {
+        const entry: AgentMount = { key, configKey, unconfigured: true }
+        mounts.set(key, entry)
+        syncPrompt(agent, entry, presetId)
+        warn(`[${PKG}] Godot MCP 未挂载:server 入口路径为空(在插件页 → 本包页面 → 「Godot 路径」填写)`)
+        return
+      }
+
+      const agentCtx = agent.ctx
+      if (agentCtx === undefined || typeof agentCtx.plugin !== 'function') return
+
+      let mountConfig: GodotMcpConfig
+      try {
+        mountConfig = buildMountConfig({
+          serverName,
+          dist: paths.godotServerDist,
+          projectPath: paths.godotProjectPath,
+          cwd,
+        })
+      } catch (error) {
+        warn(`[${PKG}] Godot MCP 配置组装失败,跳过挂载(错误类型: ${errorName(error)})`)
+        return
+      }
+      if (!validateMountConfig(mountConfig)) return
+
+      let fiber: PluginFiberShape
+      try {
+        fiber = agentCtx.plugin(mcpClient, mountConfig)
+      } catch (error) {
+        warn(`[${PKG}] 挂载 Godot MCP 失败,本会话没有工具(错误类型: ${errorName(error)})`)
+        return
+      }
+      const entry: AgentMount = { key, configKey, fiber, unconfigured: false }
+      mounts.set(key, entry)
+      syncPrompt(agent, entry, presetId)
+
+      // 只观察启动结果,不阻塞:失败时把 fiber 摘掉,让下一次设置变更/预设切换
+      // 触发重挂(官方客户端自身仍会按 reconnect 策略重试,这里只处理它彻底失败)。
+      Promise.resolve(fiber as unknown as PromiseLike<unknown>).then(undefined, (error: unknown) => {
+        warn(`[${PKG}] Godot MCP 启动失败(会话 ${key},错误类型: ${errorName(error)})`)
+        const live = mounts.get(key)
+        // 按身份摘除:同名重挂的新 fiber 不得被迟到的旧拒绝抹掉。
+        if (live !== undefined && live.fiber === fiber) live.fiber = undefined
+      })
+
+      if (options.grace === true) await withReadyGrace(fiber as unknown as PromiseLike<unknown>)
     } catch (error) {
-      warn(`[${PKG}] 工具缓存加载失败: ${errorMessage(error)}`)
+      // 会话创建路径绝不抛错(抛错会打断会话创建)。
+      warn(`[${PKG}] Godot MCP 挂载流程异常(错误类型: ${errorName(error)})`)
     }
   }
 
-  /** 工作台「连接 Godot」:spawn server + 同步清单 + 写缓存(编辑器由工具调用时按需连接)。
-   *  `cwd` 为工作台当前会话工作目录(per-cwd 路径解析键),由路由 query 传入。 */
-  async function connectWorkbench(cwd?: string): Promise<{ ok: boolean; toolCount: number }> {
-    bridge.setCwd(cwd)
-    await bridge.ensureStarted()
-    await syncFacadeFromServer()
-    return { ok: true, toolCount: facadeState?.names.length ?? 0 }
+  // ---- 原版模式:host 作用域的共享连接 + 全局提示词 section ----
+  let globalSectionDisposer: Disposer | undefined
+  let rootMount: { configKey: string; fiber: PluginFiberShape } | undefined
+
+  function syncGlobalSection(): void {
+    // 全局 section 只在原版模式下注册(preset 维度由 scoped section 承担)。
+    const wanted = shouldInjectPrompt({
+      injectLegacyMode: current.injectLegacyMode,
+      promptGuidance: current.promptGuidance,
+    }) && promptService !== undefined
+    if (!wanted) {
+      if (globalSectionDisposer !== undefined) {
+        try { globalSectionDisposer() } catch { /* teardown 尽力而为 */ }
+        globalSectionDisposer = undefined
+      }
+      return
+    }
+    if (globalSectionDisposer !== undefined) return
+    // 原版模式同样按"有没有可挂载的 server 入口"切换文本:没有工具时若还教
+    // 模型用 `mcp__godot__*`,它就只会臆造调用(与按会话分支同一口径)。
+    // 文本函数每次组装时读取当前路径,配置好后自动切回完整工作流。
+    try {
+      globalSectionDisposer = promptService!.section({
+        name: SECTION_NAME,
+        order: SECTION_ORDER,
+        text: () => (resolvePathsFor(undefined).godotServerDist === ''
+          ? notConfiguredSectionText(serverName, current.zhPrompt)
+          : sectionText(serverName, current.zhPrompt)),
+      })
+    } catch (error) {
+      const message = errorMessage(error)
+      if (/duplicate|already/i.test(message)) {
+        warn(`[${PKG}] section 已由先到实例注册,本实例不重复注册`)
+      } else {
+        warn(`[${PKG}] 全局提示词 section 注册失败: ${message}`)
+      }
+      globalSectionDisposer = undefined
+    }
   }
 
-  // ---- 工作台(tools 目录缓存 + webServer 延迟装配;与注入策略无关)。 ----
-  if (tools !== undefined && tools !== null) {
-    const executor = new WorkbenchExecutor()
-    const cache = new ToolsCatalogueCache()
-    ctx.on('tools/change', () => { cache.invalidate() })
+  function disposeRootMount(): void {
+    if (rootMount === undefined) return
+    const fiber = rootMount.fiber
+    rootMount = undefined
+    disposeFiber('原版模式的 Godot MCP', fiber)
+  }
+
+  /** 原版模式的共享连接(一个进程/一条连接服务所有会话)。 */
+  function syncRoot(): void {
+    syncGlobalSection()
+    if (!current.injectLegacyMode || mcpClient === null || mcpClient === undefined) {
+      disposeRootMount()
+      return
+    }
+    const paths = resolvePathsFor(undefined)
+    if (paths.godotServerDist === '') {
+      disposeRootMount()
+      warn(`[${PKG}] 原版模式已开启,但 server 入口路径为空:Godot MCP 不会挂载`)
+      return
+    }
+    let mountConfig: GodotMcpConfig
+    try {
+      mountConfig = buildMountConfig({
+        serverName,
+        dist: paths.godotServerDist,
+        projectPath: paths.godotProjectPath,
+        // 原版模式没有"当前会话":用宿主进程工作目录作子进程 cwd。
+        cwd: process.cwd(),
+      })
+    } catch (error) {
+      disposeRootMount()
+      warn(`[${PKG}] 原版模式 Godot MCP 配置组装失败(错误类型: ${errorName(error)})`)
+      return
+    }
+    const configKey = mountConfigKey(mountConfig)
+    if (rootMount !== undefined && rootMount.configKey === configKey) return
+    disposeRootMount()
+    if (!validateMountConfig(mountConfig)) return
+    const plugin = ctx.plugin
+    if (typeof plugin !== 'function') {
+      warn(`[${PKG}] host ctx 不支持 plugin():原版模式无法挂载 Godot MCP`)
+      return
+    }
+    try {
+      rootMount = { configKey, fiber: plugin.call(ctx, mcpClient, mountConfig) }
+    } catch (error) {
+      warn(`[${PKG}] 原版模式挂载 Godot MCP 失败(错误类型: ${errorName(error)})`)
+    }
+  }
+
+  function listAgents(): AgentShape[] {
+    try {
+      const service = ctx.get('agents') as { list?(): AgentShape[] } | undefined | null
+      return service?.list?.() ?? []
+    } catch {
+      return []
+    }
+  }
+
+  /** 设置或预设变化后的全量对齐(同步部分;每个 agent 的挂载各自异步进行)。 */
+  function resyncAll(): void {
+    if (stopped) return
+    syncRoot()
+    for (const agent of listAgents()) {
+      try { void syncAgent(agent) } catch { /* syncAgent 内部已兜底 */ }
+    }
+  }
+
+  // ---- 路径设置路由(webServer 延迟装配;与挂载策略无关)。 ----
+  {
     const mount = (mountCtx: HostContext): void => {
-      const disposeRoutes = mountWorkbenchRoutes(mountCtx, {
-        tools,
-        systemPrompt: promptService,
-        cache,
-        config: {
-          serverName,
-          godotMcpRoot,
-          projectPath: current.godotProjectPath,
-          unsafe,
-          serverDistPath: current.godotServerDist,
-          pathStore,
-          connect: (cwd?: string) => connectWorkbench(cwd),
-        },
-        executor,
+      const disposeRoute = mountPathSettingsRoute(mountCtx, {
+        pathStore,
+        serverDistPath: current.godotServerDist,
+        projectPath: current.godotProjectPath,
         warn,
       })
-      if (disposeRoutes !== undefined) {
-        mountCtx.effect(() => disposeRoutes, `${PKG}: workbench routes teardown`)
+      if (disposeRoute !== undefined) {
+        mountCtx.effect(() => disposeRoute, `${PKG}: path settings route teardown`)
       }
     }
     if (typeof ctx.inject === 'function') ctx.inject(['webServer'], (hostCtx?: HostContext) => { mount(hostCtx ?? ctx) })
     else mount(ctx)
   }
 
-  // ---- 注入策略:全局 section(仅 legacy)+ per-agent deny/scoped section。 ----
-  let globalSectionDisposer: Disposer | undefined
-  interface PerAgentSurface { disposers: Disposer[]; denied: string[]; hasPrompt: boolean; hide: boolean }
-  const perAgent = new Map<AgentShape, PerAgentSurface>()
-  let cachedNames: string[] | undefined
-  function invalidateNames(): void { cachedNames = undefined }
-
-  function disposeEntry(entry: PerAgentSurface): void {
-    for (const dispose of [...entry.disposers].reverse()) {
-      try { dispose() } catch { /* 继续清理其余 */ }
-    }
-    entry.disposers.length = 0
-    entry.denied = []
-  }
-
-  function godotNames(): string[] {
-    if (cachedNames !== undefined) return cachedNames
-    try {
-      const service = tools !== undefined && tools !== null ? tools : (ctx.get('tools') as ToolsServiceShape | undefined)
-      if (service === undefined || typeof service.schemas !== 'function') { cachedNames = []; return cachedNames }
-      cachedNames = godotToolNames(service.schemas(), toolPrefix)
-    } catch { cachedNames = [] }
-    return cachedNames
-  }
-
-  function isGodotAgent(agent: AgentShape): boolean {
-    try {
-      const presets = ctx.get('agentPresets') as AgentPresetsShape | undefined | null
-      if (presets === undefined || presets === null || typeof presets.composedPreset !== 'function') return false
-      return presets.composedPreset(agent.ctx) === GODOT_PRESET_ID
-    } catch {
-      return false
-    }
-  }
-
-  function scopedToolsOf(agent: AgentShape) {
-    return agent?.ctx?.tools ?? (agent?.ctx?.get?.('tools') as import('./types.js').ScopedToolsShape | undefined)
-  }
-
-  function scopedPromptOf(agent: AgentShape): SystemPromptService | undefined {
-    return (agent?.ctx?.get?.('systemPrompt') as SystemPromptService | undefined)
-      ?? (agent?.ctx as unknown as { systemPrompt?: SystemPromptService } | undefined)?.systemPrompt
-  }
-
-  function installFor(agent: AgentShape, cachedNames?: string[]): void {
-    const names = cachedNames ?? godotNames()
-    const presetId = isGodotAgent(agent) ? GODOT_PRESET_ID : undefined
-    const hide = shouldHideAgent({ injectLegacyMode: current.injectLegacyMode, presetId })
-    const wantsPrompt = needsScopedPrompt({ injectLegacyMode: current.injectLegacyMode, presetId, promptGuidance: current.promptGuidance })
-
-    const existing = perAgent.get(agent)
-    if (existing !== undefined && existing.hide === hide && existing.hasPrompt === wantsPrompt
-      && existing.denied.length === (hide ? names.length : 0)
-      && (hide === false || names.every((n, i) => existing.denied[i] === n))) {
-      return
-    }
-    if (existing !== undefined) disposeEntry(existing)
-    const entry: PerAgentSurface = { disposers: [], denied: [], hasPrompt: wantsPrompt, hide }
-    perAgent.set(agent, entry)
-    const scopedTools = scopedToolsOf(agent)
-
-    if (hide) {
-      if (names.length > 0 && scopedTools?.restrict !== undefined) {
-        const disposeRestriction = scopedTools.restrict({ deny: names })
-        if (typeof disposeRestriction === 'function') entry.disposers.push(disposeRestriction)
-        entry.denied = names
-      }
-    }
-
-    if (wantsPrompt) {
-      const scopedPrompt = scopedPromptOf(agent)
-      if (scopedPrompt !== undefined && typeof scopedPrompt.section === 'function') {
-        entry.disposers.push(scopedPrompt.section({ name: SECTION_NAME, order: SECTION_ORDER, text: () => sectionText(serverName, current.zhPrompt) }))
-      }
-    }
-  }
-
-  function reinstallAll(): void {
-    const agents = (ctx.get('agents') as { list?(): AgentShape[] } | undefined | null)?.list?.() ?? []
-    if (agents.length === 0) return
-    const names = godotNames()
-    for (const agent of agents) {
-      try { installFor(agent, names) } catch (error) { warn(`[${PKG}] agent 注入策略重装失败: ${errorMessage(error)}`) }
-    }
-  }
-
-  /**
-   * 增量 deny 补丁:门面 re-sync/组激活新增的 godot 工具补进已隐藏 agent 的
-   * deny 名单。**合并窗口内只执行一次**——tools/change 事件在注册时逐工具发出,
-   * 逐事件处理会重复全量 `schemas()` 克隆并把 host 主线程打满。
-   * 幂等:无新增则不调用 restrict(restrict 自身会再触发 tools/change,无 diff
-   * 守卫会事件回声)。
-   */
-  function refreshDenyPatches(): void {
-    const names = godotNames()
-    if (names.length === 0) return
-    for (const [agent, entry] of perAgent) {
-      if (!entry.hide) continue
-      const missing = names.filter(name => !entry.denied.includes(name))
-      if (missing.length === 0) continue
-      const scopedTools = scopedToolsOf(agent)
-      const disposeRestriction = scopedTools?.restrict?.({ deny: missing })
-      if (typeof disposeRestriction === 'function') entry.disposers.push(disposeRestriction)
-      entry.denied = entry.denied.concat(missing)
-    }
-  }
-
-  let denyRefreshTimer: NodeJS.Timeout | undefined
-  function scheduleDenyRefresh(): void {
-    if (denyRefreshTimer !== undefined) return
-    denyRefreshTimer = setTimeout(() => {
-      denyRefreshTimer = undefined
-      if (stopped) return
-      try {
-        invalidateNames()
-        refreshDenyPatches()
-      } catch { /* 补丁失败静默:下一轮 tools/change 会再次尝试 */ }
-    }, DENY_REFRESH_DEBOUNCE_MS)
-    denyRefreshTimer.unref?.()
-  }
-
-  function refreshGlobalSection(): void {
-    if (promptService === undefined) return
-    if (globalSectionDisposer !== undefined) {
-      try { globalSectionDisposer() } catch { /* 继续重建 */ }
-      globalSectionDisposer = undefined
-    }
-    if (!current.injectLegacyMode || !current.promptGuidance) return
-    try {
-      globalSectionDisposer = promptService.section({ name: SECTION_NAME, order: SECTION_ORDER, text: () => sectionText(serverName, current.zhPrompt) })
-    } catch (error: unknown) {
-      const message = errorMessage(error)
-      if (/duplicate|already/i.test(message)) {
-        warn(`[${PKG}] section 已由先到实例注册,本实例不重复注册`)
-        globalSectionDisposer = undefined
-      } else {
-        warn(`[${PKG}] 全局提示词 section 注册失败: ${message}`)
-      }
-    }
-  }
-
-  function refresh(): void {
-    refreshGlobalSection()
-    reinstallAll()
-  }
-
+  // ---- 生命周期:卸载时回收全部挂载与 section。 ----
   ctx.effect(
     () => () => {
       stopped = true
-      if (denyRefreshTimer !== undefined) { clearTimeout(denyRefreshTimer); denyRefreshTimer = undefined }
-      for (const entry of perAgent.values()) disposeEntry(entry)
-      perAgent.clear()
+      for (const entry of mounts.values()) disposeMount(entry)
+      mounts.clear()
+      disposeRootMount()
       if (globalSectionDisposer !== undefined) {
         try { globalSectionDisposer() } catch { /* teardown 尽力而为 */ }
         globalSectionDisposer = undefined
       }
-      for (const dispose of facadeDisposers.splice(0)) {
-        try { dispose() } catch { /* teardown 尽力而为 */ }
-      }
-      facadeState = undefined
-      bridge.stop()
     },
-    `${PKG}: injection policy teardown`,
+    `${PKG}: mcp mounts teardown`,
   )
 
   // 实时设置:宿主把 volatile 变更以引用提交进 config 并派发
   // loader/volatile-update(仅本 fiber);Config 为 null 时事件不派发,按初始
-  // 快照工作。
+  // 快照工作。路径/开关变化 → 重挂;zhPrompt 只影响文本函数(闭包读取 current)。
   ctx.on('loader/volatile-update', () => {
     if (stopped) return
-    const previous = current
     current = resolveSettings(readSettingsSnapshot())
-    refresh()
-    // 中文化开关变化:工具描述随注册定型,需重注册门面(翻译映射,不清单)。
-    if (previous.zhPrompt !== current.zhPrompt && facadeState !== undefined) {
-      applyDefs(facadeState.defs, true)
-    }
+    resyncAll()
   })
 
+  // 会话创建:Godot preset 会话在此挂载。返回 promise 让 Cordis 的串行派发等待
+  // 一个有上限的就绪宽限(见 READY_GRACE_MS);syncAgent 不抛错。
   ctx.on('agent/created', (payload: unknown) => {
+    if (stopped) return undefined
     try {
-      if (stopped) return
-      const { agent } = payload as { agent?: AgentShape }
-      if (agent === undefined) return
-      installFor(agent)
-      // Godot preset 会话:从持久缓存加载工具清单(零连接);连接由首次调用/工作台触发。
-      if (isGodotAgent(agent)) loadFacadeFromCache()
+      const agent = (payload as { agent?: AgentShape } | undefined)?.agent
+      if (agent === undefined) return undefined
+      return syncAgent(agent, { grace: true })
     } catch (error) {
-      warn(`[${PKG}] agent/created 注入策略装配失败: ${errorMessage(error)}`)
-    }
-  })
-  ctx.on('agent/disposed', (payload: unknown) => {
-    const { agent } = payload as { agent?: AgentShape }
-    if (agent !== undefined) perAgent.delete(agent)
-  })
-  ctx.on('agent-preset/selected', (sessionId: unknown) => {
-    try {
-      if (stopped) return
-      const list = (ctx.get('agents') as { list?(): AgentShape[] } | undefined | null)?.list?.() ?? []
-      const agent = list.find(candidate =>
-        candidate?.session?.header?.id === sessionId || candidate?.session?.id === sessionId || candidate?.id === sessionId)
-      if (agent !== undefined) {
-        installFor(agent)
-        if (isGodotAgent(agent)) loadFacadeFromCache()
-      }
-    } catch (error) {
-      warn(`[${PKG}] agent-preset/selected 注入策略重装失败: ${errorMessage(error)}`)
-    }
-  })
-  ctx.on('tools/change', () => {
-    try {
-      if (stopped || current.injectLegacyMode) return
-      // 合并窗口内的多事件 → 单次处理(增量 deny)。
-      scheduleDenyRefresh()
-    } catch {
-      // 调度失败静默:下一轮 tools/change 会再次尝试。
+      warn(`[${PKG}] agent/created 挂载流程失败(错误类型: ${errorName(error)})`)
+      return undefined
     }
   })
 
-  // 初始装配:legacy 全局 section(若开)+ 既有 agent 的 per-agent 表面;
-  // 桥接默认不启动(零连接)——工具清单来自持久缓存(loadFacadeFromCache)或
-  // 工作台「连接 Godot」;打开 DSH 不一定要做 Godot 相关操作。
-  refresh()
+  ctx.on('agent/disposed', (payload: unknown) => {
+    try {
+      const agent = (payload as { agent?: AgentShape } | undefined)?.agent
+      if (agent === undefined) return
+      const key = agentKeyOf(agent)
+      if (key === undefined) return
+      const entry = mounts.get(key)
+      if (entry === undefined) return
+      mounts.delete(key)
+      disposeMount(entry)
+    } catch (error) {
+      warn(`[${PKG}] 回收已销毁会话的挂载失败(错误类型: ${errorName(error)})`)
+    }
+  })
+
+  ctx.on('agent-preset/selected', (sessionId: unknown) => {
+    if (stopped) return
+    try {
+      const agent = listAgents().find(candidate =>
+        candidate?.session?.header?.id === sessionId || candidate?.session?.id === sessionId || candidate?.id === sessionId)
+      if (agent === undefined) return
+      // 空白会话换预设:换到 Godot 要挂,换走要拆(首轮之后 DSH 会拒绝换预设)。
+      // 这里不必等就绪宽限——用户的消息不会被这次切换阻塞。
+      void syncAgent(agent)
+    } catch (error) {
+      warn(`[${PKG}] agent-preset/selected 重装失败(错误类型: ${errorName(error)})`)
+    }
+  })
+
+  // 初始装配:原版模式的共享连接 + 既有 agent 的会话挂载。
+  // 默认不启动连接(godotServerDist 为空时只注入"未配置"提示词);打开 DSH
+  // 不一定要做 Godot 相关操作。
+  resyncAll()
 }

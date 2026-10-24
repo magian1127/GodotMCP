@@ -39,10 +39,9 @@ const clientText = existsSync(join(root, 'lib/client.js')) ? readFileSync(join(r
 check('window.__ModuleLoader__.load 头', clientText.includes('window.__ModuleLoader__.load'))
 check('包 id', /id:\s*['"]deepseek-harness-godot_unified['"]/.test(clientText))
 check("fiber 注入声明含 slots 与 configForms", /(?:const|var|let)\s+inject\s*=\s*\[[^\]]*["']slots["'][^\]]*\]/.test(clientText) && /["']configForms["']/.test(clientText) && /exports\.inject\s*=\s*inject/.test(clientText))
-check('注册 conversation.view', clientText.includes('conversation.view'))
 check('注册插件页配置表单(plugins.bundle.config,键为包名)', clientText.includes('plugins.bundle.config') && /BUNDLE_PACKAGE_NAME\s*=\s*["']deepseek-harness-godot_unified["']/.test(clientText))
-check('Tab id godot / order 15', /id:\s*["']godot["']/.test(clientText) && /order:\s*15/.test(clientText))
-check('工作台组件在场', clientText.includes('GodotWorkbench') || clientText.includes('gwb-modal'))
+check('路径设置路由前缀为 /godot-config/api/path-settings', clientText.includes('/godot-config/api/path-settings'))
+check('未残留工作台槽位/路由(conversation.view、/godot-workbench)', !clientText.includes('conversation.view') && !clientText.includes('/godot-workbench'))
 check('未打包 react(外部 require)', !clientText.includes('node_modules/react'))
 check('无顶层 ESM 语句', !/(?:^|\n)\s*(?:export|import)\s/m.test(clientText))
 

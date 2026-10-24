@@ -10,12 +10,10 @@
   "include": [
     "src/ambient.d.ts",
     "src/*.ts",
-    "src/workbench/**/*.ts",
+    "src/path-store.ts",
+    "src/path-settings-route.ts",
     "src/bin/**/*.mts",
-    "src/tests/*.mts",
-    "src/client/grouping.ts",
-    "src/client/form-schema.ts",
-    "src/client/history.ts"
+    "src/tests/*.mts"
   ],
   "exclude": []
 }

@@ -1,21 +1,28 @@
 /**
- * 注入策略纯函数(node --test 可直接验证;host apply 与设置卡片共用语义)。
+ * 设置与挂载决策纯函数(node --test 可直接验证;host apply 与插件页共用语义)。
  *
- * 注入模型(对齐 deepseek-harness-hashline 的 per-agent 表面模式):
- * - `injectLegacyMode`(注入原版模式,默认关):开启后所有会话全局注入
- *   `godot_*` 工具与工作流提示词(即 bundle 全局挂载的原版行为)。
- * - 默认(关):只有加入 Godot preset 的会话注入(工具可见 + 提示词 section),
- *   其余会话在 Agent 自身作用域 deny 这些工具,且不出现提示词。
+ * 接入模型(v0.5,官方 MCP):
+ * - 工具不再由本插件注册——`@deepseek-ai/dsh-mcp-client` 按官方命名
+ *   `mcp__<serverName>__<rawName>` 提供。因此"某个会话是否看得到 Godot 工具"
+ *   等于"该会话作用域里有没有这个 MCP 客户端",不需要 deny/restrict 补丁。
+ * - 默认只有加入 Godot preset 的会话在 `agent/created` 时挂载;
+ *   `injectLegacyMode`(原版模式)改为在 host 作用域挂一个**共享**连接,
+ *   所有会话可见(项目路径取全局设置,不再按会话 cwd 切换)。
  */
 
-/** 注入策略设置(设置卡片 `godot` 命名空间;host 与 client 共用默认值语义)。 */
+import { GODOT_PRESET_ID } from './constants.js'
+
+/** 设置(插件行 config;host 与 client 共用默认值语义)。 */
 export interface GodotSettings {
+  /** 原版模式:host 作用域挂一个共享连接,所有会话可见。 */
   injectLegacyMode: boolean
+  /** 是否注入工作流提示词 section(仅对挂了 Godot MCP 的会话生效)。 */
   promptGuidance: boolean
+  /** 提示词中文化(section 文本;工具描述/错误消息来自上游 server,保持原文)。 */
   zhPrompt: boolean
-  /** GodotMCP server dist 完整路径(空=未配置,工具调用报可行动错误)。 */
+  /** GodotMCP server 入口完整路径(空=未配置,Godot 会话不会挂载 MCP)。 */
   godotServerDist: string
-  /** Godot 项目路径(server env GODOT_MCP_PROJECT_PATH)。 */
+  /** Godot 项目路径(作为 GODOT_MCP_PROJECT_PATH 传给 server;会话 cwd 无匹配时兜底)。 */
   godotProjectPath: string
 }
 
@@ -26,8 +33,6 @@ export const SETTINGS_DEFAULTS: GodotSettings = {
   godotServerDist: '',
   godotProjectPath: '',
 }
-
-export const SETTINGS_KEYS = ['injectLegacyMode', 'promptGuidance', 'zhPrompt', 'godotServerDist', 'godotProjectPath'] as const
 
 /** 逐键校验;布尔回退默认,字符串保留(trim 由调用方处理),非法形状回退默认。 */
 export function resolveSettings(raw: unknown): GodotSettings {
@@ -49,42 +54,30 @@ export function resolveSettings(raw: unknown): GodotSettings {
   }
 }
 
-/** 从工具 schema 目录按服务器前缀收集当前全部 Godot 桥接工具名。 */
-export function godotToolNames(schemas: ReadonlyArray<{ name: string }>, prefix: string): string[] {
-  return schemas.filter(schema => schema.name.startsWith(prefix)).map(schema => schema.name)
+/**
+ * 官方 mcp-client 的工具名前缀:`mcp__<serverName>__`。
+ *
+ * 命名是官方固定约定(不是本插件拼出来的门面),这里只用于提示词里描述工具名。
+ */
+export function toolNamePrefix(serverName: string): string {
+  return `mcp__${serverName}__`
 }
 
-/** 该 agent 是否应隐藏 Godot 工具(非 Godot preset 且未开原版模式)。 */
-export function shouldHideAgent(options: { injectLegacyMode: boolean; presetId?: string }): boolean {
-  return !options.injectLegacyMode && options.presetId !== 'godot'
-}
-
-/** 该 agent 是否需要 scoped 提示词 section(Godot preset 且非 legacy——legacy 由全局 section 覆盖)。 */
-export function needsScopedPrompt(options: { injectLegacyMode: boolean; presetId?: string; promptGuidance: boolean }): boolean {
-  return options.promptGuidance && !options.injectLegacyMode && options.presetId === 'godot'
+/** 该 preset 是否是 Godot preset(会话维度挂载的唯一判据)。 */
+export function isGodotPreset(presetId: string | undefined): boolean {
+  return presetId === GODOT_PRESET_ID
 }
 
 /**
- * 工具说明解析(zhPrompt,输出不带「工具名」前缀):
- * - zh:优先「已本地化描述」(上游中文翻译表),缺失回退上游原文,最后中文占位;
- * - 非 zh:上游原文优先,再回退英文占位。
- * 说明:这是描述**翻译映射**(按名字查表),不是写死的工具清单——工具清单始终
- * 由桥接从 server 动态获取。
+ * 该作用域是否需要工作流提示词 section。
+ * - Godot preset 会话:需要(scoped section)。
+ * - 原版模式:需要(host 全局 section),与 preset 无关。
  */
-export function resolveToolDescription(
-  zh: boolean,
-  localized: string | undefined,
-  upstream: string | undefined,
-  fallback: string,
-): string {
-  if (zh) return localized ?? upstream ?? '（暂无中文说明）'
-  return upstream ?? fallback
-}
-
-/** 工具失败消息本地化(zhPrompt):中文包一层前缀并保留上游错误码/文本;非 zh 维持原样。 */
-export function toolFailureMessage(zh: boolean, name: string, text: string): string {
-  if (zh) {
-    return text === '' ? `「${name}」执行失败` : `「${name}」执行失败：${text}`
-  }
-  return text === '' ? `${name} failed` : text
+export function shouldInjectPrompt(options: {
+  injectLegacyMode: boolean
+  presetId?: string
+  promptGuidance: boolean
+}): boolean {
+  if (!options.promptGuidance) return false
+  return options.injectLegacyMode || isGodotPreset(options.presetId)
 }

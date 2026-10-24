@@ -5,8 +5,8 @@
 // 表单;只有保存才写入,离开页面即丢弃草稿(无放弃/恢复默认值控件)。
 // 字段为 Godot 注入策略三开关 + 「Godot 路径」区。
 // 「Godot 路径」区(server dist 全局单值 + 项目路径按工作目录批量条目)经同源
-// /godot-workbench/api/path-settings 读写 host 持久(PathStore/paths.json),
-// 不走 localStorage——桥接 server 在 host 启动、需 host 读到路径。
+// /godot-config/api/path-settings 读写 host 持久(PathStore/paths.json),
+// 不走 localStorage——MCP 连接在 host 侧挂载、需 host 读到路径。
 import React from 'react'
 import { api, type ProjectEntry } from './api.js'
 
@@ -27,25 +27,19 @@ const DEFAULTS = {
   injectLegacyMode: false,
   promptGuidance: true,
   zhPrompt: false,
-  godotServerDist: '',
-  godotProjectPath: '',
 }
 
 const zh = {
-  summary: 'GodotMCP 桥接的工具注入策略、提示词与相关路径。',
+  summary: 'GodotMCP 的工具挂载策略、提示词与相关路径。',
   loading: '正在读取设置…',
   unavailable: '当前部署未提供 Godot 设置。',
   readOnly: '当前设置文档为只读，无法保存更改。',
-  injectLegacyMode: '注入原版模式',
-  injectLegacyModeDesc: '开启后所有会话注入 godot_* 工具与工作流提示词（原版全局行为）。默认关闭：仅 Godot 预设的会话注入，其余会话隐藏这些工具。',
+  injectLegacyMode: '原版模式（全局挂载）',
+  injectLegacyModeDesc: '开启后在 host 上挂一个共享 MCP 连接：所有会话都能看到 mcp__godot__* 工具并注入工作流提示词（项目路径取全局设置）。默认关闭：只有 Godot 预设会话挂载 MCP，其余会话不是"隐藏"这些工具，而是根本没有挂载。',
   promptGuidance: '注入工作流提示词',
-  promptGuidanceDesc: '在系统提示中说明 Godot 桥接的按需扩面、FIFO 串行与错误恢复。仅对会注入工具的会话生效（Godot 预设或原版模式）。',
+  promptGuidanceDesc: '在系统提示中说明 Godot 的按需扩面、编辑器 FIFO 串行与错误恢复。仅对挂了 Godot MCP 的会话生效（Godot 预设或原版模式）。',
   zhPrompt: '提示词中文化',
-  zhPromptDesc: '开启后注入的系统提示词、工具说明及其错误消息使用中文（默认英文，与内置工具一致）。',
-  godotServerDist: 'Server 入口路径',
-  godotServerDistDesc: 'GodotMCP server 入口的完整路径：随包 shim 可执行文件（标准形态，server-dotnet/publish/<rid>/godot-mcp-shim.exe，由它自举 daemon）。为空时工具调用提示未配置；填写后首次调用自动启动桥接（空闲 10 分钟自动关闭）。',
-  godotProjectPath: 'Godot 项目路径',
-  godotProjectPathDesc: '目标 Godot 项目（含 project.godot）的完整路径，作为桥接的项目上下文。',
+  zhPromptDesc: '开启后注入的工作流提示词使用中文（默认英文）。工具描述与错误消息由 GodotMCP server 提供，保持上游原文。',
   inherited: '继承默认值',
   overridden: '用户覆盖',
   save: '保存',
@@ -54,7 +48,7 @@ const zh = {
   saveTimeout: '保存超时：写入可能已生效，刷新页面后请核对开关状态；若反复出现请反馈。',
   saveNotApplied: '主程序未接受全部设置，已保留草稿。',
   pathTitle: '相关路径',
-  pathDesc: 'server 入口为全局单值；项目路径按工作目录（cwd）批量条目，切换会话时按其工作目录匹配。未设置时回退 CLI 解析链。',
+  pathDesc: 'server 入口为全局单值；项目路径按工作目录（cwd）批量条目，会话创建时按其工作目录匹配并把项目路径传给 server。两项都为空时该会话不挂载 MCP（CLI 解析链只决定 install 时写入 paths.json 的值）。',
   pathServerDist: 'Server 入口（全局）',
   pathServerDistPlaceholder: '.../server-dotnet/publish/<rid>/godot-mcp-shim.exe',
   pathProjects: '项目路径（按工作目录）',
@@ -68,20 +62,16 @@ const zh = {
 }
 
 const en = {
-  summary: 'Tool-injection policy, prompt, and related paths for the GodotMCP bridge.',
+  summary: 'MCP mounting policy, prompt, and related paths for GodotMCP.',
   loading: 'Reading settings…',
   unavailable: 'This deployment does not provide Godot settings.',
   readOnly: 'The settings document is read-only; changes cannot be saved.',
-  injectLegacyMode: 'Legacy injection mode',
-  injectLegacyModeDesc: 'When on, every session sees the godot_* tools and the workflow prompt (original global behavior). Default off: only sessions on the Godot preset inject; all other sessions hide these tools.',
+  injectLegacyMode: 'Legacy mode (global mount)',
+  injectLegacyModeDesc: 'When on, one shared MCP connection is mounted on the host: every session sees the mcp__godot__* tools and the workflow prompt (project path from the global setting). Default off: only Godot-preset sessions mount the MCP; other sessions do not "hide" these tools — they have none.',
   promptGuidance: 'Workflow prompt',
-  promptGuidanceDesc: 'Explain on-demand group activation, editor FIFO ordering, and error recovery in the system prompt. Applies only to sessions that inject tools (Godot preset or legacy mode).',
+  promptGuidanceDesc: 'Explain on-demand group activation, editor FIFO ordering, and error recovery in the system prompt. Applies only to sessions that mounted the Godot MCP (Godot preset or legacy mode).',
   zhPrompt: 'Localize prompt',
-  zhPromptDesc: 'When on, the injected system prompt, tool descriptions, and error messages use Chinese (English by default, matching built-in tools).',
-  godotServerDist: 'Server entry path',
-  godotServerDistDesc: 'Full path to the GodotMCP server entry: the bundled shim executable (standard form, server-dotnet/publish/<rid>/godot-mcp-shim.exe, which bootstraps the daemon). Empty = tool calls report "not configured"; once set, the bridge starts on the first call (auto-closes after 10 idle minutes).',
-  godotProjectPath: 'Godot project path',
-  godotProjectPathDesc: 'Full path of the target Godot project (containing project.godot), used as the bridge project context.',
+  zhPromptDesc: 'When on, the injected workflow prompt uses Chinese (English by default). Tool descriptions and error messages come from the GodotMCP server and stay as provided.',
   inherited: 'Inherited',
   overridden: 'Overridden',
   save: 'Save',
@@ -90,7 +80,7 @@ const en = {
   saveTimeout: 'Save timed out: the write may have landed; refresh and re-check the toggles. If it repeats, please report.',
   saveNotApplied: 'The host did not accept all settings; the draft was kept.',
   pathTitle: 'Related paths',
-  pathDesc: 'The server entry is a single global value; project paths are batch entries keyed by workspace (cwd), matched when you switch sessions. Falls back to the CLI resolve chain when unset.',
+  pathDesc: 'The server entry is a single global value; project paths are batch entries keyed by workspace (cwd), matched when a session starts and passed to the server. When both are empty that session mounts nothing (the CLI resolve chain only decides what install writes into paths.json).',
   pathServerDist: 'Server entry (global)',
   pathServerDistPlaceholder: '.../server-dotnet/publish/<rid>/godot-mcp-shim.exe',
   pathProjects: 'Project paths (by workspace)',
@@ -143,7 +133,7 @@ interface PathSectionProps {
 /** 「Godot 路径」区:server dist 全局单值 + 项目路径按工作目录(cwd)批量条目。
  * 受控、纯渲染组件:自身不持有 serverDist/projects 持久状态、不自动保存、
  * 也没有独立「保存路径」按钮——数据由配置页(createForm)统一管理,保存统一由
- * 页面「保存」按钮触发,经 /godot-workbench/api/path-settings 写 host。
+ * 页面「保存」按钮触发,经 /godot-config/api/path-settings 写 host。
  * 只保留添加行局部输入态与校验提示;每条目编辑/删除经回调上抛。 */
 function PathSettingsSection(props: PathSectionProps): React.ReactElement {
   const t = props.t
@@ -510,7 +500,7 @@ function createForm(scope: any, t: (key: string) => string): (props: { view?: st
 export function registerConfigPage(ctx: Record<string, any>): void {
   // DSH 0.1.7 起 settingsScope 退役:经 configForms 按入口 id(profile 行 id,
   // 与旧 settings 命名空间 'godot' 不同名)取 ConfigForm;snapshot/subscribe/
-  // set 面与旧 settingsScope 同构。缺失时跳过(工作台不受影响)。
+  // set 面与旧 settingsScope 同构。缺失时跳过(页面留空,不抛错)。
   const configForms = ctx.configForms
   if (configForms === undefined || configForms === null || typeof configForms.get !== 'function') return
   const scope = configForms.get(CONFIG_ENTRY_ID)
@@ -518,7 +508,7 @@ export function registerConfigPage(ctx: Record<string, any>): void {
   const ConfigPage = createForm(scope, t)
   ctx.effect(function () {
     return ctx.locale.register(LOCALE_NAMESPACE, DICTS)
-  }, 'godot workbench: settings dictionaries')
+  }, 'godot config: settings dictionaries')
   ctx.slots.inject('plugins.bundle.config', function () {
     return ctx.slots.register({
       name: 'plugins.bundle.config',

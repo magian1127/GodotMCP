@@ -1,10 +1,10 @@
 // CLI 顶层常量与共享类型。
 export const PKG = 'deepseek-harness-godot_unified'
 
-/** mcp-client 桥接行(CLI 写入 profile 用户 patch 层)的默认 id。 */
+/** 历史静态 mcp-client 行(旧 CLI 写入 profile 用户 patch 层)的 id:v0.5 只用于清理。 */
 export const MCP_ROW_ID = 'godot-mcp'
 
-/** 默认 serverName:工具以 godot_<tool> 形式出现。 */
+/** 默认 serverName:工具以 `mcp__<serverName>__<raw>` 形式出现(默认 `mcp__godot__*`)。 */
 export const SERVER_NAME_DEFAULT = 'godot'
 
 /** bundle patch 行 id(cordis.patch.yml 的 insert 条目,与 host 侧同步)。 */

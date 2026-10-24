@@ -13,6 +13,7 @@ interface ModuleState {
 }
 
 const schemasteryState: ModuleState = { cache: undefined, failed: false }
+const mcpClientState: ModuleState = { cache: undefined, failed: false }
 
 /** 桌面版 Host(Electron RunAsNode)argv 不带 --profile,profile 固定为 desktop
  * (apps/desktop/src/paths.ts);此时不能落回 web 默认,否则 createRequire 会
@@ -75,7 +76,10 @@ async function importFromProfile(name: string, state: ModuleState): Promise<void
 }
 
 // 预载失败保持 cache undefined，由 loadFromProfile 的同步兜底兜住。
+// DSH 0.2.1-rc.2 实测：`@deepseek-ai/dsh-mcp-client` 没有 default 导出，聚合面就是
+// 整个命名空间（name/inject/Config/apply）——`ctx.plugin()` 需要的正是这个对象。
 await importFromProfile('@deepseek-ai/schemastery', schemasteryState)
+await importFromProfile('@deepseek-ai/dsh-mcp-client', mcpClientState)
 
 function loadFromProfile(name: string, state: ModuleState): unknown {
   if (state.cache !== undefined) return state.cache
@@ -94,4 +98,15 @@ function loadFromProfile(name: string, state: ModuleState): unknown {
 
 export function loadSchemastery(): unknown {
   return loadFromProfile('@deepseek-ai/schemastery', schemasteryState)
+}
+
+/**
+ * 从当前 profile 解析宿主自带的 MCP 客户端插件（`@deepseek-ai/dsh-mcp-client`）。
+ *
+ * 返回的是**插件本体**（模块命名空间：name/inject/Config/apply），供
+ * `agent.ctx.plugin()` / `ctx.plugin()` 挂载；不是 Config 值。拿不到时返回 null，
+ * 调用方降级为"不挂载 + 记一条错误日志"——宁可没有工具，也不自建一份连接。
+ */
+export function loadMcpClient(): unknown {
+  return loadFromProfile('@deepseek-ai/dsh-mcp-client', mcpClientState)
 }

@@ -2,21 +2,26 @@
 
 [English](README.en.md) | 中文
 
-把 [GodotMCP](https://github.com/)（Godot 4 编辑器与游戏的 MCP 控制工具集）接入 DSH：模型在会话里直接读写场景、节点、脚本与资源，跑确定性游玩测试，截图验证视觉结果。
+把 [GodotMCP](https://github.com/magian1127/GodotMCP)（Godot 4 编辑器与游戏的 MCP 控制工具集）接入 DSH：模型在会话里直接读写场景、节点、脚本与资源，跑确定性游玩测试，截图验证视觉结果。
 
 ## 它做什么
 
-- **自研桥接 + 动态工具**：插件自己 spawn GodotMCP 桥接 server（stdio）并经内嵌极简 MCP client 桥接——工具以 `godot_<tool>` 稳定命名，清单**来自 server 的 `tools/list`**（真实 schema/描述，随组激活 `discover_tools` 动态增删）：启动面 19 个常驻工具 + 1 个元工具，另有 31 组 64 个按需工具组，上下文成本受控（启动面约 8.8K tokens）。插件内**不写死任何工具**。
-- **按会话 cwd 传参**：桥接按**当前调用会话的工作目录**解析项目路径（`$DSH_HOME/godot/paths.json` 按 cwd 批量条目，无匹配回退全局设置）并传给 server——不同会话工作区可以是不同 Godot 项目，绝不绑死目录。
+- **在 Godot 会话里挂载宿主官方 MCP 客户端**：v0.5 起本包**不实现 MCP 客户端**。加入 Godot preset 的会话创建时，把 DSH 自带的 `@deepseek-ai/dsh-mcp-client` 挂进**该会话的 Agent 作用域**，连接、握手、工具发现、`list_changed` 增量、断线重连与图片投影全部由它负责。工具名是官方固定约定 `mcp__godot__<原生工具名>`（`serverName` 可由插件行 config 覆盖，改它会改掉模型看到的工具名）。
+- **工具清单仍由 server 动态提供**：清单来自 GodotMCP server 的 `tools/list`（真实 schema 与描述），插件内**不写死任何工具**。常驻面 19 个工具 + 1 个元工具 `discover_tools`，另有 31 组按需工具组；`discover_tools` 激活一组后 server 发 `list_changed`，官方客户端自动把这批工具加入本会话。
+- **只有 Godot 会话有工具**：非 Godot 会话**根本不挂载**——没有连接、没有工具，不是"注册后隐藏"。
+- **按会话 cwd 传项目路径**：挂载时按**该会话的工作目录**解析 Godot 项目路径（`$DSH_HOME/godot/paths.json` 按 cwd 批量条目，无匹配回退全局设置）并作为 `GODOT_MCP_PROJECT_PATH` 传给 server；子进程 cwd 也设为会话 cwd——不同会话工作区可以是不同 Godot 项目，绝不绑死目录。
+- **进入会话即连接**：进入 Godot 会话就建立连接（不再"首次调用才拉起"，也没有空闲自动关闭）。编辑器没开不会让会话创建失败，断线由官方客户端自动重连（500ms 起、每次翻倍、上限 30s）；截图等图片结果现在是**真正的图片附件**。
 - **工作流提示词 section**（可选，随 bundle 行挂载）：教模型按需扩面、批量编辑、理解编辑器 FIFO 串行语义、按错误码恢复、用截图验证。
 - **管理 CLI `dsh-godot`**：install / uninstall / status——校验 server 构建产物与 Godot 项目、写入/清理路径配置、体检编辑器注册表与端口。
-- **Godot 工作台**：DSH Web 会话顶部第三个 Tab「Godot」，旁路浏览全部工具、按需组激活、手动调用与状态条（见下）。
+- **插件页配置表单**：注入三开关 + 「相关路径」区（server 入口全局单值 + 按工作目录的项目路径批量条目），保存即写 host 侧 `paths.json`。
+
+> 通用工具调试界面（工具树 / 手动调用 / 结果与历史 / 状态条）与 Godot 无关，已迁至 `deepseek-harness-project-mcp` 的「工具调试」Tab；本包不再提供会话顶部 Tab。
 
 ## 前提
 
-1. DSH（CLI 自带 `@deepseek-ai/dsh-mcp-client`，无需另装）。
-2. GodotMCP 工作区就绪：随包 shim 在位——`<GodotMCP>/plugin/godot-mcp-unified/server-dotnet/publish/<rid>/godot-mcp-shim[.exe]`（由仓库发布产出：`dotnet publish plugin/godot-mcp-unified/server-dotnet/src/godot-mcp-shim -c Release -p:PublishProfile=<rid>`）。host 直接 spawn 该 shim，由它确保机器级单例 daemon 在跑（同目录的 `godot-mcp-daemon[.exe]`）再把 stdio 转发到 daemon 的 HTTP 面，因此不要求 daemon 先被别处拉起。仅 stdio 兜底/回滚时才用 `<GodotMCP>/adapters/dsh/godot-http-bridge.mjs`（Node 脚本，经 node 执行；Node 桥已随插件 1.1.0 退役）。
-3. 目标 Godot 项目已安装 `godot_mcp_toolkit` addon（用 GodotMCP 的 `install-godot-project.ps1`），且**编辑器正在运行**（无头亦可：`godot --headless --editor --path <项目>`）。server 不启动编辑器；编辑器不在时工具调用返回可行动错误。
+1. DSH（CLI 自带 `@deepseek-ai/dsh-mcp-client`——本插件挂载的就是它，无需另装）。
+2. GodotMCP 工作区就绪：随包 shim 在位——`<GodotMCP 工作区>/plugin/godot-mcp-unified/server-dotnet/publish/<rid>/godot-mcp-shim[.exe]`（由仓库发布产出：`dotnet publish plugin/godot-mcp-unified/server-dotnet/src/godot-mcp-shim -c Release -p:PublishProfile=<rid>`）。本插件把这个入口作为 stdio server 交给宿主官方客户端直接 spawn；shim 负责确保机器级单例 daemon 在跑（同目录的 `godot-mcp-daemon[.exe]`）再把 stdio 转发到 daemon 的 HTTP 面，因此不要求 daemon 先被别处拉起。仅 stdio 兜底/回滚时才用 `<GodotMCP 工作区>/adapters/dsh/godot-http-bridge.mjs`（Node 脚本，经 node 执行；Node 桥已随插件 1.1.0 退役）。
+3. 目标 Godot 项目已安装 `godot_mcp_toolkit` addon（用 GodotMCP 的 `install-godot-project.ps1`），且**编辑器正在运行**（无头亦可：`godot --headless --editor --path <Godot 项目>`）。server 不启动编辑器；编辑器不在时工具调用返回可行动错误，但连接与会话创建都不受影响。
 
 ## 环境要求
 
@@ -26,39 +31,39 @@
 ## 安装
 
 ```sh
-# 从本仓库（开发安装,含 bundle 行 + 路径配置）:
+# 从本仓库(开发安装,含 bundle 行 + 路径配置):
 node bin/dsh-godot.mjs install --profile web \
-  --project <Godot 项目绝对路径> \
+  --project <Godot 项目> \
   --cwd <会话工作目录> \
-  --godot-mcp-root <GodotMCP 工作区根目录> \
-  --link <本仓库目录>
+  --godot-mcp-root <GodotMCP 工作区> \
+  --link <本仓库>
 
-# 或不装 bundle(只要桥接能力,不要提示词 section/工作台):
+# 或不装 bundle(只要挂载能力,不要提示词 section/配置表单):
 node bin/dsh-godot.mjs install --profile web \
-  --project <Godot 项目绝对路径> \
-  --server-dist <GodotMCP>/plugin/godot-mcp-unified/server-dotnet/publish/<rid>/godot-mcp-shim.exe
+  --project <Godot 项目> \
+  --server-dist <GodotMCP 工作区>/plugin/godot-mcp-unified/server-dotnet/publish/<rid>/godot-mcp-shim.exe
 ```
 
 server dist 解析顺序：`--server-dist` > `$GODOT_MCP_SERVER_DIST` > `--godot-mcp-root`/`$GODOT_MCP_ROOT`。
 
-**桌面版 DSH（Electron 应用）**：本插件兼容桌面版（桌面 Host 端口 19387）。路径配置 `$DSH_HOME/godot/paths.json` 是机器级共享——`install` 在桌面场景照常写入（`--profile desktop` 时仅跳过 bundle 安装）；桥接 spawn 的 shim 是原生 exe，不依赖 PATH 上的 node。bundle（提示词 section/工作台）的 link 开发安装（桌面应用**未运行**时执行）——编辑 `~/.dsh/profiles/desktop/package.json`：
+**桌面版 DSH（Electron 应用）**：本插件兼容桌面版（桌面 Host 端口 19387）。路径配置 `$DSH_HOME/godot/paths.json` 是机器级共享——`install` 在桌面场景照常写入（`--profile desktop` 时仅跳过 bundle 安装）；官方客户端 spawn 的 shim 是原生 exe，不依赖 PATH 上的 node。bundle（提示词 section + 插件页配置表单）的 link 开发安装（桌面应用**未运行**时执行）——编辑 `~/.dsh/profiles/desktop/package.json`：
 
 ```jsonc
-"dependencies": { "deepseek-harness-godot_unified": "link:<本仓库绝对路径>" },
+"dependencies": { "deepseek-harness-godot_unified": "link:<本仓库>" },
 "dsh": { "profile": { "bundles": [ /* 官方 bundle 保持原样，末尾追加 */ "deepseek-harness-godot_unified" ] } }
 ```
 
 在 profile 目录内执行 `pnpm install` 物化链接，启动桌面应用即挂载；改源码后 `npm run build` 并重启桌面应用；卸载移除两处条目后重新 `pnpm install`。
 
-v0.4 起 install **不再写官方 mcp-client 行**（自研桥接）：把 `serverDist` 与 `{cwd, projectPath}` 条目写入 `$DSH_HOME/godot/paths.json`（并清理历史官方桥接行）。路径生效无需重启——在 **Godot preset 会话**（`Godot` 模式，由本包 bundle patch 的 `preset-godot` 行声明，无需手工安装 preset 目录）中首次创建时桥接自动加载；也可在侧栏「插件」页 → deepseek-harness-godot_unified 页面按 cwd 增改路径（保存即时生效，DSH 0.1.6+）。不同会话工作区可以配置不同 Godot 项目。
+v0.5 起 install **不写 profile 的 mcp-client 行**：把 `serverDist` 与 `{cwd, projectPath}` 条目写入 `$DSH_HOME/godot/paths.json`（并清理历史静态 mcp-client 受管块，防双轨）。路径生效无需重启——进入 **Godot preset 会话**（`Godot` 模式，由本包 bundle patch 的 `preset-godot` 行声明，无需手工安装 preset 目录）时，插件按该会话的 cwd 解析路径、把宿主官方 MCP 客户端挂到该会话；也可在侧栏「插件」页 → deepseek-harness-godot_unified 页面按 cwd 增改路径（保存即时生效，DSH 0.1.6+）。host 按文件 mtime 重读 `paths.json`，所以 CLI 在另一个进程里改写的路径同样会在下一次解析时生效。不同会话工作区可以配置不同 Godot 项目。
 
 ### 常用选项
 
 | 选项 | 语义 |
 | --- | --- |
-| `--cwd <dir>` | 条目绑定的会话工作目录（默认当前目录；按 cwd 匹配生效） |
-| `--server-name <name>` | 工具命名空间（默认 `godot`，即 `godot_*`；保留参数） |
-| `--read-only` / `--unsafe` / `--rate-limit` / `--editor-port` / `--runtime-port` / `--timeout-ms` | 原官方行 env 参数，v0.4 不再写入（警告）；相关能力由 server 默认/项目设置提供 |
+| `--cwd <dir>` | 条目绑定的会话工作目录（默认当前目录；按会话 cwd 匹配生效） |
+| `--server-name <name>` | 保留参数：v0.5 不再写 profile 行，工具名由插件行 config 的 `serverName` 决定（默认 `godot`，即 `mcp__godot__*`） |
+| `--read-only` / `--unsafe` / `--rate-limit` / `--editor-port` / `--runtime-port` / `--timeout-ms` | 原官方行 env 参数，v0.5 不再写入（警告）；相关能力由 server 默认/项目设置提供 |
 
 ## 验证
 
@@ -67,7 +72,7 @@ node bin/dsh-godot.mjs status --profile web   # 路径配置/server/项目/注�
 dsh --profile web --dump-config | grep godot  # 组合校验(不启动)
 ```
 
-GUI 里：用 Godot preset 新建会话 → 模型即可看到 `godot_*` 工具；也可在「Godot」工作台 Tab 浏览/手动调用。前提是目标项目的 Godot 编辑器在运行。
+GUI 里：用 Godot preset 新建会话 → 模型即可看到 `mcp__godot__*` 工具（进入会话即建立连接，不需要先手动调用一次）。前提是目标项目的 Godot 编辑器在运行。若 server 入口为空，该会话里没有工具、只有一段"如何配置"的提示词。需要手动调试工具调用时，用 `deepseek-harness-project-mcp` 的「工具调试」Tab。
 
 **技能目录**：本包的 6 个 Godot 工作流技能（godot-control / godot-debug / godot-mcp-extension / godot-playtest / godot-project-setup / godot-ui）随 Godot preset 提供，来源是包内 `skills/`——它是指向上游 GodotMCP `plugin/godot-mcp-unified/skills` 的 junction，**改上游即时生效**（无需重建本包）。历史 `~/.dsh/.agent-presets/godot/skills/` 目录已废弃（DSH 0.1.6+ 不再读取该目录）。
 
@@ -79,53 +84,32 @@ GUI 里：用 Godot preset 新建会话 → 模型即可看到 `godot_*` 工具�
 ## 卸载
 
 ```sh
-node bin/dsh-godot.mjs uninstall --profile web            # 清空路径配置(并清理历史官方桥接行)
-dsh plugin --profile web remove deepseek-harness-godot_unified # 移除 bundle(提示词 section/工作台)
+node bin/dsh-godot.mjs uninstall --profile web            # 清空路径配置(并清理历史静态 mcp-client 行)
+dsh plugin --profile web remove deepseek-harness-godot_unified # 移除 bundle(提示词 section/配置表单)
 ```
 
 ## 数据与边界
 
-- 桥接 server 只连本机回环（编辑器/运行时 WebSocket，token 鉴权）；自研桥接 spawn 时清洗凭据样式变量与 `DSH_*`，显式传入的 `GODOT_MCP_*` 覆盖值不受影响。
-- server 路径与项目路径写在 **`$DSH_HOME/godot/paths.json`**（机器本地配置，不随包发布、不入 git）；历史官方 mcp-client 受管块由 CLI 清理。
-- 已知限制：MCP resources（如 `godot://roots`）不被自研桥接透传；上游工具的只读/破坏性注解不映射为 DSH 权限规则（工作台采取保守确认策略）。
+- GodotMCP server 只连本机回环（编辑器/运行时 WebSocket，token 鉴权）；stdio 子进程的环境由宿主官方 MCP 客户端清洗（凭据样式变量与 `DSH_*` 被剔除），本插件显式传入的 `GODOT_MCP_PROJECT_PATH` 不受影响。
+- server 入口与项目路径写在 **`$DSH_HOME/godot/paths.json`**（机器本地配置，不随包发布、不入 git）；历史静态 mcp-client 受管块由 CLI 清理。
+- 默认（按会话挂载）下，每个 Godot 会话（含继承 preset 的子代理）各持有一条轻量 stdio shim 连接；机器级 daemon 仍是单例，由 shim 复用。原版模式则只有 host 上的一条共享连接。
+- 已随 v0.5 移除：工具清单缓存 `$DSH_HOME/godot/tools-cache.json`（**不再读取**，旧文件残留在盘上无害、也不会被自动删除）、上游中文描述翻译表、deny/restrict 注入补丁。
+- 已知限制：MCP 提示词模板（prompts）官方客户端不支持；资源（如 `godot://roots`）由 profile 的 `dsh-mcp-resources` 行提供，本包不自行转发；上游工具的只读/破坏性注解不映射为 DSH 权限规则。
 
-## Godot 工作台（Godot Workbench）
+## 工具注入策略与路径（插件页配置表单）
 
-DSH Web 会话界面的顶部新增第三个 Tab「Godot」，作为本插件与整个 GodotMCP server 的预览与调试点。它**不经过对话、不写回会话**，全程走同源 `/godot-workbench/api/*` 路由；client 半边随插件冷启动挂载（首次安装需重启一次 `dsh web`），此后 `lib/client.js` 的改动由 DSH client HMR 在页面内自动换血，无需刷新页面。
-
-能力：
-
-- **全部工具浏览**：列出当前可调用的全部工具，`godot_*`（Godot）置顶展开；GodotMCP 的 31 个按需工具组单独列出（灰显 + 描述 + 「激活」按钮），其余按名称前缀聚拢为「内置工具」/「其他插件」。
-- **手动调用**：选中工具后按 JSON Schema 生成表单（或切「原始 JSON」整段编辑），点「执行」直接调用并查看结果——文本 / JSON / 截图图片内联 / 错误码 + 可行动建议；进行中可「取消」。
-- **结果区四个子页**：结果、历史（最近 50 条，localStorage）、技能（GodotMCP 5 个 SKILL.md + 本包提示词 section）、提示词面（当前实际生效的 systemPrompt sections，验证注入效果）。
-- **状态条**：桥接工具数 / 编辑器注册表（项目 · 端口 · Godot 版本 · pid）/ `READ_ONLY` 标记 / server dist 路径与存在性 / 安装指引；拉取失败时显示错误原因与「重试」按钮（MCP/编辑器就绪后一键重新探测），不再无限「加载中」。
-- **视图模式**：与「轨迹」Tab 同为 composer-overlay 视图——工作台占满视口、自带滚动器；底部输入框以浮动条形式为内容让位（根元素 `data-conversation-composer-overlay`，走 DSH `ConversationRoot` 的 `:has()` 契约），不呈现对话式粘底输入框。
-
-### 工具注入策略与动态工具（插件页配置表单）
-
-**自研桥接 + 动态工具**：插件自己 spawn GodotMCP server（stdio）并经内嵌极简 MCP client 桥接——工具清单**来自 server 的 `tools/list`**（真实 schema/描述，随组激活/扩展动态增删），插件内**不写死任何工具**；server 默认不启动，Godot preset 会话创建时自动预热一次清单（异步，不阻塞），空闲 10 分钟自动关闭，调用时按需自愈。桥接按**调用会话的工作目录（cwd）**解析并传参项目路径——不同会话可以做不同 Godot 项目，绝不绑死目录。插件页配置表单提供：
+**按会话挂载宿主官方 MCP 客户端**：插件只决定"哪些会话需要它、它连哪个 server"。会话创建（`agent/created`）且 preset 是 `godot` 时，把官方客户端挂进该会话的 Agent 作用域；**空白会话（首轮之前）**切到 Godot preset 同样挂载，切走 / 会话销毁 / 插件卸载时卸载（首轮之后 DSH 不允许换预设）。挂载不 await 连接（失败只记日志，绝不打断会话创建）：会话创建最多等 10 秒让工具就绪，超时则工具在后台就位、下一轮可见。插件页配置表单提供：
 
 | 设置 | 默认 | 说明 |
 | --- | --- | --- |
-| 注入原版模式 | 关 | 开=所有会话全局注入工具与提示词（即时生效）；关=**仅 Godot preset 会话注入**，其余会话在 Agent 作用域隐藏这些工具（schema 面不出现） |
-| 注入工作流提示词 | 开 | 工作流提示词 section 开关（仅对注入工具的会话生效） |
-| 提示词中文化 | 关 | 注入的工作流提示词与桥接工具说明使用中文（默认英文）；工具名保持英文 |
+| 原版模式（全局挂载） | 关 | 开=在 host 上挂**一个共享连接** + 全局注入工作流提示词，所有会话都能看到 `mcp__godot__*` 工具（项目路径取全局设置、不随会话 cwd 切换）；关=**仅 Godot preset 会话挂载**，其余会话**根本没有**这些工具（不是隐藏） |
+| 注入工作流提示词 | 开 | 工作流提示词 section 开关（仅对挂了 Godot MCP 的会话生效：Godot preset 的会话级 section，或原版模式的全局 section） |
+| 提示词中文化 | 关 | 只把**工作流提示词**切成中文（默认英文）；工具描述与错误消息来自上游 server，保持原文。工具名保持英文 |
 
-路径（server dist、项目路径）支持两种来源：插件页配置表单的「Godot 路径」区（含**按工作目录的项目路径批量条目**，切换会话按 cwd 匹配）与 `$DSH_HOME/godot/paths.json` 持久存储；无匹配时回退全局值。编辑器离场时桥接在几次退避重试后静默待命，下一次调用按需重连自愈。
+「相关路径」区（server 入口全局单值 + **按工作目录的项目路径批量条目**）经同源 `GET/POST /godot-config/api/path-settings` 读写 `$DSH_HOME/godot/paths.json`；会话创建时按其 cwd 匹配项目路径（全表只有一条时用它兜底），无匹配回退全局值。server 入口为空时不挂载，Godot 会话会得到一段"如何配置"的提示词（模型据此不臆造工具调用并引导你去填路径），其他会话没有任何提示。
 
 安全与边界：
 
-- 路由仅接受**同源 + 回环**（校验 `Origin` 与 Host 一致或无 Origin）；GET 只读、POST 带 JSON 体；错误以 `{error:{code,message}}` 返回。
-- 工具注解（readOnly/destructive）经 mcp-client 不桥接而不可得，工作台采取**保守确认策略**：每次都弹确认（工具名 + 参数摘要），可勾选「本会话跳过确认」（仅内存记忆、不落盘），但工具名含 `unsafe` 的**永远需要确认**。
-- 若其它插件为某工具注册了 pre-execute `'ask'` 策略，工作台调用（无 agent 上下文）会被**拒绝**——错误原样呈现，设计如此、不做绕过。
-- 历史仅存浏览器 localStorage（上限 50 条、每条摘要 8KB 截断）；不向对话会话写入任何内容。
-
-已知限制：
-
-1. 截图 base64 内联受单响应体积限制（单图超 4MB 截断为截断标记）。
-2. 工具注解不可得 → 确认策略保守（每次确认或会话级豁免；`unsafe` 永远确认）。
-3. pre-execute `'ask'` 策略工具在工作台调用会被拒（设计如此，不绕过）。
-4. server stderr 对工作台不可见（mcp-client 不暴露）。
-5. Tab 依赖 web profile 的 `ui-conversation` 契约（`conversation.view` list slot）——DSH 升级若改契约需适配。
+- 路径设置路由仅接受**本机回环 + 同源**（`Origin`/`Host`/`sec-fetch-site` 三重校验）；方法不是 GET/POST 时 405，请求体上限 8MiB（413），非法 JSON 400；错误以 `{error:{code,message}}` 返回。
 
 MIT License.

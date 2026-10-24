@@ -9,14 +9,16 @@
 #
 #   node bin/dsh-godot.mjs install --profile web --link <项目目录> --project <Godot 项目>
 #
-# 行一 `dsh-godot`:注册 Godot 工作流提示词 section 与工作台(host 侧插件)。
+# 行一 `dsh-godot`:Godot 工作流提示词 section、按会话挂载宿主官方 mcp-client
+# (仅 Godot preset 会话;原版模式在 host 上挂一个共享连接)与路径设置路由(host 侧插件)。
 # 行二 `preset-godot`:Godot agent preset 声明(0.1.6+ DSH 已不读
 # $DSH_HOME/.agent-presets/<id>/ 目录,preset 只能经 bundle patch 声明行注册)。
 # 迁移自 legacy 目录:config.name/description 取自原 preset.yml,plugins 逐字
 # 迁自原 agent.cordis.yml;唯一改动是 customSkillDirs 改为从本包 resolve——
 # 本包 skills/ 目录是指向上游 GodotMCP plugin/godot-mcp-unified/skills 的
-# junction(单一真身在上游,上游修改即时生效;npm pack 会把 junction 内容
-# 解引用为文件快照打进发布包)。
+# junction(单一真身在上游,上游修改即时生效)。注意:`npm pack` **不会**跟随
+# junction——实测 tarball 里没有任何 skills/ 条目,发布前必须先物化技能快照
+# (见 docs/release.md「发布阻塞项」)。
 - insert:
     - id: dsh-godot
       name: 'deepseek-harness-godot_unified'
@@ -25,7 +27,7 @@
       config:
         id: godot
         name: Godot
-        description: Godot MCP 工具与工作流提示词（引擎桥接、按需工具组与工作台）。
+        description: Godot MCP 工具与工作流提示词（引擎桥接、按需工具组）。
         plugins:
           # 该 preset 继承 shipped `standard` 的全部能力;发布服务(inject)的行
           # 必须落在带 isolate realm 的 group 内,否则与第二个 preset 冲突。

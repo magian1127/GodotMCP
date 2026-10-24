@@ -1,8 +1,8 @@
 {
   "name": "deepseek-harness-godot_unified",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "type": "module",
-  "description": "Godot MCP Unified for DSH：把 GodotMCP 桥接服务器接入 DSH 的 @deepseek-ai/dsh-mcp-client 行与 Godot 工作流提示词 section，附安装/卸载/体检 CLI。Godot MCP Unified bridge row + workflow prompt section for DSH, with an install/uninstall/status CLI.",
+  "description": "Godot MCP Unified for DSH：进入 Godot preset 会话时把宿主官方 MCP 客户端接到 GodotMCP server（不实现自有 MCP 客户端），附 Godot 工作流提示词、路径配置 CLI 与插件页。Mounts DSH's official MCP client for GodotMCP in Godot-preset sessions only, with a workflow prompt, path CLI, and plugin page.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/magian1127/deepseek-harness-godot_unified.git"
@@ -66,6 +66,7 @@
     "dsh-plugin",
     "godot",
     "mcp",
+    "mcp-client",
     "gamedev",
     "gdscript"
   ],

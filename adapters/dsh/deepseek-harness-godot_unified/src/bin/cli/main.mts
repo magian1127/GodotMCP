@@ -1,7 +1,8 @@
 // CLI 参数解析与命令分发(install / uninstall / status)。
-// v0.4:本插件使用**自研桥接**——不再写官方 mcp-client 受管块;
-// install 把路径写入 `$DSH_HOME/godot/paths.json`(host 侧 PathStore 同源配置),
-// uninstall 清空该文件,status 体检配置与编辑器注册表。
+// v0.5:工具由宿主官方 mcp-client 提供(进入 Godot preset 会话时挂载),
+// 本 CLI 不再写 profile 里的 mcp-client 行,只把路径写入
+// `$DSH_HOME/godot/paths.json`(host 侧 PathStore 同源配置);uninstall 清空该文件,
+// status 体检配置与编辑器注册表。
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, dirname, join, resolve } from 'node:path'
@@ -26,8 +27,8 @@ const USAGE = [
   `  dsh-godot uninstall [--profile <name>]`,
   `  dsh-godot status [--profile <name>]`,
   ``,
-  `v0.4 起 install 不再写官方 mcp-client 行(自研桥接):路径写入 $DSH_HOME/godot/paths.json,`,
-  `由 Godot preset 会话创建时自动加载;正式入口是侧栏「插件」页 → 本包页面路径区(DSH 0.1.6+)。`,
+  `install 只写 $DSH_HOME/godot/paths.json(不写 profile 的 mcp-client 行):`,
+  `Godot preset 会话创建时按会话 cwd 挂载宿主官方 MCP 客户端;正式入口是侧栏「插件」页 → 本包页面路径区。`,
   `server dist 解析顺序:--server-dist > $GODOT_MCP_SERVER_DIST > --godot-mcp-root/$GODOT_MCP_ROOT。`,
 ].join('\n')
 
@@ -181,23 +182,24 @@ async function cmdInstall(argv: string[]): Promise<number> {
     }
   }
 
-  // v0.4:自研桥接——路径写入 host 侧 PathStore 同源文件($DSH_HOME/godot/paths.json),
-  // 由 Godot preset 会话创建时自动加载;不再写官方 mcp-client 行。
+  // 路径写入 host 侧 PathStore 同源文件($DSH_HOME/godot/paths.json),
+  // 由 Godot preset 会话创建时按 cwd 解析并挂载宿主官方 MCP 客户端;
+  // 本 CLI 不再写 profile 的 mcp-client 行(实测:那会把项目路径固化在 profile 里)。
   const cwd = args.cwd ?? process.cwd()
   const current = readGodotPaths()
   const projects = current.projects.filter(entry => entry.cwd !== cwd)
   projects.push({ cwd, projectPath: project.path })
   writeGodotPaths({ serverDist: dist.path, projects })
-  // 清理历史官方 mcp-client 受管块(自研桥接不使用;残留会双轨)。
+  // 清理历史官方 mcp-client 受管块(v0.5 由插件按会话挂载,静态行会与它双轨)。
   // desktop profile 的 patch 文件由桌面应用管理,CLI 不触碰。
   if (args.profile.toLowerCase() !== 'desktop' && removeManagedRow(args.profile)) {
-    console.log(`[${PKG}] 已清理旧的官方 mcp-client 桥接行(自研桥接不再需要)`)
+    console.log(`[${PKG}] 已清理旧的静态 mcp-client 行(v0.5 改为进入 Godot preset 会话时按会话挂载)`)
   }
   console.log(`[${PKG}] 路径配置已写入 $DSH_HOME/godot/paths.json:serverDist + cwd=${cwd} → ${project.path}`)
-  console.log(`[${PKG}] Godot preset 会话创建时桥接自动加载;侧栏「插件」页 → 本包页面可继续按 cwd 增改`)
+  console.log(`[${PKG}] 进入 Godot preset 会话时挂载官方 MCP 客户端;侧栏「插件」页 → 本包页面可继续按 cwd 增改`)
   console.log(`[${PKG}] 前提:目标 Godot 编辑器已运行且项目装了 godot_mcp_toolkit addon;否则工具调用会返回可行动错误`)
   if (args.readOnly || args.unsafe || args.rateLimit !== null || args.editorPort !== null || args.runtimePort !== null || args.timeoutMs !== null) {
-    console.warn(`[${PKG}] 警告: --read-only/--unsafe/--rate-limit/--editor-port/--runtime-port/--timeout-ms 原为官方行 env 参数,v0.4 自研桥接不再写入;相关能力暂由 server 默认/项目设置提供`)
+    console.warn(`[${PKG}] 警告: --read-only/--unsafe/--rate-limit/--editor-port/--runtime-port/--timeout-ms 原为静态行的 env 参数,本包不再写入;相关能力暂由 server 默认/项目设置提供`)
   }
   return 0
 }
@@ -213,19 +215,19 @@ async function cmdUninstall(argv: string[]): Promise<number> {
     }
   }
   writeGodotPaths({ projects: [] })
-  console.log(`[${PKG}] 已清空 $DSH_HOME/godot/paths.json 路径配置(桥接下次调用起不再生效)`)
+  console.log(`[${PKG}] 已清空 $DSH_HOME/godot/paths.json 路径配置(之后新建/重进的 Godot 会话不再挂载 MCP)`)
   const removed = profile.toLowerCase() === 'desktop'
     ? false
     : removeManagedRow(profile)
   if (profile.toLowerCase() !== 'desktop') {
     console.log(removed
-      ? `[${PKG}] 已删除历史官方 MCP 桥接行`
-      : `[${PKG}] 无历史官方 MCP 桥接行`)
+      ? `[${PKG}] 已删除历史静态 mcp-client 行`
+      : `[${PKG}] 无历史静态 mcp-client 行`)
   }
   if (bundlesHasPlugin(profile)) {
     console.log(profile.toLowerCase() === 'desktop'
-      ? `[${PKG}] 提示: bundle 行仍在(提示词 section/工作台);移除请在桌面应用侧栏「插件」页操作`
-      : `[${PKG}] 提示: bundle 行仍在(提示词 section/工作台);移除用 dsh plugin --profile ${profile} remove ${PKG}`)
+      ? `[${PKG}] 提示: bundle 行仍在(提示词 section/配置表单);移除请在桌面应用侧栏「插件」页操作`
+      : `[${PKG}] 提示: bundle 行仍在(提示词 section/配置表单);移除用 dsh plugin --profile ${profile} remove ${PKG}`)
   }
   return 0
 }
@@ -263,7 +265,7 @@ async function cmdStatus(argv: string[]): Promise<number> {
       }
     }
   }
-  console.log(`  bundle 行:     ${bundlesHasPlugin(profile) ? '已就绪(提示词 section/工作台随冷启动挂载)' : '未就绪(可选;--link 或 dsh plugin add 安装)'}`)
+  console.log(`  bundle 行:     ${bundlesHasPlugin(profile) ? '已就绪(提示词 section/配置表单随冷启动挂载)' : '未就绪(可选;--link 或 dsh plugin add 安装)'}`)
   return 0
 }
 

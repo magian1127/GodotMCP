@@ -10,12 +10,14 @@
 // - 持久载体:一个 JSON 文件 `<DSH_HOME>/godot/paths.json`,形状
 //   `{ serverDist?: string, projects: Array<{ cwd: string, projectPath: string }> }`。
 //   DSH_HOME 取 `process.env.DSH_HOME`,缺省 `~/.dsh`(与 DSH 数据目录惯例一致)。
-// - 惰性加载(首次读/写才读盘)+ 内存缓存;写盘为临时文件 + rename 的原子替换,
-//   失败静默(内存仍保留本次有效值,下次写再尝试)。
+// - 惰性加载(首次读/写才读盘)+ 内存缓存;**外部改动按文件 mtime 热生效**——
+//   长跑 host 里 PathStore 只加载一次,而 CLI install 会从另一个进程改写同一文件;
+//   不重读的话"CLI 写完路径、重开会话"会静默用旧值。mtime 未变即零额外开销。
+// - 写盘为临时文件 + rename 的原子替换,失败静默(内存仍保留本次有效值,下次写再尝试)。
 // - 归一化(参照 zhpro 自定义监控项):结构合法才保留、cwd 去重(后写覆盖)、
 //   上限 100,防手改注入脏数据。
 // - 不跨进程共享锁:DSH 单 host 进程持有,并发极小,采用最简单模式。
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 
@@ -27,7 +29,7 @@ export interface ProjectEntry {
   projectPath: string
 }
 
-/** 工作台路径配置:全局 serverDist 单值 + 按 cwd 的项目条目表。 */
+/** 路径配置:全局 serverDist 单值 + 按 cwd 的项目条目表。 */
 export interface PathConfig {
   serverDist?: string
   projects: ProjectEntry[]
@@ -63,7 +65,7 @@ export function cleanPath(value: string): string {
 
 /**
  * 项目路径归一化:GodotMCP 注册表键是**项目目录**(小写规范路径),而用户常把
- * `project.godot` **文件**填进来(工作台占位符/资源管理器复制)。文件 → 其父目录,
+ * `project.godot` **文件**填进来(配置表单占位符/资源管理器复制)。文件 → 其父目录,
  * 目录原样保留;空返回 ''。桥接/CLI/加载三处共用,避免「no registry entry」类
  * AUTH_FAILED(2026-09 实测:编辑器在场但项目路径带了 project.godot)。
  */
@@ -100,19 +102,44 @@ export function normalizeConfig(raw: unknown): NormalizedConfig {
 export class PathStore {
   private data: NormalizedConfig = { projects: [] }
   private loaded = false
+  /** 上次读/写时文件的 mtimeMs;用于发现"别的进程改过这份配置"。 */
+  private knownMtimeMs: number | undefined
   constructor(private readonly file: string = DEFAULT_PATHS_FILE) {}
 
-  /** 惰性加载一次;文件缺失/损坏 → 空配置(不抛,不影响工作台)。 */
+  /** 惰性加载一次;文件缺失/损坏 → 空配置(不抛,不影响宿主启动)。 */
   private load(): void {
-    if (this.loaded) return
+    if (this.loaded) {
+      this.reloadIfChanged()
+      return
+    }
     this.loaded = true
+    this.readFromDisk()
+  }
+
+  /** 文件被外部改写(CLI install/uninstall)时重读;mtime 未变则什么都不做。 */
+  private reloadIfChanged(): void {
     try {
-      if (existsSync(this.file)) {
-        const raw = JSON.parse(readFileSync(this.file, 'utf8')) as unknown
-        this.data = normalizeConfig(raw)
+      const mtimeMs = existsSync(this.file) ? statSync(this.file).mtimeMs : undefined
+      if (mtimeMs === this.knownMtimeMs) return
+      this.readFromDisk()
+    } catch {
+      // 读不到 mtime:保持内存值,不影响当前会话。
+    }
+  }
+
+  private readFromDisk(): void {
+    try {
+      if (!existsSync(this.file)) {
+        this.data = { projects: [] }
+        this.knownMtimeMs = undefined
+        return
       }
+      const raw = JSON.parse(readFileSync(this.file, 'utf8')) as unknown
+      this.data = normalizeConfig(raw)
+      this.knownMtimeMs = statSync(this.file).mtimeMs
     } catch {
       this.data = { projects: [] }
+      this.knownMtimeMs = undefined
     }
   }
 
@@ -164,6 +191,8 @@ export class PathStore {
       const tmp = `${this.file}.tmp`
       writeFileSync(tmp, JSON.stringify(this.data, null, 2), 'utf8')
       renameSync(tmp, this.file)
+      // 记下自己写入后的 mtime:避免下一次读时把自己刚写的当成"外部改动"再读一遍。
+      this.knownMtimeMs = statSync(this.file).mtimeMs
     } catch {
       // 写盘失败静默:内存已更新,下次写再尝试;不影响当前会话使用。
     }

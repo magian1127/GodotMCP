@@ -2,20 +2,26 @@
 
 English | [中文](README.md)
 
-Connect [GodotMCP](https://github.com/) (a Godot 4 editor & game MCP control toolkit) to DSH: the model reads and writes scenes, nodes, scripts, and resources directly in sessions, runs deterministic playtests, and verifies visuals with screenshots.
+Connect [GodotMCP](https://github.com/magian1127/GodotMCP) (a Godot 4 editor & game MCP control toolkit) to DSH: the model reads and writes scenes, nodes, scripts, and resources directly in sessions, runs deterministic playtests, and verifies visuals with screenshots.
 
 ## What it does
 
-- **Self-hosted bridge with dynamic tools**: the plugin spawns the GodotMCP bridge server itself (stdio) through a minimal embedded MCP client — tools are named `godot_<tool>` and the inventory **comes from the server's `tools/list`** (real schemas/descriptions, grown on demand via the `discover_tools` meta tool): 19 resident tools + 1 meta tool, plus 31 on-demand groups (64 tools), keeping context cost bounded (~8.8K tokens). No tool is hardcoded in the plugin.
-- **Per-session cwd parameter passing**: the bridge resolves the project path from the **calling session's cwd** (`$DSH_HOME/godot/paths.json` per-cwd entries, global fallback) and passes it to the server — different sessions may target different Godot projects; never locked to one directory.
+- **Mounts the host's official MCP client in Godot sessions**: since v0.5 this package **does not implement an MCP client**. When a session that joined the Godot preset is created, DSH's own `@deepseek-ai/dsh-mcp-client` is mounted into **that session's agent scope**, and it owns the connection, handshake, tool discovery, `list_changed` increments, reconnects, and image projection. Tool names follow the official convention `mcp__godot__<raw tool name>` (the `serverName` can be overridden by the plugin row config; changing it changes the tool names the model sees).
+- **The tool inventory still comes from the server**: the list comes from the GodotMCP server's `tools/list` (real schemas and descriptions), and **no tool is hardcoded** in the plugin. The resident surface has 19 tools + 1 meta tool `discover_tools`, plus 31 on-demand tool groups; when `discover_tools` activates a group the server sends `list_changed` and the official client adds those tools to this session.
+- **Only Godot sessions have tools**: non-Godot sessions **mount nothing** — no connection, no tools. Not "registered and then hidden".
+- **Project path per session cwd**: on mount, the Godot project path is resolved from **that session's working directory** (`$DSH_HOME/godot/paths.json` per-cwd entries, global fallback) and passed to the server as `GODOT_MCP_PROJECT_PATH`; the child process cwd is the session cwd too — different sessions may target different Godot projects, never locked to one directory.
+- **Entering a session connects immediately**: entering a Godot session establishes the connection (no more "start on the first call", and no idle auto-close). A closed editor never fails session creation, and disconnects reconnect automatically through the official client (500ms, doubling, capped at 30s); screenshots and other image results are now **real image attachments**.
 - **Workflow prompt section** (optional, mounted with the bundle row): teaches the model on-demand group activation, batch editing, the editor's FIFO mutation queue semantics, error-code-driven recovery, and screenshot verification.
 - **Management CLI `dsh-godot`**: install / uninstall / status — validates the server build artifact and Godot project, writes/clears the path config, and checks the editor registry and ports.
+- **Plugin-page config form**: the three injection toggles plus a "Related paths" section (a single global server entry + per-workspace project entries); saving writes the host-side `paths.json`.
+
+> The generic tool-debugging UI (tool tree / manual calls / results & history / status bar) is not Godot-specific and has moved to the "Tool Debugging" tab of `deepseek-harness-project-mcp`; this package no longer adds a top-level session tab.
 
 ## Prerequisites
 
-1. DSH (the CLI ships `@deepseek-ai/dsh-mcp-client`; nothing extra to install).
-2. A ready GodotMCP workspace: the bundled shim in place — `<GodotMCP>/plugin/godot-mcp-unified/server-dotnet/publish/<rid>/godot-mcp-shim[.exe]` (produced by the repo's publish step: `dotnet publish plugin/godot-mcp-unified/server-dotnet/src/godot-mcp-shim -c Release -p:PublishProfile=<rid>`). The host spawns that shim directly; the shim makes sure the machine-level daemon is running (the sibling `godot-mcp-daemon[.exe]`) and forwards stdio to the daemon's HTTP face, so the daemon need not be started elsewhere first. Only for an stdio fallback/rollback use `<GodotMCP>/adapters/dsh/godot-http-bridge.mjs` (a Node script, run through node; the Node bridge was retired with plugin 1.1.0).
-3. The target Godot project has the `godot_mcp_toolkit` addon installed (use GodotMCP's `install-godot-project.ps1`) and the **editor is running** (headless works: `godot --headless --editor --path <project>`). The server never launches the editor; when it is absent, tool calls return actionable errors.
+1. DSH (the CLI ships `@deepseek-ai/dsh-mcp-client` — that is what this plugin mounts; nothing extra to install).
+2. A ready GodotMCP workspace: the bundled shim in place — `<GodotMCP workspace>/plugin/godot-mcp-unified/server-dotnet/publish/<rid>/godot-mcp-shim[.exe]` (produced by the repo's publish step: `dotnet publish plugin/godot-mcp-unified/server-dotnet/src/godot-mcp-shim -c Release -p:PublishProfile=<rid>`). This plugin hands that entry to the host's official client as a stdio server and the client spawns it directly; the shim makes sure the machine-level daemon is running (the sibling `godot-mcp-daemon[.exe]`) and forwards stdio to the daemon's HTTP face, so the daemon need not be started elsewhere first. Only for an stdio fallback/rollback use `<GodotMCP workspace>/adapters/dsh/godot-http-bridge.mjs` (a Node script, run through node; the Node bridge was retired with plugin 1.1.0).
+3. The target Godot project has the `godot_mcp_toolkit` addon installed (use GodotMCP's `install-godot-project.ps1`) and the **editor is running** (headless works: `godot --headless --editor --path <Godot project>`). The server never launches the editor; when it is absent, tool calls return actionable errors, but neither the connection nor session creation is affected.
 
 ## Requirements
 
@@ -27,37 +33,37 @@ Connect [GodotMCP](https://github.com/) (a Godot 4 editor & game MCP control too
 ```sh
 # From this repo (dev install, includes the bundle + path config):
 node bin/dsh-godot.mjs install --profile web \
-  --project <absolute Godot project path> \
+  --project <Godot project> \
   --cwd <session working directory> \
-  --godot-mcp-root <GodotMCP workspace root> \
-  --link <this repo directory>
+  --godot-mcp-root <GodotMCP workspace> \
+  --link <this repo>
 
-# Or without the bundle (bridge only, no prompt section/workbench):
+# Or without the bundle (mounting only, no prompt section/config form):
 node bin/dsh-godot.mjs install --profile web \
-  --project <absolute Godot project path> \
-  --server-dist <GodotMCP>/plugin/godot-mcp-unified/server-dotnet/publish/<rid>/godot-mcp-shim.exe
+  --project <Godot project> \
+  --server-dist <GodotMCP workspace>/plugin/godot-mcp-unified/server-dotnet/publish/<rid>/godot-mcp-shim.exe
 ```
 
 Server dist resolution order: `--server-dist` > `$GODOT_MCP_SERVER_DIST` > `--godot-mcp-root` / `$GODOT_MCP_ROOT`.
 
-**DSH Desktop (the Electron app)**: supported (desktop Host port 19387). The path config `$DSH_HOME/godot/paths.json` is machine-wide and shared, so `install` still writes it in the desktop scenario (`--profile desktop` only skips the bundle install); the bridge spawns the shim as a native exe and does not depend on node being on PATH. For a link dev install of the bundle (prompt section/workbench; while the app is **not running**), edit `~/.dsh/profiles/desktop/package.json`:
+**DSH Desktop (the Electron app)**: supported (desktop Host port 19387). The path config `$DSH_HOME/godot/paths.json` is machine-wide and shared, so `install` still writes it in the desktop scenario (`--profile desktop` only skips the bundle install); the shim the official client spawns is a native exe and does not depend on node being on PATH. For a link dev install of the bundle (prompt section + plugin-page config form; while the app is **not running**), edit `~/.dsh/profiles/desktop/package.json`:
 
 ```jsonc
-"dependencies": { "deepseek-harness-godot_unified": "link:<absolute path to this repo>" },
+"dependencies": { "deepseek-harness-godot_unified": "link:<this repo>" },
 "dsh": { "profile": { "bundles": [ /* keep official bundles, append */ "deepseek-harness-godot_unified" ] } }
 ```
 
 then `pnpm install` inside the profile directory; start the app to mount, `npm run build` + restart after source changes, remove both entries + `pnpm install` to uninstall.
 
-Since v0.4 `install` **no longer writes an official mcp-client row** (self-hosted bridge): it writes `serverDist` and a `{cwd, projectPath}` entry into `$DSH_HOME/godot/paths.json` (and cleans up any historical official bridge row). Paths take effect without a restart — the bridge loads them when a **Godot-preset session** (the `Godot` mode, declared by this package's bundle patch row `preset-godot`; no hand-installed preset directory) is created; you can also edit per-cwd paths in "Settings → Plugins → Godot Workbench" (immediate). Different sessions may target different Godot projects.
+Since v0.5 `install` **writes no mcp-client row into the profile**: it writes `serverDist` plus a `{cwd, projectPath}` entry into `$DSH_HOME/godot/paths.json` (and cleans up any historical static mcp-client managed block, preventing a double track). Paths take effect without a restart — when a **Godot-preset session** (the `Godot` mode, declared by this package's bundle patch row `preset-godot`; no hand-installed preset directory) is created, the plugin resolves paths from that session's cwd and mounts the host's official MCP client into the session; you can also edit per-cwd paths in the sidebar "Plugins" page → deepseek-harness-godot_unified (immediate save, DSH 0.1.6+). The host re-reads `paths.json` when its mtime changes, so paths written by the CLI from another process also take effect on the next resolution. Different sessions may target different Godot projects.
 
 ### Common options
 
 | Option | Meaning |
 | --- | --- |
-| `--cwd <dir>` | Session working directory this entry binds to (default: current dir; matched by cwd) |
-| `--server-name <name>` | Tool namespace (default `godot`, i.e. `godot_*`; retained parameter) |
-| `--read-only` / `--unsafe` / `--rate-limit` / `--editor-port` / `--runtime-port` / `--timeout-ms` | Former official-row env parameters; no longer written in v0.4 (warned); capabilities come from the server's defaults/project settings |
+| `--cwd <dir>` | Session working directory this entry binds to (default: current dir; matched by session cwd) |
+| `--server-name <name>` | Retained parameter: v0.5 writes no profile row, so tool names come from the plugin row config's `serverName` (default `godot`, i.e. `mcp__godot__*`) |
+| `--read-only` / `--unsafe` / `--rate-limit` / `--editor-port` / `--runtime-port` / `--timeout-ms` | Former official-row env parameters; no longer written in v0.5 (warned); capabilities come from the server's defaults/project settings |
 
 ## Verify
 
@@ -66,7 +72,9 @@ node bin/dsh-godot.mjs status --profile web   # path config/server/project/regis
 dsh --profile web --dump-config | grep godot  # composition check (no boot)
 ```
 
-In the GUI: create a session with the Godot preset → the model sees `godot_*` tools; you can also browse/call manually in the "Godot" workbench tab. The target project's Godot editor must be running.
+In the GUI: create a session with the Godot preset → the model sees `mcp__godot__*` tools (the connection is established when the session starts; no manual first call needed). The target project's Godot editor must be running. If the server entry is empty, that session has no tools and only a "how to configure" prompt. For manual tool-call debugging, use the "Tool Debugging" tab of `deepseek-harness-project-mcp`.
+
+**Skills directory**: the 6 Godot workflow skills bundled with this package (godot-control / godot-debug / godot-mcp-extension / godot-playtest / godot-project-setup / godot-ui) ship with the Godot preset; their source is the package's `skills/`, a junction to the upstream GodotMCP `plugin/godot-mcp-unified/skills`, so **upstream edits apply immediately** (no rebuild of this package needed). The historical `~/.dsh/.agent-presets/godot/skills/` directory is obsolete (DSH 0.1.6+ no longer reads it).
 
 **DSH 0.2.1 behavior changes** (already adapted here; no user action needed):
 
@@ -76,53 +84,32 @@ In the GUI: create a session with the Godot preset → the model sees `godot_*` 
 ## Uninstall
 
 ```sh
-node bin/dsh-godot.mjs uninstall --profile web             # clear path config (and historical official rows)
-dsh plugin --profile web remove deepseek-harness-godot_unified # remove the bundle (prompt section/workbench)
+node bin/dsh-godot.mjs uninstall --profile web             # clear path config (and historical static mcp-client rows)
+dsh plugin --profile web remove deepseek-harness-godot_unified # remove the bundle (prompt section/config form)
 ```
 
 ## Data & boundaries
 
-- The bridge server dials loopback only (editor/runtime WebSockets, token-authenticated); the DSH stdio child environment is scrubbed of credential-shaped variables and `DSH_*`, while this package's explicit `GODOT_MCP_*` overrides survive.
-- Server and project paths live in **`$DSH_HOME/godot/paths.json`** (machine-local, not published, never committed); the historical official mcp-client managed block is cleaned up by the CLI.
-- Known limits: MCP resources (e.g. `godot://roots`) are not transparently bridged by this package's own bridge; upstream read-only/destructive tool annotations do not map to DSH permission rules (the workbench takes a conservative confirmation policy).
+- The GodotMCP server dials loopback only (editor/runtime WebSockets, token-authenticated); the stdio child environment is scrubbed by the host's official MCP client (credential-shaped variables and `DSH_*` are removed), while this package's explicit `GODOT_MCP_PROJECT_PATH` survives.
+- The server entry and project paths live in **`$DSH_HOME/godot/paths.json`** (machine-local, not published, never committed); the historical static mcp-client managed block is cleaned up by the CLI.
+- By default (per-session mounting) each Godot session (including subagents that inherit the preset) holds one lightweight stdio shim connection; the machine-level daemon remains a singleton reused by the shim. Legacy mode instead has a single shared connection on the host.
+- Removed in v0.5: the tool-inventory cache `$DSH_HOME/godot/tools-cache.json` (**no longer read**; a stale file is harmless on disk and is never deleted automatically), the upstream Chinese-description translation table, and the deny/restrict injection patch.
+- Known limits: MCP prompt templates are not supported by the official client; resources (e.g. `godot://roots`) come from the profile's `dsh-mcp-resources` row, this package does not forward them itself; upstream read-only/destructive tool annotations do not map to DSH permission rules.
 
-## Godot Workbench
+## Tool-injection policy and paths (plugin-page config form)
 
-A third top-level tab "Godot" in the DSH Web session UI, serving as a preview and debugging surface for this plugin and the whole GodotMCP server. It runs **outside the conversation and writes nothing back to the session**; everything goes through the same-origin `/godot-workbench/api/*` routes. The client half mounts with the plugin at cold start (a first install needs one `dsh web` restart); later `lib/client.js` changes hot-swap in-page through DSH client HMR, with no page refresh.
-
-Capabilities:
-
-- **Browse all tools**: lists every tool currently callable, with `godot_*` (Godot) pinned and expanded; GodotMCP's 31 on-demand tool groups are shown separately (greyed out + description + an "Activate" button), and the rest are clustered by name prefix into "Built-in" / "Other plugins".
-- **Manual calls**: pick a tool and a JSON-Schema-driven form is generated (or switch to "Raw JSON" editing), press "Run" to call it directly and inspect results — text / JSON / inline screenshot images / error codes + actionable hints; can "Cancel" while running.
-- **Result area, four sub-tabs**: Result, History (last 50, localStorage), Skills (the 5 GodotMCP SKILL.md + this package's prompt section), and Prompt Sections (the currently effective systemPrompt sections, to verify injection).
-- **Status bar**: bridge tool count / editor registry (project · port · Godot version · pid) / `READ_ONLY` flag / server-dist path & existence / install hints; on fetch failure it shows the error reason plus a **Retry** button (one-click re-probe once the MCP bridge/editor is up) instead of an endless "Loading…".
-- **View mode**: a composer-overlay view like the "Trajectory" tab — the workbench fills the viewport with its own scrollers; the bottom input box becomes a floating strip that yields space to content (root element carries `data-conversation-composer-overlay`, riding DSH's `ConversationRoot` `:has()` contract) instead of a conversation-style docked composer.
-
-### Tool-injection policy and dynamic tools (Settings → Plugins → Godot Workbench)
-
-**Self-hosted bridge with dynamic tools**: the plugin spawns the GodotMCP server itself (stdio) through a minimal embedded MCP client — the tool inventory **comes from the server's `tools/list`** (real schemas/descriptions, growing/shrinking with group activation and extensions). No tool is hardcoded. The server stays idle by default; a Godot-preset session triggers one async warm-up (non-blocking), it auto-closes after 10 idle minutes, and calls reconnect on demand. The bridge resolves the **calling session's cwd** and passes the project path per call — different sessions can target different Godot projects, never locked to one directory. The settings card offers:
+**Per-session mounting of the host's official MCP client**: the plugin only decides which sessions need it and which server it connects to. When a session is created (`agent/created`) with preset `godot`, the official client is mounted into that session's agent scope; switching a **blank session (before its first turn)** to the Godot preset does the same, and switching away / disposing the session / unloading the plugin unmounts it (DSH refuses preset changes after the first turn). Mounting never awaits the connection (failures are logged and never break session creation): session creation waits at most 10 seconds for the tools to be ready, after which they land in the background and become visible on the next turn. The config form offers:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| Legacy injection mode | off | On = inject tools and prompt globally into every session (takes effect immediately); off = **only Godot-preset sessions inject**, all other sessions hide these tools in their agent scope |
-| Workflow prompt | on | Toggle for the Godot workflow prompt section (only affects sessions that inject tools) |
-| Localize prompts | off | Injected workflow prompt and bridge tool descriptions use Chinese (English by default); tool names stay English |
+| Legacy mode (global mount) | off | On = one **shared connection** on the host plus a global workflow prompt: every session sees the `mcp__godot__*` tools (project path from the global setting, no longer switching with the session cwd); off = **only Godot-preset sessions mount**, all other sessions **simply have none** of these tools (not hidden) |
+| Workflow prompt | on | Toggle for the workflow prompt section (only affects sessions that mounted the Godot MCP: the scoped section of a Godot preset, or the global section in legacy mode) |
+| Localize prompt | off | Switches **only the workflow prompt** to Chinese (English by default); tool descriptions and error messages come from the upstream server and stay as provided. Tool names stay English |
 
-Paths (server dist, project path) come either from the settings card's "Godot paths" section (including **per-working-directory project entries**, matched by session cwd) or from `$DSH_HOME/godot/paths.json`; unmatched cwds fall back to the global value. When the editor is away the bridge goes quiet after a few backoff retries and the next call reconnects on demand.
+The "Related paths" section (a single global server entry + **per-working-directory project entries**) reads and writes `$DSH_HOME/godot/paths.json` through the same-origin `GET/POST /godot-config/api/path-settings` route; on session creation the project path is matched by that session's cwd (a single entry acts as fallback), falling back to the global value when nothing matches. When the server entry is empty nothing is mounted and the Godot session receives a "how to configure" prompt (so the model does not invent tool calls and instead points the user at the path fields); other sessions receive no prompt at all.
 
 Security & boundaries:
 
-- Routes accept **same-origin + loopback only** (validate `Origin` against Host, or no `Origin`); GET is read-only and POST carries a JSON body; errors return `{error:{code,message}}`.
-- Tool annotations (readOnly/destructive) are unavailable because mcp-client does not bridge them, so the workbench uses a **conservative confirmation policy**: every run asks for confirmation (tool name + argument summary) with an optional "skip confirmation this session" checkbox (kept in memory only, never persisted), but tools whose name contains `unsafe` **always require confirmation**.
-- If another plugin registers a pre-execute `'ask'` policy on a tool, workbench calls (which carry no agent context) are **rejected** — the error is surfaced as-is; this is by design and not bypassed.
-- History lives only in browser localStorage (cap of 50 entries, 8KB summary truncation each); nothing is written to the conversation session.
-
-Known limits:
-
-1. Screenshot base64 inlining is bounded by the single-response size cap (a single image over 4MB is truncated into a truncation marker).
-2. Tool annotations are unavailable → conservative confirmation (confirm each time, or a session-level exemption; `unsafe` always confirms).
-3. pre-execute `'ask'`-policy tools are rejected on the workbench (by design, not bypassed).
-4. Server stderr is not visible to the workbench (mcp-client does not expose it).
-5. The tab depends on the web profile's `ui-conversation` contract (`conversation.view` list slot) — a DSH upgrade that changes the contract would need adaptation.
+- The path-settings route accepts **loopback + same-origin only** (`Origin`/`Host`/`sec-fetch-site` triple check); methods other than GET/POST get 405, request bodies are capped at 8MiB (413), invalid JSON gets 400; errors return `{error:{code,message}}`.
 
 MIT License.
