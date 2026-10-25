@@ -116,3 +116,7 @@ dotnet publish src/godot-mcp-shim -c Release -p:PublishProfile=<rid>
 Windows AOT 需 Visual Studio C++ 桌面工作负载，macOS 需 Xcode，Linux 需 clang/zlib 开发包。RID 使用 win-x64、linux-x64、osx-arm64 或 osx-x64。
 
 架构决策：[会话键](../../../docs/adr/0006-session-key-listen-lifetime.md)、[工具面](../../../docs/adr/0007-tool-face-per-session.md)、[默认目标](../../../docs/adr/0008-per-key-default-target.md)。
+
+## 平台验收记录
+
+macOS 适配提交 7ac9b3a 记录了 Apple Silicon 与 Godot 4.7.2 mono 的本机发布、原有单测及真实编辑器全链路验证。本次新增的会话工具面、全机互斥与目录头编码尚未在 Mac 真机复测；发布前应按当前代码重新验证，不能把历史平台记录当成本次功能证明。

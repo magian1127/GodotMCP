@@ -13,6 +13,15 @@ test-project validates editor/runtime, C#, LSP, debugger, input. addons/godot_mc
 | test/fixtures/send_text_smoke.tscn | Input, secret masking, submit |
 | tests/*_test.gd | Time, locale, theme, local connection/config discovery |
 
+## macOS / Linux links
+
+Use a directory symlink instead of a Windows junction, only when the link does not exist. A trailing-slash ignore pattern may not match symlinks; add a local exclusion when necessary:
+
+```bash
+ln -s ../../plugin/godot-mcp-unified/addons/godot_mcp_toolkit test-project/addons/godot_mcp_toolkit
+echo 'test-project/addons/godot_mcp_toolkit' >> .git/info/exclude
+```
+
 ## Build and start
 
 From the repository root, using local .env or an explicit executable:

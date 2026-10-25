@@ -54,9 +54,12 @@ function Assert-ChildPath {
         [string]$Child
     )
 
-    $parentFull = [IO.Path]::GetFullPath($Parent).TrimEnd("\") + "\"
+    # 分隔符与大小写规则随平台：Windows 用 "\" 且大小写不敏感；macOS/Linux 用 "/" 且按区分大小写比较
+    # （更严格，宁可误拒也不放行越界路径）。
+    $parentFull = [IO.Path]::GetFullPath($Parent).TrimEnd("\", "/") + [IO.Path]::DirectorySeparatorChar
     $childFull = [IO.Path]::GetFullPath($Child)
-    if (-not $childFull.StartsWith($parentFull, [StringComparison]::OrdinalIgnoreCase)) {
+    $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    if (-not $childFull.StartsWith($parentFull, $comparison)) {
         throw "Resolved path escaped its parent: $childFull"
     }
 }
@@ -164,17 +167,24 @@ function Write-ProjectMcpConfig {
 if (-not (Test-Path -LiteralPath $addonSource -PathType Container)) {
     throw "Bundled addon is missing: $addonSource"
 }
+# macOS：Godot 是 .app 包，允许直接给包路径（<Godot>.app），解析为包内 Contents/MacOS/Godot。
+if ($IsMacOS -and $GodotExecutable.TrimEnd("/").EndsWith(".app") -and (Test-Path -LiteralPath $GodotExecutable -PathType Container)) {
+    $GodotExecutable = Join-Path $GodotExecutable "Contents/MacOS/Godot"
+}
 if (-not (Test-Path -LiteralPath $GodotExecutable -PathType Leaf)) {
     throw "Godot executable not found: $GodotExecutable"
 }
 
 $godotConsole = $GodotExecutable
-$consoleCandidate = [IO.Path]::Combine(
-    [IO.Path]::GetDirectoryName($GodotExecutable),
-    [IO.Path]::GetFileNameWithoutExtension($GodotExecutable) + "_console.exe"
-)
-if (Test-Path -LiteralPath $consoleCandidate -PathType Leaf) {
-    $godotConsole = $consoleCandidate
+# 仅 Windows 有与 GUI 版并存的 *_console.exe（带控制台输出）；其他平台同一个可执行文件即可。
+if ($IsWindows) {
+    $consoleCandidate = [IO.Path]::Combine(
+        [IO.Path]::GetDirectoryName($GodotExecutable),
+        [IO.Path]::GetFileNameWithoutExtension($GodotExecutable) + "_console.exe"
+    )
+    if (Test-Path -LiteralPath $consoleCandidate -PathType Leaf) {
+        $godotConsole = $consoleCandidate
+    }
 }
 
 $versionOutput = (& $godotConsole --headless --version 2>&1 | Out-String).Trim()
@@ -231,12 +241,24 @@ if (Test-Path -LiteralPath $addonDestination -PathType Container) {
 }
 
 New-Item -ItemType Directory -Force -Path $addonDestination | Out-Null
-& robocopy $addonSource $addonDestination /MIR /XD ".godot" /NFL /NDL /NJH /NJS /NP | Out-Null
-$copyExit = $LASTEXITCODE
-if ($copyExit -gt 7) {
-    throw "Addon copy failed with robocopy exit code $copyExit"
+if ($IsWindows) {
+    & robocopy $addonSource $addonDestination /MIR /XD ".godot" /NFL /NDL /NJH /NJS /NP | Out-Null
+    $copyExit = $LASTEXITCODE
+    if ($copyExit -gt 7) {
+        throw "Addon copy failed with robocopy exit code $copyExit"
+    }
+    Write-Host "[OK] Installed addon: $addonDestination"
+} elseif ((Get-Item -LiteralPath $addonDestination -Force).LinkType) {
+    # 链接安装（目标是指向仓库真源的符号链接）：镜像会穿过链接清理并改写真源，绝不执行。
+    Write-Host "[OK] Addon is link-installed, copy skipped: $addonDestination -> $((Get-Item -LiteralPath $addonDestination -Force).Target)"
+} else {
+    # 无 robocopy：先清空目标（上方已备份）再复制源文件，语义等同 /MIR 且排除 .godot。
+    Get-ChildItem -LiteralPath $addonDestination -Force | Where-Object { $_.Name -ne ".godot" } |
+        Remove-Item -Recurse -Force
+    Get-ChildItem -LiteralPath $addonSource -Force | Where-Object { $_.Name -ne ".godot" } |
+        Copy-Item -Destination $addonDestination -Recurse -Force
+    Write-Host "[OK] Installed addon: $addonDestination"
 }
-Write-Host "[OK] Installed addon: $addonDestination"
 
 $enabledNow = Enable-EditorPlugin -Path $projectFile -PluginPath $pluginConfigPath
 if ($enabledNow) {

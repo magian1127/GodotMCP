@@ -17,7 +17,7 @@ $authorizationNames = @(
 # $schema 标识 URL 是格式标识而非产品路由,与 package-lock.json 同理豁免。
 $allFiles = Get-ChildItem -LiteralPath $pluginRoot -Recurse -File | Where-Object {
     $_.FullName -ne $selfPath -and
-    $_.FullName -notmatch "\\node_modules\\|\\dist\\|\\.mimosa\\|\\server-dotnet\\(.*\\)?(obj|bin|publish)\\" -and
+    $_.FullName -notmatch "[\\/]node_modules[\\/]|[\\/]dist[\\/]|[\\/]\.mimosa[\\/]|[\\/]server-dotnet[\\/](.*[\\/])?(obj|bin|publish)[\\/]" -and
     $_.Name -notin @("package-lock.json", "NodeToolTable.json")
 }
 $productFiles = $allFiles | Where-Object { $_.Name -notin $authorizationNames }

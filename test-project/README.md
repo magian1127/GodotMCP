@@ -13,6 +13,15 @@ test-project 承载编辑器、运行时、C#、LSP、调试器和输入验证�
 | test/fixtures/send_text_smoke.tscn | 输入、秘密字段遮蔽、提交 |
 | tests/*_test.gd | 时间、语言、主题、本地连接与配置发现 |
 
+## macOS / Linux 链接
+
+这两个平台用目录符号链接代替 Windows junction。只在链接位置尚不存在时创建；带尾斜杠的目录忽略规则可能不匹配符号链接，按需添加本地排除：
+
+```bash
+ln -s ../../plugin/godot-mcp-unified/addons/godot_mcp_toolkit test-project/addons/godot_mcp_toolkit
+echo 'test-project/addons/godot_mcp_toolkit' >> .git/info/exclude
+```
+
 ## 构建与启动
 
 从仓库根运行，Godot 路径使用本机 .env 或显式参数：

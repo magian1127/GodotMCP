@@ -25,9 +25,11 @@ test-project/Godot/
 # Projects that junction the shared addon may generate its import sidecars here.
 plugin/godot-mcp-unified/addons/godot_mcp_toolkit/*.import
 
-# DSH adapter's skills/ is a junction view of plugin/godot-mcp-unified/skills
-# (single source of truth lives upstream; never track the duplicate path).
-adapters/dsh/deepseek-harness-godot_unified/skills/
+# DSH adapter's skills is a junction (Windows) / symlink (macOS) view of
+# plugin/godot-mcp-unified/skills (single source of truth lives upstream;
+# never track the duplicate path). No trailing slash: git reports a symlink
+# as a file, so a "skills/" rule would miss it and leave it untracked-dirty.
+adapters/dsh/deepseek-harness-godot_unified/skills
 
 # Visual Studio session state (regenerated on open; never tracked).
 .vs/

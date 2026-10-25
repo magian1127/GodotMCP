@@ -116,3 +116,7 @@ Publish profiles live under `Properties/PublishProfiles/`. The daemon is a self-
 Windows AOT needs Visual Studio desktop C++, macOS Xcode, Linux clang/zlib development packages. RIDs: win-x64, linux-x64, osx-arm64, osx-x64.
 
 Decisions: [keys](../../../docs/adr/0006-session-key-listen-lifetime.en.md), [tool face](../../../docs/adr/0007-tool-face-per-session.en.md), [default target](../../../docs/adr/0008-per-key-default-target.en.md).
+
+## Platform acceptance history
+
+Commit 7ac9b3a records native Apple Silicon/Godot 4.7.2 mono publishing, prior unit tests, and real-editor end-to-end checks. The new per-session face, machine-wide mutex, and cwd encoding have not been revalidated on a Mac. Recheck current code before release; historical platform evidence does not prove these additions.

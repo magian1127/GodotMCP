@@ -84,4 +84,6 @@ static func _addon_real_dir(addon_dir: String) -> String:
 		return addon_dir
 	if target.is_absolute_path():
 		return target.simplify_path()
-	return addon_dir.path_join(target).simplify_path()
+	# 相对链接目标相对于"链接所在目录"解析（符号链接语义），而不是相对于链接自身。
+	# Windows 联接(junction)恒返回绝对路径，此分支只在 macOS/Linux 的相对符号链接下命中。
+	return addon_dir.get_base_dir().path_join(target).simplify_path()
