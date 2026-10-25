@@ -1,11 +1,13 @@
 ---
 name: godot-mcp-extension
-description: 使用 Godot MCP Unified 扩展 API 添加或更新项目专用的 Godot MCP 工具。当用户要求新 MCP 工具、自定义项目操作、扩展包，或内置的 83 工具面无法清晰表达某项行为时使用。
+description: 使用 Godot MCP Unified 扩展 API 添加或更新项目专用的 Godot MCP 工具。当用户要求新 MCP 工具、自定义项目操作、扩展包，或内置工具无法清晰表达某项行为时使用。
 ---
 
 语言：中文 | [英文版](SKILL.en.md)
 
 # Godot MCP 扩展
+
+先确认本会话已通过 `godot_connect(project="<Godot 项目绝对路径>")` 选择目标。未连接时只有入口工具；连接后提供 9 个核心工具，其他能力通过 `discover_tools(request=[组名], include_schemas=true)` 激活。多项目交错调用显式传 `instance`。工具路由、参数缺失与连接恢复见 [工具路由](../godot-control/references/tool-routing.md)。
 
 编辑前，阅读相对于本技能目录解析的 `../../addons/godot_mcp_toolkit/docs/extending.md`。
 

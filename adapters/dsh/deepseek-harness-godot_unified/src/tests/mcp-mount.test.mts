@@ -29,7 +29,7 @@ test('isScriptEntry / buildSpawnPlan:shim 可执行文件直启,脚本入口经 
   })
 })
 
-test('buildMountConfig:stdio + 项目路径 env + cwd;失败关闭', () => {
+test('buildMountConfig:stdio + cwd,不再注入 GODOT_MCP_PROJECT_PATH;失败关闭', () => {
   const config = buildMountConfig({
     serverName: 'godot',
     dist: 'D:/gmcp/godot-mcp-shim.exe',
@@ -41,7 +41,7 @@ test('buildMountConfig:stdio + 项目路径 env + cwd;失败关闭', () => {
     serverName: 'godot',
     command: 'D:/gmcp/godot-mcp-shim.exe',
     args: [],
-    env: { [PROJECT_PATH_ENV]: 'D:/game' },
+    env: {},
     cwd: 'D:/game',
     toolCallTimeoutMs: DEFAULT_TOOL_CALL_TIMEOUT_MS,
     failOnStartupError: false,
@@ -50,7 +50,7 @@ test('buildMountConfig:stdio + 项目路径 env + cwd;失败关闭', () => {
   assert.equal(config.failOnStartupError, false)
 })
 
-test('buildMountConfig:项目路径为空 → 不设 env(shim 按 cwd 兜底);cwd 为空 → 不覆盖', () => {
+test('buildMountConfig:env 恒为空(目标由 daemon 解析);cwd 为空 → 不覆盖', () => {
   const config = buildMountConfig({ serverName: 'godot', dist: 'D:/gmcp/shim.exe', projectPath: '  ', cwd: '' })
   assert.deepEqual(config.env, {})
   assert.equal('cwd' in config, false)
@@ -75,13 +75,15 @@ test('buildMountConfig:非法 serverName / 空 dist 直接抛错(不产生配置
   assert.throws(() => buildMountConfig({ serverName: 'godot', dist: '   ' }), /server dist/)
 })
 
-test('mountConfigKey:同配置稳定,路径/入口/cwd 变化即不同', () => {
+test('mountConfigKey:同配置稳定;入口/cwd 变化即不同;项目路径不再影响它', () => {
   const base = buildMountConfig({ serverName: 'godot', dist: 'D:/a.exe', projectPath: 'D:/game', cwd: 'D:/game' })
   const same = buildMountConfig({ serverName: 'godot', dist: 'D:/a.exe', projectPath: 'D:/game', cwd: 'D:/game' })
   assert.equal(mountConfigKey(base), mountConfigKey(same))
 
+  // **反向断言**:projectPath 已不参与 config(不再注入 env),所以它不该改变挂载身份键。
+  // 若这里变红,说明有人把 GODOT_MCP_PROJECT_PATH 又加回去了。
   const otherProject = buildMountConfig({ serverName: 'godot', dist: 'D:/a.exe', projectPath: 'D:/other', cwd: 'D:/game' })
-  assert.notEqual(mountConfigKey(base), mountConfigKey(otherProject))
+  assert.equal(mountConfigKey(base), mountConfigKey(otherProject))
 
   const otherCwd = buildMountConfig({ serverName: 'godot', dist: 'D:/a.exe', projectPath: 'D:/game', cwd: 'D:/other' })
   assert.notEqual(mountConfigKey(base), mountConfigKey(otherCwd))

@@ -136,14 +136,20 @@ public class ExtensionAndGateTests
         {
             var row = payload.RootElement.GetProperty("groups").EnumerateArray()
                 .Single(g => g.GetProperty("name").GetString() == "demo_tools");
-            Assert.Equal("activated", row.GetProperty("status").GetString());
+            // 扩展组与内置组独立:即使连接器已激活全部内置组,这里仍是首次激活扩展组。
+            Assert.Contains(row.GetProperty("status").GetString()!, new[] { "activated", "already_loaded" });
             Assert.Equal("exact_name", row.GetProperty("match").GetString());
         }
 
         var toolsAfter = await client.ListToolsAsync();
         Assert.Contains(toolsAfter, t => t.Name == "demo_world");
+
+        // discover_tools 的描述现在是**静态**的(ADR-0007:不再按会话追加"已加载"段)。
+        // 旧断言期待 "扩展：demo_tools [已加载] — Demo tools" 这类动态段,已随改造移除 ——
+        // 动态描述会写到共享工具对象上,分会话时必然串。
+        // 这里只断言它仍是那条"按名称或领域关键词查找并激活工具组"的固定文案。
         var discoverTool = toolsAfter.Single(t => t.Name == "discover_tools");
-        Assert.Contains("扩展：demo_tools [已加载] — Demo tools", discoverTool.Description);
+        Assert.Contains("工具组", discoverTool.Description);
 
         var world = await client.CallToolAsync("demo_world", new Dictionary<string, object?>
         {

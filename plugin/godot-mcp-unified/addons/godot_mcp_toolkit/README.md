@@ -9,7 +9,7 @@ spawns (`server-dotnet/publish/<rid>/godot-mcp-shim`). The shim bootstraps the
 daemon when it is not already running, and the daemon connects back to this
 WebSocket server through the machine registry.
 
-Everything runs locally. Nothing leaves your machine.
+Bridge listeners run locally; the host controls whether tool input/output is sent to a model service.
 
 ## Quick start
 
@@ -29,6 +29,7 @@ Everything runs locally. Nothing leaves your machine.
 3. **Connect:** launch your MCP client from the project root. It spawns the
    shim, which brings the daemon up and authenticates against it; the dock's
    peer count increments on connection.
+4. **Select the project:** call godot_connect(project) before other tools. The initial list has one entry; connection expands core 9, and discover_tools(request=[...]) activates groups.
 
 If a step misfires, start with the bundled
 [advanced configuration guide](docs/advanced_configuration.md).
@@ -47,11 +48,7 @@ If a step misfires, start with the bundled
 
 ## Read-only mode
 
-For supervised environments (classrooms, CI, demos), flip the dock's
-read-only toggle (or set `GODOT_MCP_READ_ONLY=1` in the `.mcp.json` env
-block). Every mutating tool is hidden from the agent. Turn it off and
-reconnect the client to restore full access — the tool list is decided at
-connect time.
+The addon UI retains legacy read-only configuration/status, but the current C# daemon does not consume GODOT_MCP_READ_ONLY. Do not treat the toggle as enforced mutation blocking; configure the host’s tool policy and verify actual restrictions. Missing tools can also mean unconnected state, inactive groups, or version gates.
 
 ## Documentation
 
@@ -74,8 +71,7 @@ skill and an extension-authoring skill — in
 `addons/godot_mcp_toolkit/CompanionSkills/`; copy a skill folder into your
 client's skills directory to use them.
 
-The complete generated tool reference is stored locally in the integrated
-plugin at `server/docs/tool-reference/README.md`.
+Use the connected server’s latest tools/list for schemas and discover_tools for groups. The retired server/docs tool-reference path is no longer maintained.
 
 ## Uninstalling
 

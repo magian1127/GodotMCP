@@ -108,12 +108,25 @@ function readBody(req: MinimalRequest, limit = 8 * 1024 * 1024): Promise<string>
 export interface PathSettingsRouteDeps {
   /** 路径存储(host 侧持久层);缺席时 POST 返回 400。 */
   pathStore?: PathStore
-  /** 设置卡片里的 `godotServerDist`(store 未显式设置时的生效回退值)。 */
-  serverDistPath?: string
-  /** 设置卡片里的 `godotProjectPath`(cwd 无匹配时的回退值)。 */
+  /**
+   * 取设置卡片里的 `godotServerDist`(store 未显式设置时的生效回退值)。
+   *
+   * **必须是 getter,不能是值**:按值传入会在挂载路由那一刻把 config 快照钉死,
+   * 之后 volatile 更新重赋值也不会反映到这里 —— 于是 GET 一直显示旧值,
+   * 用户改了插件行 config 却在页面上看不到变化。允许 `string` 只为兼容既有测试。
+   */
+  serverDistPath?: (() => string) | string
+  /** 设置卡片里的 `godotProjectPath`。项目路径表已删除,此字段不再参与解析。 */
   projectPath?: string
   /** 路由 500 原始错误的去向(host logger.warn;缺省静默)。 */
   warn?: (message: string) => void
+}
+
+/** 解析 `serverDistPath`(可能是 getter,也可能是值)。 */
+function resolveServerDistPath(deps: PathSettingsRouteDeps): string {
+  const source = deps.serverDistPath
+  if (source === undefined) return ''
+  return typeof source === 'function' ? source() : source
 }
 
 /**
@@ -153,19 +166,20 @@ export function mountPathSettingsRoute(
 
 async function handle(req: MinimalRequest, res: MinimalResponse, deps: PathSettingsRouteDeps): Promise<void> {
   if (req.method === 'GET') {
-    const cwd = queryParam(req, 'cwd') ?? ''
-    const config = deps.pathStore?.getConfig()
-    const currentCwd = cwd === '' ? undefined : cwd
     // serverDist 全局单值;store 未显式设置时回退设置卡片 godotServerDist(生效值)。
-    const effectiveServerDist = config?.serverDist !== undefined && config.serverDist !== '' ? config.serverDist : (deps.serverDistPath ?? '')
-    const effectiveCurrentProject = currentCwd !== undefined
-      ? (deps.pathStore?.getProjectPath(currentCwd) ?? deps.projectPath ?? '')
-      : ''
+    const config = deps.pathStore?.getConfig()
+    const effectiveServerDist = config?.serverDist !== undefined && config.serverDist !== '' ? config.serverDist : resolveServerDistPath(deps)
     sendJson(res, 200, {
       serverDist: effectiveServerDist,
-      projects: config?.projects ?? [],
-      currentCwd: currentCwd ?? null,
-      currentProjectPath: currentCwd !== undefined ? (effectiveCurrentProject || null) : null,
+      // **projects 恒为空**:项目路径表已删除。
+      //
+      // 一个工作区常有多个 Godot 项目,按 cwd 查表只能给一个;会话要连别的项目还得先改表。
+      // 现在目标由 daemon 侧解析(godot_connect 的 project 参数 → 本会话默认目标 →
+      // shim 上报的 x-godot-cwd 下的 project.godot → 唯一活跃实例)。
+      // 保留空数组是为了让旧版前端拿到的形状仍然合法。
+      projects: [],
+      currentCwd: null,
+      currentProjectPath: null,
     })
     return
   }
@@ -185,18 +199,8 @@ async function handle(req: MinimalRequest, res: MinimalResponse, deps: PathSetti
     return
   }
   const serverDist = typeof body.serverDist === 'string' ? body.serverDist : ''
-  const projects: ProjectEntry[] = []
-  if (Array.isArray(body.projects)) {
-    for (const item of body.projects as unknown[]) {
-      if (item === null || typeof item !== 'object') continue
-      const rec = item as Record<string, unknown>
-      const cwd = typeof rec.cwd === 'string' ? rec.cwd : ''
-      const projectPath = typeof rec.projectPath === 'string' ? rec.projectPath : ''
-      if (cwd.trim() === '' || projectPath.trim() === '') continue
-      projects.push({ cwd, projectPath })
-    }
-  }
-  store.setConfig({ serverDist, projects })
+  // 请求里若还带 projects,一律忽略且不持久化:留着它只会让用户以为改了项目路径就生效。
+  store.setConfig({ serverDist, projects: [] })
   const saved = store.getConfig()
-  sendJson(res, 200, { ok: true, serverDist: saved.serverDist ?? '', projects: saved.projects })
+  sendJson(res, 200, { ok: true, serverDist: saved.serverDist ?? '', projects: [] })
 }

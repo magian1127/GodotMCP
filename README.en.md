@@ -6,11 +6,11 @@ A plugin ecosystem providing an MCP (Model Context Protocol) control plane for G
 
 ## Core capabilities
 
-- **83 built-in MCP tools**: 19 resident + 1 `discover_tools` meta tool at startup; 31 on-demand groups (64 tools) activated on demand to keep context cost bounded.
+- **92 built-in tool names**: only `godot_connect` before connecting; afterward nine core tools plus this session’s active groups from 17 groups (85 member slots / 83 unique group tools). Engine-version and unsafe gates also affect visibility; extensions are additional.
 - **Deterministic playtesting**: run the game, simulate input, inspect runtime state, control time and step frames, screenshots returned inline.
 - **Multi-instance**: a machine-level registry auto-discovers every running Godot instance; the daemon multiplexes them so several projects can be developed in parallel.
 - **Local-first security**: loopback-only listening with Bearer token auth; game export builds strip the plugin automatically.
-- **Multi-client access**: Codex, ZCode, DSH and VS Code each have an adapter layer; MCP tools are uniformly exposed under the `godot` server key (`mcp__godot__<tool>`; the DSH facade uses `godot_<tool>`).
+- **Multi-client access**: Codex, ZCode, DSH and VS Code each have an adapter layer; MCP tools are uniformly exposed under the `godot` server key (`mcp__godot__<tool>`; DSH uses `mcp__godot__<native tool name>`, while other hosts follow their actual tool list).
 
 ## Quick start
 
@@ -22,6 +22,8 @@ A plugin ecosystem providing an MCP (Model Context Protocol) control plane for G
 3. **Optional**: copy `.env.example` to `.env` and fill in your local Godot path so scripts run without parameters (the file is git-ignored).
 
 Prerequisites: Godot 4.x (.NET/mono build) with the target project's editor running. Full prerequisites and troubleshooting live in each client's adapter docs.
+
+Connect each session with `godot_connect(project="<absolute Godot project path>")`, then verify using `list_instances` and `scene_get_tree`. Activate further capabilities with `discover_tools(request=[group names])`. The [daemon README](plugin/godot-mcp-unified/server-dotnet/README.en.md) owns surface counts, addressing, timeouts, and reproduced limits. Passing current tests does not complete five-host release acceptance.
 
 ## Repository map
 

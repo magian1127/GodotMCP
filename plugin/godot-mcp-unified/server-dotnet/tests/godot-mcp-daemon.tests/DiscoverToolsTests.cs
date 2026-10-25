@@ -35,7 +35,11 @@ public class DiscoverToolsTests
     {
         var stateDir = TestPaths.NewStateDir();
         using var daemon = DaemonProcess.StartReady(new DaemonSpawnOptions { StateDir = stateDir, IdleSeconds = 120 });
-        await using var client = await SessionConnector.ConnectAsync(daemon.Port, daemon.Token);
+        // 本测试要观察"激活前 / 激活后"的工具面差异,所以不能自动激活全部组。
+        await using var session = await SessionConnector.ConnectKeyedAsync(
+            daemon.Port, daemon.Token, autoConnect: false);
+        var client = session.Client;
+        await session.ConnectGodotAsync(project: @"D:\proj\alpha");
         using var fake = FakeGodotInstance.Start(new FakeGodotOptions
         {
             ProjectPath = @"D:\proj\alpha",
@@ -55,7 +59,7 @@ public class DiscoverToolsTests
         Assert.Contains(before, t => t.Name == "discover_tools");
 
         // listen 长流:无状态 HTTP 下 daemon 自持该流(SDK 无状态内建 listen 按设计不授予通知)。
-        await using var listen = await ListenStream.OpenAsync(daemon.Port, daemon.Token);
+        await using var listen = await ListenStream.OpenAsync(daemon.Port, daemon.Token, session.SessionKey);
         var ack = await listen.WaitForAckAsync(TimeSpan.FromSeconds(10));
         Assert.True(ack["params"]!["notifications"]!["toolsListChanged"]!.GetValue<bool>());
 
@@ -138,116 +142,6 @@ public class DiscoverToolsTests
         Assert.True(reActivate.IsError is null or false, TextOf(reActivate));
         await Task.Delay(750);
         Assert.Single(listen.ListChanged);
-    }
-
-    /// <summary>
-    /// 激活状态 daemon 全局:会话 A 激活后会话 B 立即可见(跨会话一致、无隐藏状态);目录/模糊匹配/
-    /// refresh_extensions 空摘要;reset 全量与数组形态各自回落工具面。
-    /// <para>断言链:Arrange —— daemon+会话 A/B+fake(beta)声明 cleanup 三方法。Act/Assert ——
-    /// ① A 激活 cleanup 后 B 的 tools/list 立刻含 scene_close。② 无参目录恰 31 组,cleanup 行
-    /// status="already_loaded";③ request="delete" 模糊命中 cleanup,match="loose_keyword"。
-    /// ④ refresh_extensions 对无扩展脚本的替身不算错误,结算为空摘要(registered/deferred/commands
-    /// 全 0)。⑤ A reset:true:reset_all=true、deactivated 含 cleanup、deactivated_tools 含
-    /// scene_close;B 的 tools/list 不再含 scene_close,再调用抛异常(工具面已回落)。
-    /// ⑥ 数组形态 reset=["cleanup"](先重新激活):响应无 reset_all 键,deactivated 恰为 [cleanup]。</para>
-    /// </summary>
-    [Fact]
-    public async Task activation_is_daemon_global_across_sessions_and_reset_restores_surface()
-    {
-        var stateDir = TestPaths.NewStateDir();
-        using var daemon = DaemonProcess.StartReady(new DaemonSpawnOptions { StateDir = stateDir, IdleSeconds = 120 });
-        await using var sessionA = await SessionConnector.ConnectAsync(daemon.Port, daemon.Token);
-        await using var sessionB = await SessionConnector.ConnectAsync(daemon.Port, daemon.Token);
-        using var fake = FakeGodotInstance.Start(new FakeGodotOptions
-        {
-            ProjectPath = @"D:\proj\beta",
-            StateDir = stateDir,
-            Scripts = CleanupMethods.Select(m => new FakeScript
-            {
-                Method = m,
-                Reusable = true,
-                Frames = { new FakeFrame { Json = EchoParamsFrame() } },
-            }).ToList(),
-        });
-        await WaitConnectedAsync(sessionA, @"D:\proj\beta");
-
-        // 会话 A 激活 → 会话 B 立刻可见(daemon 全局,无隐藏状态)。
-        var activateA = await sessionA.CallToolAsync("discover_tools", new Dictionary<string, object?>
-        {
-            ["request"] = "cleanup",
-        });
-        Assert.True(activateA.IsError is null or false, TextOf(activateA));
-        var toolsB = await sessionB.ListToolsAsync();
-        Assert.Contains(toolsB, t => t.Name == "scene_close");
-
-        // 完整目录:31 个组;cleanup 已加载;模糊关键词 "delete" 命中 cleanup。
-        var catalog = await sessionB.CallToolAsync("discover_tools", new Dictionary<string, object?>());
-        using (var payload = JsonDocument.Parse(TextOf(catalog)))
-        {
-            var groups = payload.RootElement.GetProperty("groups");
-            Assert.Equal(31, groups.GetArrayLength());
-            var cleanup = groups.EnumerateArray().Single(g => g.GetProperty("name").GetString() == "cleanup");
-            Assert.Equal("already_loaded", cleanup.GetProperty("status").GetString());
-        }
-        var fuzzy = await sessionB.CallToolAsync("discover_tools", new Dictionary<string, object?>
-        {
-            ["request"] = "delete",
-        });
-        using (var payload = JsonDocument.Parse(TextOf(fuzzy)))
-        {
-            var cleanup = payload.RootElement.GetProperty("groups").EnumerateArray()
-                .First(g => g.GetProperty("name").GetString() == "cleanup");
-            Assert.Equal("loose_keyword", cleanup.GetProperty("match").GetString());
-        }
-
-        // refresh_extensions:对已连接实例拉取扩展(issue 14 起已接入;
-        // 该替身无扩展脚本 —— 拉取失败不算错误,结算为空摘要)。
-        var refresh = await sessionB.CallToolAsync("discover_tools", new Dictionary<string, object?>
-        {
-            ["refresh_extensions"] = true,
-        });
-        Assert.True(refresh.IsError is null or false, TextOf(refresh));
-        using (var payload = JsonDocument.Parse(TextOf(refresh)))
-        {
-            Assert.True(payload.RootElement.GetProperty("extensions_refreshed").GetBoolean());
-            var summary = payload.RootElement.GetProperty("extension_refresh");
-            Assert.Equal(0, summary.GetProperty("registered").GetInt32());
-            Assert.Equal(0, summary.GetProperty("deferred").GetInt32());
-            Assert.Equal(0, summary.GetProperty("commands").GetInt32());
-        }
-
-        // reset:true → 全部停用;工具面回落;组工具不可再调用。
-        var reset = await sessionA.CallToolAsync("discover_tools", new Dictionary<string, object?>
-        {
-            ["reset"] = true,
-        });
-        using (var payload = JsonDocument.Parse(TextOf(reset)))
-        {
-            Assert.True(payload.RootElement.GetProperty("reset_all").GetBoolean());
-            var deactivated = payload.RootElement.GetProperty("deactivated").EnumerateArray()
-                .Select(e => e.GetString()).ToList();
-            Assert.Contains("cleanup", deactivated);
-            Assert.Contains("scene_close", payload.RootElement.GetProperty("deactivated_tools").EnumerateArray()
-                .Select(e => e.GetString()).ToList());
-        }
-        var afterReset = await sessionB.ListToolsAsync();
-        Assert.DoesNotContain(afterReset, t => t.Name == "scene_close");
-        await Assert.ThrowsAnyAsync<Exception>(() => sessionB.CallToolAsync(
-            "scene_close", new Dictionary<string, object?> { ["file_path"] = "res://Main.tscn" }).AsTask());
-
-        // 数组形态 reset:重新激活后仅停用指定组,无 reset_all。
-        await sessionA.CallToolAsync("discover_tools", new Dictionary<string, object?> { ["request"] = "cleanup" });
-        var resetOne = await sessionA.CallToolAsync("discover_tools", new Dictionary<string, object?>
-        {
-            ["reset"] = new List<string> { "cleanup" },
-        });
-        using (var payload = JsonDocument.Parse(TextOf(resetOne)))
-        {
-            Assert.False(payload.RootElement.TryGetProperty("reset_all", out _));
-            var deactivated = payload.RootElement.GetProperty("deactivated").EnumerateArray()
-                .Select(e => e.GetString()!).ToList();
-            Assert.Equal(new List<string> { "cleanup" }, deactivated);
-        }
     }
 
     // ── 辅助 ────────────────────────────────────────────────────

@@ -1,5 +1,10 @@
 # 0005: 宿主条目 = stdio + 随包 shim（自举 daemon）
 
+中文 | [English](0005-host-entry-stdio-shim.en.md)
+
+> 当前会话工具面、默认目标与通知限制见 [daemon README](../../plugin/godot-mcp-unified/server-dotnet/README.md) 及 ADR-0006～0008；下文保留最初迁移方案及修订历史。
+
+
 每个宿主的 MCP 条目统一为 `type: stdio`、`command` 指向随包发布的 `godot-mcp-shim`
 （`server-dotnet/publish/<rid>/`），daemon 缺席时由 shim 自举拉起。即：**条目形态服从
 "任何 Godot 工程、任何宿主都能自行拉起服务"**，而不是服从"少一个转发进程"。

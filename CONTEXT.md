@@ -1,5 +1,7 @@
 # GodotMCP
 
+中文 | [English](CONTEXT.en.md)
+
 为 Godot 引擎提供 MCP(Model Context Protocol) 控制面的插件生态：AI 助手会话通过常驻 daemon 同时操控多个 Godot 项目与实例。
 
 ## Language
@@ -29,7 +31,7 @@ _Avoid_: projects.json（那是文件名，不是概念）
 _Avoid_: pid 文件、互斥量
 
 **接入令牌(daemon token)**:
-daemon 的 HTTP 面要求的机器级稳定 Bearer token；首次生成后存于注册表目录，host 静态配置与 shim plumbing 共用同一值。
+daemon 的 HTTP 面要求的机器级稳定 Bearer token；首次生成后存于注册表目录，由自举器读取后用于连接守护进程。
 _Avoid_: 密钥、鉴权串
 
 **操作队列(dispatch lane)**:
@@ -52,3 +54,15 @@ _Avoid_: 启动器、代理
 宿主配置文件（`.mcp.json` 等）里声明如何接入 daemon 的那一条记录。其形态是决策而非约定，
 由 [ADR-0005](docs/adr/0005-host-entry-stdio-shim.md) 决定，不随宿主而异。
 _Avoid_: MCP 配置、服务器定义
+
+**会话键(session key)**:
+区分自举器连接所持有应用状态的标识；激活组和默认目标按它归属，不能据此推导权限。
+_Avoid_: 项目句柄、接入令牌
+
+**工具面(tool face)**:
+某个会话当前可发现并调用的工具集合，随连接与组激活状态变化。
+_Avoid_: 全量目录、静态工具表
+
+**默认目标(default target)**:
+会话为后续省略实例参数的调用选定的项目；显式实例选择优先于它。
+_Avoid_: 全局当前项目、固定工作区

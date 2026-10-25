@@ -3,9 +3,6 @@ name: godot-mcp-unified
 description: >
   通过 Godot MCP Unified 构建、检查、调试和游玩测试 Godot 4 项目。
   覆盖当前合并后的工具面、按需组生命周期、安全规则和证据闭环。
-when_to_use: >
-  当 MCP 智能体通过 scene_get_tree、node_inspect、node_set_property、
-  game_start 或 discover_tools 等工具处理 Godot 项目时使用。
 ---
 
 [英文原文](SKILL.md)
@@ -16,23 +13,25 @@ when_to_use: >
 
 ## 工具面生命周期
 
-启动面包含 19 个业务工具和 `discover_tools`。只为当前工作阶段加载工具组，记录本次加载的组，普通工作同时保持不超过 3 个；阶段结束后使用 `discover_tools(reset=[...])` 释放下一阶段不再需要的组。跨领域任务可临时达到 5 个组。
+先调用 `godot_connect(project="<Godot 项目绝对路径>", groups=[...])`。未连接时只有入口，连接后是 9 个核心工具加本会话激活的组，共 17 个内置组。用 `discover_tools(request=[组名], include_schemas=true)` 按阶段加载，普通工作不超过 3 个组，跨领域任务可暂用 5 个。用 `discover_tools(reset=[...])` 释放不再需要的组；只传 `include_schemas=true` 不会激活。
 
 新增、编辑或删除项目扩展后使用 `discover_tools(refresh_extensions:true)`。Godot 4.2 修改已有扩展时可能需要重启编辑器；检查 `extension_refresh.hint`。
 
 服务器只有以 `GODOT_MCP_UNSAFE=1` 启动时才会暴露 `unsafe` 组。仅在用户明确授权且类型化工具无法表达当前操作时启用。
 
+工具列表、连接恢复与当前实现边界见 [多实例与会话](../../docs/multi-instance.zh-CN.md)。当前 `include_schemas=true` 对部分常驻工具只返回名称；以激活后的最新工具列表 schema 为准。多项目交错调用显式传 `instance`。
+
 ## 当前路由
 
 | 目标 | 工具或工具组 |
 |---|---|
-| 检查场景 | `scene_get_tree`、`scene_query`、`node_inspect`；几何布局加载 `scene_spatial` |
+| 检查场景 | `scene_get_tree`、`scene_query`、`node_inspect`；几何布局加载 `scene_edit` |
 | 编辑节点 | `scene_create_node`、`node_manage`、`node_set_property`、`node_set_script`、`scene_delete_node` |
-| 编辑项目文件 | 使用宿主的文件读取/补丁工具，然后加载 `editor_advanced` 并调用 `editor_sync` |
-| 项目配置 | `project_get_settings`；按需加载 `project_config`、`node_advanced`、`input_map` 或 `layer_naming` |
-| 素材与资源 | 加载 `asset_ops`、`resource_io` 或 `cleanup`；`project_delete` 统一处理项目路径删除 |
-| 运行时与游玩测试 | `game_start`、`runtime_inspect_node`、`input_simulate`、`capture_screenshot`、`log_read`；时间/动画控制加载 `runtime_advanced` |
-| GDScript 智能 | `script_check`；按需加载 `lsp_code_analysis`、`lsp_code_navigation` 或 `classdb` |
+| 编辑项目文件 | 使用宿主的文件读取/补丁工具，然后加载 `editor_ops` 并调用 `editor_sync` |
+| 项目配置 | 加载 `project_config` 使用设置、autoload、层名和输入映射；节点组用 `scene_edit` |
+| 素材与资源 | `assets`；删除用 `cleanup`，用户数据用 `user_data` |
+| 运行时与游玩测试 | `game_start`、`runtime_inspect_node`、`input_simulate`、`capture_screenshot`、`log_read`；时间/动画控制加载 `playtest` |
+| GDScript 智能 | 加载 `code_intel` 使用 `script_check`、`lsp_*`、`classdb_query` |
 | 调试器 | `log_read`；加载 `debugger` 使用 `debug_inspect`、断点和继续执行 |
 | 3D、Tile 与动画 | 加载最窄的领域组；使用 `scene_create_3d`、`tileset_edit` 和 `spriteframes_create`，不再使用旧的逐动作工具 |
 
@@ -49,7 +48,7 @@ when_to_use: >
 
 ## 确定性游玩测试
 
-从 `game_start(wait_for_runtime=true)` 开始。使用 `runtime_inspect_node` 和 `log_read` 捕获结构化基线。时间敏感行为使用 `runtime_time_control` 冻结和推进；尽量把输入作为一个有界的 `input_simulate` 序列发送。`capture_screenshot(target="runtime")` 只用于视觉证据。清理时始终解除冻结并释放按住的输入。
+激活 `playtest` 后从 `game_start(wait_for_runtime=true)` 开始。使用 `runtime_inspect_node` 和 `log_read` 捕获结构化基线。时间敏感行为使用 `runtime_time_control` 冻结和推进；尽量把输入作为一个有界的 `input_simulate` 序列发送。`capture_screenshot(target="runtime")` 只用于视觉证据。清理时始终解除冻结并释放按住的输入。
 
 ## 安全与错误
 

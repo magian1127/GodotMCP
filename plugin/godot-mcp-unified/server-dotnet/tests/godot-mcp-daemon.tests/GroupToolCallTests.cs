@@ -28,14 +28,14 @@ public class GroupToolCallTests
         string Tool, string ArgsJson, string Method, string ExpectedParamsJson, string? Via = null);
 
     /// <summary>
-    /// 调用期望总表:74 条行覆盖 58 个工具、31 组中的 28 组(lsp_code_analysis /
-    /// lsp_code_navigation / editor_advanced 由 LspToolsTests 与 EagerToolsTests 负责调用验证)。
+    /// 调用期望总表:74 条行覆盖 58 个工具、31 组中的 28 组(code_intel /
+    /// code_intel / editor_ops 由 LspToolsTests 与 EagerToolsTests 负责调用验证)。
     /// 普通工具方法与 params 直通;改写类工具(双方法分支、键名归一如 orthogonal_size → size、
     /// 通道改路由)以显式期望值表达,行内注释标注各组特例。
     /// </summary>
     private static readonly CallRow[] Rows =
     [
-        // ── runtime_advanced(仅运行时替身持有脚本 —— 路由错误将直接失败)──
+        // ── playtest(仅运行时替身持有脚本 —— 路由错误将直接失败)──
         Row("animation_player_control", """{"node_path":"/root/Main/Player","operation":"play","animation_name":"run"}""", via: "runtime"),
         Row("runtime_time_control", """{"action":"step","frames":3}""", via: "runtime"),
 
@@ -46,24 +46,24 @@ public class GroupToolCallTests
         Row("signal_emit", """{"node_path":"/root/Main","signal_name":"ready","channel":"runtime"}""",
             expectedParams: """{"node_path":"/root/Main","signal_name":"ready","args":[]}""", via: "runtime"),
 
-        // ── animation_authoring ──
+        // ── animation ──
         Row("animation_keyframe", """{"action":"add","player_path":"/root/Main/Player","animation_name":"run","track_path":"position","time":0.5,"value":{"x":1,"y":2}}"""),
         Row("animation_get_keys", """{"player_path":"/root/Main/Player","animation_name":"run","track_path":"position"}"""),
         Row("animationtree_edit", """{"node_path":"/root/Main/Anim","action":"set_root","root_type":"AnimationNodeStateMachine"}"""),
         Row("animationtree_list", """{"node_path":"/root/Main/Anim"}"""),
 
-        // ── input_map(特例:action 映射 + 双方法分支)──
+        // ── project_config(特例:action 映射 + 双方法分支)──
         Row("input_map_edit", """{"action":"bind","name":"jump","event":{"type":"key","keycode":32}}""",
             "input_map.event", """{"action":"bind","name":"jump","event":{"type":"key","keycode":32}}"""),
         Row("input_map_edit", """{"action":"add_action","name":"dash","deadzone":0.75}""",
             "input_map.action", """{"action":"add","name":"dash","deadzone":0.75}"""),
 
-        // ── resource_io ──
+        // ── assets ──
         Row("folder_create", """{"path":"res://generated"}"""),
         Row("resource_load", """{"file_path":"res://resources/font.tres"}"""),
         Row("resource_write", """{"file_path":"res://resources/mat.tres","properties":{"metallic":1.0},"type":"StandardMaterial3D"}"""),
 
-        // ── asset_ops(特例:双方法分支)──
+        // ── assets(特例:双方法分支)──
         Row("asset_query", """{"mode":"list","name_glob":"*.png","limit":5}""",
             "asset.list", """{"name_glob":"*.png","limit":5}"""),
         Row("asset_query", """{"mode":"dependencies","file_path":"res://scenes/Main.tscn","include_transitive":true}""",
@@ -88,7 +88,7 @@ public class GroupToolCallTests
         Row("save_write", """{"path":"user://save1.dat","content":"abc"}"""),
         Row("save_delete", """{"path":"user://save1.dat"}"""),
 
-        // ── scene_advanced ──
+        // ── scene_edit ──
         Row("scene_diff", """{"before":"res://a.tscn","after":"res://b.tscn"}"""),
         Row("scene_instantiate", """{"parent_path":"/root/Main","scene_path":"res://Enemy.tscn","as_name":"Enemy1"}"""),
 
@@ -108,18 +108,18 @@ public class GroupToolCallTests
         Row("tileset_edit", """{"aspect":"physics","file_path":"res://tiles/new.tres","tiles":[{"source_id":0,"atlas_x":0,"atlas_y":0}]}""",
             "tileset.edit_physics", """{"file_path":"res://tiles/new.tres","tiles":[{"source_id":0,"atlas_x":0,"atlas_y":0}]}"""),
 
-        // ── theme ──
+        // ── art_fx ──
         Row("theme_edit", """{"file_path":"res://ui/theme.tres","edits":[{"type":"color","name":"font_color","value":"#ffffff"}]}"""),
 
-        // ── layer_naming ──
+        // ── project_config ──
         Row("layer_names_set", """{"category":"2d_physics","layers":{"1":"terrain"}}"""),
         Row("layer_names_get", """{"category":"3d_render"}"""),
 
-        // ── path_editing ──
+        // ── art_fx ──
         Row("path2d_edit_curve", """{"node_path":"/root/Main/Path2D","action":"set","points":[{"x":0,"y":0},{"x":10,"y":5}]}"""),
         Row("collision_from_texture", """{"sprite_path":"res://assets/ship.png","parent_path":"/root/Main"}"""),
 
-        // ── 3d_tools(特例:kind 分支 + mesh_size/orthogonal_size → size)──
+        // ── world_3d(特例:kind 分支 + mesh_size/orthogonal_size → size)──
         Row("scene_create_3d", """{"kind":"primitive","parent_path":"/root/Main","primitive":"box","mesh_size":{"x":1,"y":2,"z":1}}""",
             "3d.create_primitive", """{"parent_path":"/root/Main","primitive":"box","size":{"x":1,"y":2,"z":1}}"""),
         Row("scene_create_3d", """{"kind":"light","parent_path":"/root/Main","light_type":"omni","energy":2.0}""",
@@ -129,29 +129,29 @@ public class GroupToolCallTests
         Row("scene_create_3d", """{"kind":"environment","parent_path":"/root/Main","tonemap":"aces"}""",
             "3d.setup_environment", """{"parent_path":"/root/Main","tonemap":"aces"}"""),
 
-        // ── procedural ──
+        // ── art_fx ──
         Row("procedural_edit_gradient", """{"file_path":"res://grad.tres","action":"set","points":[{"offset":0,"color":"#000000"}]}"""),
         Row("procedural_edit_curve", """{"file_path":"res://curve.tres","action":"set","points":[{"offset":0,"value":1}]}"""),
         Row("procedural_edit_noise", """{"file_path":"res://noise.tres","noise_type":"simplex","frequency":0.05}"""),
 
-        // ── scene_inheritance ──
+        // ── scene_edit ──
         Row("scene_create_inherited", """{"file_path":"res://enemy_variant.tscn","base_scene":"res://Enemy.tscn","root_name":"EnemyVariant"}"""),
 
         // ── audio ──
         Row("audiobus_edit", """{"action":"set_bus","bus_name":"Master","volume_db":-3.0}"""),
         Row("audiobus_list", """{}"""),
 
-        // ── spriteframes(特例:frames / spritesheet 双方法)──
+        // ── animation(特例:frames / spritesheet 双方法)──
         Row("spriteframes_create", """{"file_path":"res://anim.tres","source":"frames","animations":[{"name":"idle","frames":[{"texture_path":"res://a.png"}]}]}""",
             "spriteframes.create", """{"file_path":"res://anim.tres","animations":[{"name":"idle","frames":[{"texture_path":"res://a.png"}]}]}"""),
         Row("spriteframes_create", """{"file_path":"res://anim2.tres","source":"spritesheet","texture_path":"res://sheet.png","frame_size":{"x":32,"y":32},"animations":[{"name":"run","frame_count":4}]}""",
             "spriteframes.from_spritesheet", """{"file_path":"res://anim2.tres","texture_path":"res://sheet.png","frame_size":{"x":32,"y":32},"animations":[{"name":"run","frame_count":4}]}"""),
         Row("spriteframes_edit", """{"file_path":"res://anim.tres","action":"set_fps","animation_name":"idle","fps":10.0}"""),
 
-        // ── particles ──
+        // ── art_fx ──
         Row("particles_create", """{"parent_path":"/root/Main","type":"3d","preset":"fire","amount":32}"""),
 
-        // ── navigation ──
+        // ── world_3d ──
         Row("navigation_edit", """{"node_path":"/root/Main/NavRegion","action":"set","outlines":[{"points":[[0,0],[10,0],[10,10]]}]}"""),
 
         // ── debugger(特例:mode 选择方法 + 空 params)──
@@ -160,7 +160,7 @@ public class GroupToolCallTests
         Row("debug_set_breakpoint", """{"file_path":"res://scripts/x.gd","line":10,"enabled":true}"""),
         Row("debug_continue", """{}"""),
 
-        // ── classdb(特例:双方法分支)──
+        // ── code_intel(特例:双方法分支)──
         Row("classdb_query", """{"mode":"search","pattern":"Node","limit":10}""",
             "classdb.search", """{"pattern":"Node","limit":10}"""),
         Row("classdb_query", """{"mode":"info","class_name":"Node2D","include_inherited":true}""",
@@ -170,11 +170,11 @@ public class GroupToolCallTests
         Row("project_set_setting", """{"setting":"application/run/main_scene","value":"res://Main.tscn"}"""),
         Row("autoload_manage", """{"action":"register","name":"GameState","script_path":"res://autoload/game_state.gd"}"""),
 
-        // ── node_advanced ──
+        // ── scene_edit ──
         Row("node_groups", """{"action":"add","node_path":"/root/Main","group":"enemies"}"""),
         Row("control_set_layout", """{"node_path":"/root/Main/Panel","preset":"full_rect","resize_mode":"set_to_anchors"}"""),
 
-        // ── scene_spatial ──
+        // ── scene_edit ──
         Row("scene_spatial_map", """{"detail":"brief","max_nodes":50}"""),
 
         // ── unsafe(特例:execute_code 通道;node_call_method 默认编辑器)──
@@ -184,7 +184,7 @@ public class GroupToolCallTests
             "execute.code", """{"code":"get_node('/root/Main').name"}""", via: "runtime"),
         Row("node_call_method", """{"node_path":"/root/Main","method_name":"queue_free"}"""),
 
-        // 注:lsp_code_analysis / lsp_code_navigation / editor_advanced 三组由
+        // 注:code_intel / code_intel / editor_ops 三组由
         // LspToolsTests(11 号)与 EagerToolsTests(09 号)提供调用验证记录;
         // 本测试覆盖其余 28 组、共 74 条调用行(58 个去重工具,含同工具双通道/双方法行)。
     ];
@@ -258,8 +258,12 @@ public class GroupToolCallTests
         using (var payload = JsonDocument.Parse(TextOf(discover)))
         {
             var groups = payload.RootElement.GetProperty("groups").EnumerateArray().ToList();
-            Assert.Equal(31, groups.Count);
-            Assert.All(groups, g => Assert.Equal("activated", g.GetProperty("status").GetString()));
+            // 17 组(ADR-0007 把 31 组碎片化成 17 组)。
+            Assert.Equal(17, groups.Count);
+            // 连接器已激活全部组,discover_tools 再激活同一批 → already_loaded 才是正确状态。
+            // 断言"已加载"而不是"本次激活",否则会把正确行为判成失败。
+            Assert.All(groups, g =>
+                Assert.Contains(g.GetProperty("status").GetString()!, new[] { "activated", "already_loaded" }));
         }
 
         // 74 条调用行逐一:正确方法 + 精确 params + 正确通道。

@@ -16,8 +16,8 @@ public sealed record GroupStatus(string Name, string Status, IReadOnlyList<strin
 
 /// <summary>
 /// 按需工具组激活引擎(issue 12;Node groups/groupActivation/groupMatch 语义的 C# 移植;
-/// issue 13 全量:31 组 / 64 工具,表驱动;issue 14:扩展组 + 版本门控并集)。
-/// 激活状态为 daemon 全局(与实例/会话无关):每个新请求会话语义上从全局状态同步
+/// issue 13 全量:17 组 / 85 槽位(83 唯一),表驱动;issue 14:扩展组 + 版本门控并集)。
+/// 激活状态<b>按会话键隔离</b>(ADR-0007):每个请求从<b>本键</b>的已激活集合同步
 /// 工具面(ConfigureSession),激活动作在当前请求会话的工具集合上触发
 /// 一次 tools/list_changed。
 /// </summary>
@@ -25,7 +25,7 @@ public sealed record GroupStatus(string Name, string Status, IReadOnlyList<strin
 /// 完整机制链(发现 → 激活 → 暴露 → 调用 → 通知):
 /// ① 发现:内置组来自 GroupCatalogue(静态目录);扩展组来自 ExtensionService(插件登记,
 ///    含版本门控);discover_tools 元工具按精确名或关键词打分流向 Activate/Catalog。
-/// ② 激活/停用:Activate 把组名记入全局 _loaded(内置)或 _loadedExtGroups(扩展);
+/// ② 激活/停用:Activate 把组名记入<b>本会话键</b>的已激活集合(内置与扩展分开存);
 ///    Deactivate 移除(names 缺省即全部停用)。unsafe 组受 GODOT_MCP_UNSAFE=1 门控。
 /// ③ tools/list 暴露:无状态 HTTP 下每个请求经 ConfigureSession 捕获会话工具集合并
 ///    SyncCollection —— EnsureGroupToolsLocked/EnsureExtGroupToolsLocked 懒建工具对象
@@ -55,17 +55,47 @@ public sealed class GroupService
     public const string UnknownGroupMessage = "Unknown group: ";
 
     /// <summary>
-    /// 已由 daemon 常驻注册(eager,WithToolsFromAssembly)的组工具 —— 这些工具组激活
-    /// 只改变状态与目录呈现,不重复注册/移出会话工具集合(它们始终可见)。
+    /// 已由 daemon 常驻注册(eager,<c>WithToolsFromAssembly</c>)且同时属于某个组的工具名(ADR-0007)。
     /// </summary>
+    /// <remarks>
+    /// <para><b>为什么是这 25 个</b>:它们是"常驻且属于组"的精确交集 —— 34 个常驻工具减去
+    /// core 9 里不属于任何组的那些(以及 <c>godot_connect</c> 本身)。</para>
+    /// <para><b>为什么必须列进来</b>:EnsureGroupToolsLocked 只跳过本集合里的名字,
+    /// 其余成员会在组激活时被建成 JsonSchemaGroupTool 影子。而填工具集合时
+    /// Add 会抛、TryAdd 是"先加入者胜" —— 两份是<b>不同实现</b>
+    /// (C# 的 node_set_property 有复合路由,影子是纯 wire 转发),顺序不同就静默漂移。
+    /// 列进来还顺手修掉"停用组时 collection.Remove(tool) 误摘常驻同名工具"的老毛病。</para>
+    /// <para><b>代价</b>:discover_tools 的目录对这 25 个只能报名字
+    /// (TryGetToolObject 取不到 description/schema);仅在 include_schemas: true 时可见,
+    /// 而该参数默认 false。</para>
+    /// </remarks>
     private static readonly HashSet<string> EagerRegisteredToolNames = new(StringComparer.Ordinal)
     {
+        "editor_answer_dialog",
+        "editor_build_csharp",
+        "editor_build_csharp_status",
+        "editor_build_csharp_wait",
+        "editor_save_scene",
         "editor_sync",
-        "lsp_diagnostics",
-        "lsp_symbols",
-        "lsp_hover",
+        "editor_windows",
+        "game_start",
+        "game_stop",
+        "input_simulate",
         "lsp_completion",
+        "lsp_diagnostics",
+        "lsp_hover",
         "lsp_navigate",
+        "lsp_symbols",
+        "node_manage",
+        "node_set_property",
+        "node_set_script",
+        "project_get_settings",
+        "runtime_inspect_node",
+        "scene_create",
+        "scene_create_node",
+        "scene_delete_node",
+        "scene_open",
+        "script_check",
     };
 
     /// <summary>实例管理器(版本门控可提供性判定用)。</summary>
@@ -74,45 +104,115 @@ public sealed class GroupService
     private readonly ExtensionService _extensions;
     /// <summary>组工具调用器(所有 JsonSchemaGroupTool 共享)。</summary>
     private readonly GroupToolInvoker _invoker;
-    /// <summary>保护全局激活状态与工具对象表的锁。</summary>
+    /// <summary>当前请求的会话键载体(AsyncLocal);无键请求回落到 <see cref="DefaultKey"/>。</summary>
+    private readonly Sessions.SessionKeyAccessor _keys;
+    /// <summary>当前请求的会话态(键 + cwd)的<b>唯一真源</b>。</summary>
+    private readonly Sessions.SessionRequestScope _scope;
+    /// <summary>保护激活状态与工具对象表的锁。</summary>
+    /// <remarks>锁序:会话键注册表的锁<b>先于</b>本锁。工具面填充开始前先取注册表快照,
+    /// 不得在本锁内回取注册表,否则与"激活/通知先注册表后本锁"形成 ABBA。</remarks>
     private readonly object _gate = new();
-    /// <summary>已激活内置组名(daemon 全局,跨请求/会话共享)。</summary>
-    private readonly HashSet<string> _loaded = new(StringComparer.Ordinal);
-    /// <summary>已激活扩展组名(与 _loaded 并列,随扩展生命周期)。</summary>
-    private readonly HashSet<string> _loadedExtGroups = new(StringComparer.Ordinal);
+    /// <summary>按会话键隔离的已激活内置组名(ADR-0007)。</summary>
+    private readonly Dictionary<string, HashSet<string>> _loadedByKey = new(StringComparer.Ordinal);
+    /// <summary>按会话键隔离的已激活扩展组名。</summary>
+    private readonly Dictionary<string, HashSet<string>> _loadedExtByKey = new(StringComparer.Ordinal);
     /// <summary>已登记工具名 → 工具对象(全局唯一、跨会话复用;扩展命令更新时原位重建)。</summary>
+    /// <remarks>工具对象是 DI 单例级共享的,因此<b>禁止按会话改写</b>其 Description/schema。</remarks>
     private readonly Dictionary<string, McpServerTool> _toolObjects = new(StringComparer.Ordinal);
     /// <summary>当前请求会话的工具集合(AsyncLocal,仅本请求异步上下文内可见)。</summary>
     private readonly AsyncLocal<McpServerPrimitiveCollection<McpServerTool>?> _sessionCollection = new();
 
+    /// <summary>无会话键时使用的桶名。用于裸 HTTP 调试与尚未接入键的调用方。</summary>
+    public const string DefaultKey = "";
+
     /// <summary>注入依赖并预建组工具调用器。</summary>
-    /// <param name="instances">实例管理器(转交给调用器做 wire 调用)。</param>
+    /// <param name="instances">实例管理器(组工具经它发起 wire 调用)。</param>
     /// <param name="extensions">扩展服务(扩展组/扩展工具定义源)。</param>
-    public GroupService(InstanceManager instances, ExtensionService extensions)
+    /// <param name="keys">会话键访问器(兜底读键)。</param>
+    /// <param name="scope">请求作用域(会话键与 cwd 的唯一真源)。</param>
+    /// <param name="targets">
+    /// 按本键默认目标寻址的解析器。<b>本类不直接使用它</b> —— 它的用途是让 DI 在建
+    /// <c>GroupService</c> 时就把这个单例实例化出来,好让组合根能立刻给
+    /// <c>InstanceManager.DefaultTargetProvider</c> 接线。
+    /// </param>
+    public GroupService(
+        InstanceManager instances,
+        ExtensionService extensions,
+        Sessions.SessionKeyAccessor keys,
+        Sessions.SessionRequestScope scope,
+        Tools.SessionTargetResolver targets)
     {
+        _ = targets;
         _instances = instances;
         _extensions = extensions;
+        _keys = keys;
+        _scope = scope;
         _invoker = new GroupToolInvoker(instances);
     }
 
-    /// <summary>
-    /// 工具面变更信号:任意会话真实改变全局激活状态后触发(discover_tools 每批至多一次)。
-    /// 无状态 HTTP 下本信号是 tools/list_changed 的唯一来源 —— 由挂起的
-    /// subscriptions/listen 长流消费(GroupListenStream,issue 12)。
-    /// </summary>
-    public event Action? ToolSurfaceChanged;
+    /// <summary>当前请求的会话键;无键请求回落到 <see cref="DefaultKey"/>。</summary>
+    public string CurrentKey => _scope.CurrentKey ?? _keys.CurrentKey ?? DefaultKey;
 
-    /// <summary>通报一次工具面变更(仅真实变化时调用;空闲/幂等激活不触发)。</summary>
-    public void NotifyToolSurfaceChanged() => ToolSurfaceChanged?.Invoke();
+    /// <summary>取当前键的已激活内置组集合(持锁调用;首次访问建空桶)。</summary>
+    private HashSet<string> LoadedLocked => Bucket(_loadedByKey, CurrentKey);
 
-    /// <summary>订阅工具面变更;释放返回值即退订(监听长流随客户端断开而收尾)。</summary>
-    public IDisposable SubscribeToolSurface(Action onChanged)
+    /// <summary>取当前键的已激活扩展组集合(持锁调用)。</summary>
+    private HashSet<string> LoadedExtLocked => Bucket(_loadedExtByKey, CurrentKey);
+
+    /// <summary>按键取桶,不存在则建空桶。</summary>
+    /// <param name="map">键 → 组名集合的表。</param>
+    /// <param name="key">会话键。</param>
+    /// <returns>该键的集合实例(后续增删直接作用其上)。</returns>
+    private static HashSet<string> Bucket(Dictionary<string, HashSet<string>> map, string key)
     {
-        ToolSurfaceChanged += onChanged;
-        return new ToolSurfaceSubscription(this, onChanged);
+        if (!map.TryGetValue(key, out var set))
+        {
+            set = new HashSet<string>(StringComparer.Ordinal);
+            map[key] = set;
+        }
+
+        return set;
     }
 
-    private sealed class ToolSurfaceSubscription(GroupService owner, Action onChanged) : IDisposable
+    /// <summary>
+    /// <summary>
+    /// 工具面变更信号:<b>带会话键</b>。只有该键自己的 listen 流应该被唤醒。
+    /// </summary>
+    /// <remarks>
+    /// <para>spec §1.7 要求"通知推给<b>该键</b>所有活跃流"。全局广播(不带 key)会让
+    /// N 个会话在一次激活后收到 N 条无关通知 —— N² 噪声;会话 B 的工具面根本没变却要重拉一次,
+    /// 真正该变的 A 反而被掩盖在噪声里。</para>
+    /// <para>键为 <see cref="DefaultKey"/>(空串)时表示"影响全部会话"(扩展热更新/回滚面)。</para>
+    /// </remarks>
+    public event Action<string>? ToolSurfaceChanged;
+
+    /// <summary>通报一次工具面变更(仅真实变化时调用;空闲/幂等激活不触发)。</summary>
+    /// <param name="sessionKey">变化的会话键;null 或空串表示影响全部会话。</param>
+    public void NotifyToolSurfaceChanged(string? sessionKey = null)
+        => ToolSurfaceChanged?.Invoke(string.IsNullOrEmpty(sessionKey) ? DefaultKey : sessionKey);
+
+    /// <summary>订阅工具面变更;释放返回值即退订(监听长流随客户端断开而收尾)。</summary>
+    /// <param name="sessionKey">本订阅关心的会话键;null 或空串表示关心全部变化。</param>
+    /// <param name="onChanged">变化回调。</param>
+    /// <returns>退订句柄。</returns>
+    public IDisposable SubscribeToolSurface(string? sessionKey, Action onChanged)
+    {
+        var watched = string.IsNullOrEmpty(sessionKey) ? DefaultKey : sessionKey;
+
+        // 只有"本键变了"或"全局变了"才唤醒 —— 别的键变化与本流无关。
+        void Handler(string changedKey)
+        {
+            if (changedKey == watched || changedKey == DefaultKey)
+            {
+                onChanged();
+            }
+        }
+
+        ToolSurfaceChanged += Handler;
+        return new ToolSurfaceSubscription(this, Handler);
+    }
+
+    private sealed class ToolSurfaceSubscription(GroupService owner, Action<string> onChanged) : IDisposable
     {
         /// <summary>持有人引用;Dispose 后置 null 保证退订恰好执行一次。</summary>
         private GroupService? _owner = owner;
@@ -135,7 +235,7 @@ public sealed class GroupService
         {
             lock (_gate)
             {
-                return _loaded.Count;
+                return LoadedLocked.Count;
             }
         }
     }
@@ -147,7 +247,7 @@ public sealed class GroupService
     {
         lock (_gate)
         {
-            return _loaded.Contains(name);
+            return LoadedLocked.Contains(name);
         }
     }
 
@@ -155,13 +255,98 @@ public sealed class GroupService
     public McpServerPrimitiveCollection<McpServerTool>? CurrentSessionCollection => _sessionCollection.Value;
 
     /// <summary>
-    /// 会话配置钩子(每个请求调用):捕获当前会话工具集合,并把工具面对齐到
-    /// daemon 全局激活状态(幂等)——没这一步,后续请求将看不到已激活的组工具。
+    /// 当前请求的会话键(AsyncLocal)。由 <see cref="ConfigureSession"/> 在
+    /// <c>ConfigureSessionOptions</c> 里写入 —— 这条路径与 <see cref="_sessionCollection"/>
+    /// 完全一致,而后者已被 <c>DiscoverTools</c> 长期使用并验证可读。
     /// </summary>
-    public void ConfigureSession(McpServerPrimitiveCollection<McpServerTool> collection)
+    /// <remarks>
+    /// 会话态本身的载体在 <see cref="Sessions.SessionRequestScope"/> —— 那是**唯一真源**,
+    /// 提出来是为了让 <c>SessionTargetResolver</c> 也能读它而不与 GroupService 形成构造环。
+    /// </remarks>
+    /// <summary>当前请求的会话键;无键请求为 null。</summary>
+    public string? CurrentSessionKey => _scope.CurrentKey;
+
+    /// <summary>当前请求的会话工作目录;未知为 null。</summary>
+    public string? CurrentWorkingDirectory => _scope.CurrentWorkingDirectory;
+
+    /// <summary>
+    /// 忘掉某个会话键的全部组状态(键被回收时调用)。
+    /// </summary>
+    /// <remarks>
+    /// <para>为什么必须清:每个历史键留两个 <c>HashSet</c>,而 daemon 是常驻单例、shim 每次
+    /// 启动换 UUID —— 不清就是无界增长。</para>
+    /// <para>更隐蔽的后果:同一 shim 用同一 UUID 重连时,<c>godot_connect</c> 建出的新键组集为空
+    /// (工具面 = core 9),但只要模型调一次**无参**的 <c>discover_tools()</c>(规范里那是"只浏览"),
+    /// 桶里的旧组就会被写回注册表并静默展开 —— 模型从未激活过的工具自己出现。
+    /// 清了桶,"浏览"才真的是浏览。</para>
+    /// <para><b>绝不清 <see cref="DefaultKey"/></b>:那是无键请求与回滚面的公共桶,
+    /// 不归任何会话所有。</para>
+    /// </remarks>
+    /// <param name="sessionKey">被回收的会话键。</param>
+    public void ForgetKey(string sessionKey)
+    {
+        if (string.IsNullOrEmpty(sessionKey) || sessionKey == DefaultKey)
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            _loadedByKey.Remove(sessionKey);
+            _loadedExtByKey.Remove(sessionKey);
+        }
+    }
+
+    /// <summary>
+    /// 会话配置钩子(每个请求调用):捕获当前会话工具集合与会话键,并把工具面对齐到
+    /// <b>本会话键</b>的激活状态(幂等)。
+    /// </summary>
+    /// <param name="collection">本请求的工具集合。</param>
+    /// <param name="sessionKey">本请求的会话键;无键请求传 null。</param>
+    public void ConfigureSession(McpServerPrimitiveCollection<McpServerTool> collection, string? sessionKey = null, string? workingDirectory = null)
     {
         _sessionCollection.Value = collection;
+        // 三态里只区分"没带 header"与"带了":非法键在中间件那层已被识别并记日志,
+        // 它无法跨执行上下文传到工具 handler(AsyncLocal 不流过去)。这一分已足够消除
+        // 最有害的误导 —— 让"客户端根本没带键"与"带了但还没 connect"给出不同的修复动作。
+        _scope.Set(sessionKey, workingDirectory,
+            string.IsNullOrEmpty(sessionKey) ? Sessions.RequestKeyShape.Missing : Sessions.RequestKeyShape.Present);
         SyncCollection(collection);
+    }
+
+    /// <summary>
+    /// 只为<b>本会话已激活</b>的组/扩展组构造工具对象，<b>不碰任何请求的集合</b>。
+    /// </summary>
+    /// <remarks>
+    /// <para>这是 <c>discover_tools</c> 该用的入口（spec §7）。<see cref="SyncCollection"/>
+    /// 把"懒建工具对象"和"往当前请求的集合里增删"揉在一起，而后者在每请求新建集合的
+    /// 模型下既多余、又是<b>反向</b>的：它会在漂移时先把工具从本次请求的面摘掉，
+    /// 而不是留到下一请求由 <see cref="ComposeFace"/> 自愈。</para>
+    /// <para><c>discover_tools</c> 只需要前者 —— <c>include_schemas</c> 要能读到刚激活组的
+    /// schema，而工具面会由紧接着的 <c>tools/list</c> 经 <c>ConfigureSessionOptions</c> 重算。</para>
+    /// </remarks>
+    public void EnsureActivatedTools()
+    {
+        lock (_gate)
+        {
+            foreach (var groupName in LoadedLocked.ToList())
+            {
+                EnsureGroupToolsLocked(groupName);
+            }
+            foreach (var groupName in LoadedExtLocked.ToList())
+            {
+                EnsureExtGroupToolsLocked(groupName);
+            }
+            EnsureUngroupedExtToolsLocked();
+            // 扩展被移除/更新后的陈旧对象清理(下次登记会重建)。
+            foreach (var toolName in _toolObjects.Keys.ToList())
+            {
+                if (_toolObjects[toolName] is ExtensionTool && _extensions.TryGet(toolName) is null)
+                {
+                    _toolObjects.Remove(toolName);
+                }
+            }
+        }
     }
 
     /// <summary>把某工具集合对齐到全局激活状态(活动组工具在、停用组工具不在;含扩展工具与版本门控)。</summary>
@@ -169,11 +354,11 @@ public sealed class GroupService
     {
         lock (_gate)
         {
-            foreach (var groupName in _loaded.ToList())
+            foreach (var groupName in LoadedLocked.ToList())
             {
                 EnsureGroupToolsLocked(groupName);
             }
-            foreach (var groupName in _loadedExtGroups.ToList())
+            foreach (var groupName in LoadedExtLocked.ToList())
             {
                 EnsureExtGroupToolsLocked(groupName);
             }
@@ -198,6 +383,205 @@ public sealed class GroupService
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// 把<b>本会话键</b>当前的激活集合写回会话键注册表(ADR-0007)。
+    /// </summary>
+    /// <remarks>
+    /// 工具面的可见集是从注册表快照算的(<see cref="ToolFaceComposer"/>),所以任何改动激活状态的
+    /// 路径(激活/停用/扩展刷新)都必须调用本方法,否则"激活了组但工具面没变"。
+    /// </remarks>
+    /// <returns>本键当前的组名(内置 + 扩展,已排序)。</returns>
+    public string[] SnapshotGroupsForCurrentKey()
+    {
+        lock (_gate)
+        {
+            return LoadedLocked.Concat(LoadedExtLocked)
+                .OrderBy(n => n, StringComparer.Ordinal)
+                .ToArray();
+        }
+    }
+    /// <remarks>
+    /// <para>组工具四段一个都不能少:内置组 Ensure、扩展组 Ensure、未分组扩展 Ensure、
+    /// 陈旧 <see cref="ExtensionTool"/> 清理。缺任一段都会丢面。</para>
+    /// <para><b>整体持 <c>_gate</c></b>:<c>_toolObjects</c> 是普通 <c>Dictionary</c>,
+    /// 而 <c>Ensure*Locked</c> 要求调用者已持锁。只对"读"加锁会在 Dictionary 上并发写。</para>
+    /// <para>锁序:调用方必须<b>先</b>取会话键注册表快照再调本方法(不得在本锁内回取注册表)。</para>
+    /// </remarks>
+    /// <param name="collection">本请求的工具集合。</param>
+    /// <param name="connected">该会话是否已连接(未连接时只留 <c>godot_connect</c>)。</param>
+    /// <param name="visible">调用方算好的可见工具名集合。</param>
+    /// <param name="order">可见工具名的稳定输出顺序。</param>
+    /// <param name="sessionKey">本请求的会话键;无键请求传 null。</param>
+    /// <param name="workingDirectory">shim 上报的 cwd;供空参 <c>godot_connect</c> 发现候选项目。</param>
+    public void ComposeFace(
+        McpServerPrimitiveCollection<McpServerTool> collection,
+        bool connected,
+        IReadOnlySet<string> visible,
+        IReadOnlyList<string> order,
+        string? sessionKey = null,
+        string? workingDirectory = null)
+    {
+        _sessionCollection.Value = collection;
+        // 三态里只区分"没带 header"与"带了":非法键在中间件那层已被识别并记日志,
+        // 它无法跨执行上下文传到工具 handler(AsyncLocal 不流过去)。这一分已足够消除
+        // 最有害的误导 —— 让"客户端根本没带键"与"带了但还没 connect"给出不同的修复动作。
+        _scope.Set(sessionKey, workingDirectory,
+            string.IsNullOrEmpty(sessionKey) ? Sessions.RequestKeyShape.Missing : Sessions.RequestKeyShape.Present);
+        lock (_gate)
+        {
+            if (connected)
+            {
+                foreach (var groupName in LoadedLocked.ToList())
+                {
+                    EnsureGroupToolsLocked(groupName);
+                }
+                foreach (var groupName in LoadedExtLocked.ToList())
+                {
+                    EnsureExtGroupToolsLocked(groupName);
+                }
+                EnsureUngroupedExtToolsLocked();
+                foreach (var toolName in _toolObjects.Keys.ToList())
+                {
+                    if (_toolObjects[toolName] is ExtensionTool && _extensions.TryGet(toolName) is null)
+                    {
+                        _toolObjects.Remove(toolName);
+                    }
+                }
+            }
+
+            // 组工具对象按可见集补进集合(常驻工具已由 assembly 注册在集合里)。
+            // **先按 order 走一遍拿稳定顺序,再补齐 order 里没有的可见名** ——
+            // order 只覆盖 Node 表内的工具,扩展工具(未分组的、扩展组登记的)不在表里,
+            // 若只按 order 填,扩展工具会被后面的裁剪逻辑删掉(它已在 visible 里,却从未被加进集合)。
+            foreach (var toolName in order)
+            {
+                if (visible.Contains(toolName) && _toolObjects.TryGetValue(toolName, out var tool))
+                {
+                    collection.TryAdd(tool);
+                }
+            }
+
+            foreach (var toolName in visible)
+            {
+                if (_toolObjects.TryGetValue(toolName, out var tool))
+                {
+                    collection.TryAdd(tool);
+                }
+            }
+
+            // 不在可见集里的一律移除 —— 这是"未连接只看到 godot_connect"的实现点。
+            foreach (var tool in collection.ToArray())
+            {
+                if (!visible.Contains(tool.ProtocolTool.Name))
+                {
+                    collection.Remove(tool);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 本会话键的<b>完整可见集</b>(core ∪ 内置组 ∪ 扩展组 ∪ 未分组扩展)。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>这是可见集的唯一计算入口</b>。工具面组装器(<c>ToolFaceComposer</c>)与
+    /// 未命中兜底(<c>ToolCallFallback</c>)都必须调它 —— 两处各算一套必然漂移,
+    /// 漂移的后果是"某个工具明明在面上,一调却说它不存在/组未激活"。</para>
+    /// <para>内置组由 <see cref="ToolFace.VisibleToolNames"/> 回答(它只认
+    /// <see cref="GroupCatalogue"/>),扩展组与未分组扩展不在目录里,必须在这里补 ——
+    /// 这是"扩展组激活了、工具却永不出现"的唯一成因。</para>
+    /// </remarks>
+    /// <param name="activeGroups">本会话键的激活组名;null 表示未连接。</param>
+    /// <returns>可见工具名集合(可继续 Add)。</returns>
+    public HashSet<string> VisibleToolNamesFor(IEnumerable<string>? activeGroups)
+    {
+        var visible = ToolFace.VisibleToolNames(activeGroups);
+        if (activeGroups is null)
+        {
+            // 未连接:只有入口工具,绝不回落全量(fail-open)。
+            return visible;
+        }
+
+        var groups = activeGroups as IReadOnlyList<string> ?? activeGroups.ToList();
+        foreach (var name in UngroupedExtensionToolNames())
+        {
+            visible.Add(name);
+        }
+        foreach (var name in ExtensionGroupToolNames(groups))
+        {
+            visible.Add(name);
+        }
+
+        return visible;
+    }
+
+    /// <summary>
+    /// 未分组扩展工具的名字集合(供可见集计算并进)。
+    /// </summary>
+    /// <remarks>必须在<b>裁剪之前</b>并进可见集 —— 裁剪会移除所有不在可见集里的工具。</remarks>
+    /// <returns>未分组扩展工具名。</returns>
+    public IReadOnlyList<string> UngroupedExtensionToolNames()
+    {
+        lock (_gate)
+        {
+            EnsureUngroupedExtToolsLocked();
+            return _toolObjects.Keys
+                .Where(name => _extensions.IsUngrouped(name))
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToList();
+        }
+    }
+
+    /// <summary>
+    /// 已激活<b>扩展组</b>所含的工具名(供工具面组装器并进可见集)。
+    /// </summary>
+    /// <remarks>
+    /// <para><see cref="ToolFace.VisibleToolNames"/> 只认内置组(它只查
+    /// <see cref="GroupCatalogue"/>)—— 扩展组不在目录里,所以必须在这里补。</para>
+    /// <para>不补的后果:扩展组"激活成功"但工具永远不出现在面上,而调用它们又会落到
+    /// 未命中兜底 —— 看起来像"工具不存在"。</para>
+    /// </remarks>
+    /// <param name="activeGroups">本会话键的激活组名(内置与扩展混在一起)。</param>
+    /// <returns>扩展组工具名(去重、稳定排序)。</returns>
+    public IReadOnlyList<string> ExtensionGroupToolNames(IEnumerable<string> activeGroups)
+    {
+        var names = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var groupName in activeGroups)
+        {
+            // 内置组由 ToolFace.VisibleToolNames 负责,这里只补扩展组。
+            if (GroupCatalogue.Find(groupName) is not null)
+            {
+                continue;
+            }
+
+            if (_extensions.TryGetGroup(groupName) is { } group)
+            {
+                foreach (var toolName in group.ToolNames)
+                {
+                    names.Add(toolName);
+                }
+            }
+        }
+
+        return names.ToList();
+    }
+
+    /// <summary>
+    /// 某工具所属的<b>扩展组</b>名;不在任何扩展组里返回 null。
+    /// </summary>
+    /// <remarks>
+    /// 未命中兜底需要它来区分"扩展组未激活"与"工具名拼错" —— 前者可行动,后者只能让模型去查目录。
+    /// 内置组的归属由 <see cref="GroupCatalogue"/> 回答,不走这里。
+    /// </remarks>
+    /// <param name="toolName">工具名。</param>
+    /// <returns>扩展组名;无归属为 null。</returns>
+    public string? ExtensionGroupOf(string toolName)
+    {
+        return _extensions.Groups()
+            .FirstOrDefault(g => g.ToolNames.Contains(toolName, StringComparer.Ordinal))
+            ?.Name;
     }
 
     /// <summary>
@@ -234,9 +618,9 @@ public sealed class GroupService
 
     /// <summary>按名称激活工具组(命令);不直接改会话工具面,改全局状态。</summary>
     /// <para>逻辑链:内置目录未命中 → 查扩展组;两者皆无 → 返回 available + Unknown group 文案。
-    /// 命中扩展组 → 已激活回 already_loaded,否则记入 _loadedExtGroups 回 activated。
+    /// 命中扩展组 → 已激活回 alreadyLoadedLocked,否则记入 LoadedExtLocked 回 activated。
     /// 命中内置组 → unsafe 且未设 GODOT_MCP_UNSAFE=1 时回 available + 禁用文案;
-    /// 已激活回 already_loaded;否则记入 _loaded 回 activated(成员以表内已实现工具为准)。
+    /// 已激活回 already_loaded;否则记入本会话键的集合回 activated(成员以表内已实现工具为准)。
     /// 会话工具面的实际增删由下一请求的 ConfigureSession/SyncCollection 统一对齐。</para>
     /// <param name="groupName">组名(内置或扩展)。</param>
     /// <returns>组状态行(状态为 activated/already_loaded/available 之一)。</returns>
@@ -253,11 +637,11 @@ public sealed class GroupService
                 {
                     return new GroupStatus(groupName, "available", [], UnknownGroupMessage + groupName);
                 }
-                if (_loadedExtGroups.Contains(groupName))
+                if (LoadedExtLocked.Contains(groupName))
                 {
                     return new GroupStatus(groupName, "already_loaded", ext.ToolNames, ext.Description);
                 }
-                _loadedExtGroups.Add(groupName);
+                LoadedExtLocked.Add(groupName);
                 return new GroupStatus(groupName, "activated", ext.ToolNames, ext.Description);
             }
             if (!IsGroupEnabled(group))
@@ -266,18 +650,18 @@ public sealed class GroupService
                 return new GroupStatus(group.Name, "available", [], UnsafeDisabledMessage);
             }
             var implemented = ImplementedToolsOf(group);
-            if (_loaded.Contains(group.Name))
+            if (LoadedLocked.Contains(group.Name))
             {
                 return new GroupStatus(group.Name, "already_loaded", implemented, group.Description);
             }
-            _loaded.Add(group.Name);
+            LoadedLocked.Add(group.Name);
             return new GroupStatus(group.Name, "activated", implemented, group.Description);
         }
     }
 
     /// <summary>停用工具组(命令);未知名的移除请求静默忽略。</summary>
     /// <para>逻辑链:names 为 null(reset 全部)→ 目标 = 已激活内置组 ∪ 已激活扩展组;
-    /// 否则逐名尝试从 _loaded 与 _loadedExtGroups 移除,移除成功者计入返回。
+    /// 否则逐名尝试从 LoadedLocked 与 LoadedExtLocked 移除,移除成功者计入返回。
     /// 会话工具面的收缩由下一请求的 SyncCollection 对齐。</para>
     /// <param name="names">要停用的组名;null 表示停用全部已激活组。</param>
     /// <returns>本次实际停用的组名列表。</returns>
@@ -287,12 +671,12 @@ public sealed class GroupService
         {
             // Node:reset 目标 = 已加载的内置组 + 已加载的扩展组。
             var targets = names is null
-                ? _loaded.Concat(_loadedExtGroups).ToList()
+                ? LoadedLocked.Concat(LoadedExtLocked).ToList()
                 : names.ToList();
             var deactivated = new List<string>();
             foreach (var name in targets)
             {
-                if (_loaded.Remove(name) || _loadedExtGroups.Remove(name))
+                if (LoadedLocked.Remove(name) || LoadedExtLocked.Remove(name))
                 {
                     deactivated.Add(name);
                 }
@@ -303,8 +687,8 @@ public sealed class GroupService
 
     /// <summary>查询单个组的当前状态(查询,不改状态)。</summary>
     /// <para>逻辑链:内置未命中 → 查扩展组 → 两者皆无回 available + 空成员(null 描述);
-    /// 扩展组按 _loadedExtGroups 分辨 already_loaded/available;内置组先过 unsafe 门控,
-    /// 再按 _loaded 分辨 already_loaded/available(成员均以已实现工具为准)。</para>
+    /// 扩展组按本会话键的扩展集合分辨 already_loaded/available;内置组先过 unsafe 门控,
+    /// 再按本会话键的内置集合分辨 already_loaded/available(成员均以已实现工具为准)。</para>
     /// <param name="groupName">组名。</param>
     /// <returns>组状态行。</returns>
     public GroupStatus Report(string groupName)
@@ -319,7 +703,7 @@ public sealed class GroupService
                 {
                     return new GroupStatus(groupName, "available", [], null);
                 }
-                return _loadedExtGroups.Contains(groupName)
+                return LoadedExtLocked.Contains(groupName)
                     ? new GroupStatus(groupName, "already_loaded", ext.ToolNames, ext.Description)
                     : new GroupStatus(groupName, "available", ext.ToolNames, ext.Description);
             }
@@ -328,7 +712,7 @@ public sealed class GroupService
                 return new GroupStatus(group.Name, "available", [], UnsafeDisabledMessage);
             }
             var implemented = ImplementedToolsOf(group);
-            return _loaded.Contains(group.Name)
+            return LoadedLocked.Contains(group.Name)
                 ? new GroupStatus(group.Name, "already_loaded", implemented, group.Description)
                 : new GroupStatus(group.Name, "available", implemented, group.Description);
         }
@@ -569,40 +953,6 @@ public sealed class GroupService
         return [];
     }
 
-    /// <summary>discover_tools 描述(Node buildDiscoverToolsDesc;含 已加载/可用 状态标签与扩展节)。</summary>
-    /// <para>逻辑链:遍历内置组(禁用组跳过,不进描述)拼"名称 [已加载|可用] — 描述",
-    /// 再拼固定使用说明;扩展组非空时追加"扩展"节(同样带状态标签)。</para>
-    /// <returns>组装好的 discover_tools 工具描述文本(以句号结尾)。</returns>
-    public string BuildDiscoverToolsDesc()
-    {
-        var parts = new List<string>();
-        foreach (var group in GroupCatalogue.Groups)
-        {
-            if (!IsGroupEnabled(group))
-            {
-                // Node 同规矩:禁用组不出现在目录描述里(完整目录仍经无参调用可见)。
-                continue;
-            }
-            var loaded = IsLoaded(group.Name);
-            parts.Add($"{group.Name} [{(loaded ? "已加载" : "可用")}] — {group.Description}");
-        }
-
-        var description = "按名称或领域关键词查找并激活工具组。" +
-                          "仅激活当前任务需要的组，建议不超过约 5 个；同时加载过多工具组会挤满工具列表并降低回答质量。" +
-                          "不传参数时返回完整目录。reset: true 停用全部工具组；reset: ['group_a'] 仅停用 group_a。" +
-                          "添加、编辑或删除项目扩展后，请设置 refresh_extensions:true。" +
-                          "工具组：" + string.Join("; ", parts);
-
-        var extParts = _extensions.Groups()
-            .Select(g => $"{g.Name} [{(_loadedExtGroups.Contains(g.Name) ? "已加载" : "可用")}] — {g.Description}")
-            .ToList();
-        if (extParts.Count > 0)
-        {
-            description += "。扩展：" + string.Join("; ", extParts);
-        }
-        return description + "。";
-    }
-
     // ── 工具对象工厂(表驱动;每工具对象全局唯一,跨会话复用) ──────
 
     /// <summary>该组全部可注册工具(表内成员;64/64 已全实现,issue 13)。</summary>
@@ -620,7 +970,7 @@ public sealed class GroupService
     /// <returns>应出现在工具面上为 true。</returns>
     private bool IsToolActiveLocked(string toolName)
     {
-        if (_loaded.Any(groupName =>
+        if (LoadedLocked.Any(groupName =>
                 GroupCatalogue.Find(groupName)?.ToolNames.Contains(toolName) == true))
         {
             return true;
@@ -630,7 +980,7 @@ public sealed class GroupService
         {
             return true;
         }
-        return _loadedExtGroups.Any(groupName => _extensions.GroupToolNames(groupName).Contains(toolName));
+        return LoadedExtLocked.Any(groupName => _extensions.GroupToolNames(groupName).Contains(toolName));
     }
 
     /// <summary>确保内置组的工具对象已全部登记(持锁调用;懒建、全局唯一、跨会话复用)。</summary>

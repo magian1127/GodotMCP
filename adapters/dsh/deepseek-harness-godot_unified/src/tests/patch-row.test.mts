@@ -64,7 +64,8 @@ test('mcpRowBlock 生成合法 YAML 形态且 parseMcpRowBlock 可往返', () =>
   assert.ok(block.includes(`- id: ${MCP_ROW_ID}`))
   assert.ok(block.includes("name: '@deepseek-ai/dsh-mcp-client'"))
   assert.ok(block.includes('transport: stdio'))
-  assert.ok(block.includes("GODOT_MCP_PROJECT_PATH: 'D:/games/demo'"))
+  // **反向断言**:项目路径不再注入 —— 目标是 daemon 侧解析的,插件不该替用户猜。
+  assert.ok(!block.includes('GODOT_MCP_PROJECT_PATH'))
   assert.ok(block.includes("GODOT_MCP_READ_ONLY: '1'"))
   assert.ok(block.includes("GODOT_MCP_RATE_LIMIT: '5'"))
   assert.ok(block.includes('    unsafe: true'))
@@ -76,7 +77,8 @@ test('mcpRowBlock 生成合法 YAML 形态且 parseMcpRowBlock 可往返', () =>
   assert.notEqual(parsed, null)
   assert.equal(parsed!.serverName, 'godot')
   assert.equal(parsed!.serverDist, 'D:/repo/GodotMCP/plugin/godot-mcp-unified/server/dist/index.js')
-  assert.equal(parsed!.projectPath, 'D:/games/demo')
+  // 新块没有 projectPath 行;解析器兼容读取,缺省为空串。
+  assert.equal(parsed!.projectPath, '')
   assert.equal(parsed!.readOnly, true)
   // 默认(非只读)块解析出 readOnly=false。
   const plain = parseMcpRowBlock(mcpRowBlock(baseOptions()))
@@ -178,7 +180,8 @@ test('readManagedBlock:无块返回 null,有块返回块体', () => {
 
 test('双条目:--server-dist 安装(无根)时省略 godotMcpRoot', () => {
   const block = mcpRowBlock({ ...baseOptions(), serverDist: 'D:/x/dist/index.js' })
-  assert.ok(block.includes('projectPath: ' + "'D:/games/demo'"))
+  // projectPath 不再写进 bundle config(它是被删掉的路径表的最后残留)。
+  assert.ok(!block.includes('projectPath:'))
   assert.ok(!block.includes('godotMcpRoot'))
 })
 

@@ -1,5 +1,7 @@
 # Godot Version Compatibility
 
+Tool visibility also depends on session/groups: connect first, load code_intel for checks/LSP, and use the latest tools/list. Engine support does not mean the tool is already exposed. See [multi-instance.md](multi-instance.md).
+
 **Minimum supported:** Godot 4.2  
 **Full functionality:** Godot 4.5+  
 **Recommended:** Godot 4.5+  
@@ -30,7 +32,7 @@ All MCP tools work on Godot 4.2+ unless noted below.
 | `editor_sync` | 4.2 | Refreshes the requested `file_paths` in O(1)-per-file mode, or performs a full `scan()` when omitted, then waits for the import pipeline to become idle. Both stages work on all versions |
 | `discover_tools(refresh_extensions:true)` | 4.2 | On 4.2, **editing an existing** extension is not applied in-session (a cached read avoids an engine reimport crash — see below); `extension_refresh.hint` names the extension and says to restart. Adding/removing extensions applies live. 4.3+ applies all changes live |
 | `node_call_method` | 4.2 | On **< 4.4**, an `INVALID_METHOD` whose method exists on the node's on-disk `.gd` (a stale live instance) carries a relaunch `hint`; a genuine typo does not. 4.4+ hot-reloads on a **display** editor, so the call just succeeds — but a **4.4+ headless** editor never re-instantiates the reloaded node, so the stale `hint` fires there too (headless wording: re-create the node or relaunch a display editor) |
-| `lsp_diagnostics`, `lsp_symbols`, `lsp_hover`, `lsp_completion`, `lsp_navigate` | 4.2 | LSP works on 4.2+. **Multi-editor conflict detection is degraded < 4.5**: the cross-project root-mismatch check needs 4.5+, so on 4.2–4.4 give each editor a distinct `--lsp-port` + `GODOT_MCP_LSP_PORT` (see [multi-instance.md](multi-instance.md)) |
+| `lsp_diagnostics`, `lsp_symbols`, `lsp_hover`, `lsp_completion`, `lsp_navigate` | 4.2 | LSP works on 4.2+. **Multi-editor conflict detection is degraded < 4.5**: the cross-project root-mismatch check needs 4.5+, so on 4.2–4.4 give each editor a distinct matching actual LSP listeners and published registry endpoints (see [multi-instance.md](multi-instance.md)) |
 | `log_read(channel:"editor")` | 4.2 | Captures runtime output (errors/warnings/prints) on all versions. **Editor parse errors** (from `editor_sync` recompiling a script) surface only on **4.5+** (the Logger API hooks editor diagnostics); on **4.2–4.4** they are NOT written to `godot.log`, so neither `source="buffer"` nor `source="file"` can return them — use `script_check` or `lsp_diagnostics` instead. Multi-line errors that ARE captured (`SCRIPT ERROR: …` + `   at: <script>.gd:LINE`) are leveled as a unit, so a filename + `level_filter:["error"]` query finds the location line. 4.5+ uses the synchronous Logger (one entry per error, zero-latency) |
 | `animationtree_edit` | 4.2 | All ops work on 4.2+ (set_root, add/remove_node, add/remove_transition, set_property; transitions enumerate on all versions) |
 | `animationtree_list` | 4.2 | Listing works on 4.2+, but **node enumeration is 4.5+:** `AnimationNodeStateMachine.get_node_list()` is a 4.5 script API (absent 4.2-4.4), so on 4.2-4.4 `animationtree_list` returns `nodes: []` and `nodes_count` reads 0 (node *operations* via `animationtree_edit` add/remove/has still work; only listing existing nodes is unavailable). 4.5+ enumerates nodes fully |
@@ -102,7 +104,7 @@ script identity (even across stale/phantom tabs); with an external editor the to
   work, but the server's cross-project safety check (the workspace-root mismatch
   warning) doesn't exist before 4.5. With more than one editor open the server
   cannot detect a foreign or near-simultaneous holder of LSP port 6005, so each
-  editor must use a distinct `--lsp-port` + `GODOT_MCP_LSP_PORT` (see
+  editor must use a distinct matching actual LSP listeners and published registry endpoints (see
   [multi-instance.md](multi-instance.md)).
 - **`animationtree_list` — node enumeration needs 4.5+ (4.2–4.4).**
   `AnimationNodeStateMachine.get_node_list()` is a 4.5+ script API, so on 4.2–4.4
@@ -143,7 +145,7 @@ script identity (even across stale/phantom tabs); with an external editor the to
   with a warning; active scene deletion is blocked (`EDITED_SCENE`).
 - GDScript LSP multi-editor: root verification needs 4.5+ (see the 4.2–4.3 note);
   a multi-editor LSP setup on 4.4 still needs a distinct `--lsp-port` +
-  `GODOT_MCP_LSP_PORT`.
+  the published LSP endpoint.
 
 **Godot 4.5+:**
 - Full functionality. All tools, all UI features.
@@ -387,7 +389,7 @@ that require a viewport use this guard to return `HEADLESS_UNSUPPORTED` early.
 
 The matrix below covers the core tool surface as audited end-to-end in
 headless mode. Tools added since that audit (the LSP, debugger, 3D, and
-tileset groups among others) follow the same detection rule — file-based
+assets groups among others) follow the same detection rule — file-based
 operations work, viewport-dependent ones return `HEADLESS_UNSUPPORTED` —
 but have not been individually re-audited headless yet.
 

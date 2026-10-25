@@ -21,12 +21,14 @@ const LOCALE_NAMESPACE = 'settings.godot'
 /** plugins.bundle.config 槽位的键:profile 中本包的 npm 包名(非 settings 命名空间)。 */
 export const BUNDLE_PACKAGE_NAME = 'deepseek-harness-godot_unified'
 
-const FIELDS = ['injectLegacyMode', 'promptGuidance', 'zhPrompt']
+const FIELDS = ['injectLegacyMode', 'promptGuidance', 'zhPrompt', 'toolCallTimeoutMs']
 
 const DEFAULTS = {
   injectLegacyMode: false,
   promptGuidance: true,
   zhPrompt: false,
+  /** 与 injection.ts 的 SETTINGS_DEFAULTS 同值（三层阶梯的最高层）。 */
+  toolCallTimeoutMs: 240_000,
 }
 
 const zh = {
@@ -38,6 +40,8 @@ const zh = {
   injectLegacyModeDesc: '开启后在 host 上挂一个共享 MCP 连接：所有会话都能看到 mcp__godot__* 工具并注入工作流提示词（项目路径取全局设置）。默认关闭：只有 Godot 预设会话挂载 MCP，其余会话不是"隐藏"这些工具，而是根本没有挂载。',
   promptGuidance: '注入工作流提示词',
   promptGuidanceDesc: '在系统提示中说明 Godot 的按需扩面、编辑器 FIFO 串行与错误恢复。仅对挂了 Godot MCP 的会话生效（Godot 预设或原版模式）。',
+  toolCallTimeout: '单次工具调用超时（毫秒）',
+  toolCallTimeoutDesc: '默认 240000。必须大于服务器的 210000：否则慢调用会先被宿主掐断，看不到服务器给出的清晰超时说明。改动会重新建立连接。',
   zhPrompt: '提示词中文化',
   zhPromptDesc: '开启后注入的工作流提示词使用中文（默认英文）。工具描述与错误消息由 GodotMCP server 提供，保持上游原文。',
   inherited: '继承默认值',
@@ -52,7 +56,7 @@ const zh = {
   pathServerDist: 'Server 入口（全局）',
   pathServerDistPlaceholder: '.../server-dotnet/publish/<rid>/godot-mcp-shim.exe',
   pathProjects: '项目路径（按工作目录）',
-  pathProjectsDesc: '每条 { cwd, projectPath }，可多条并存、按 cwd 唯一；重复/空 cwd 标红不保存。',
+  pathProjectsDesc: '项目路径不再在此配置：会话连哪个项目由模型调用 godot_connect(project) 决定，未指定时按会话工作目录下的 project.godot 或唯一活跃实例解析。此处的旧条目已失效。',
   pathAddProject: '添加',
   pathRemove: '删除',
   pathCwdPlaceholder: '工作目录 cwd',
@@ -70,6 +74,8 @@ const en = {
   injectLegacyModeDesc: 'When on, one shared MCP connection is mounted on the host: every session sees the mcp__godot__* tools and the workflow prompt (project path from the global setting). Default off: only Godot-preset sessions mount the MCP; other sessions do not "hide" these tools — they have none.',
   promptGuidance: 'Workflow prompt',
   promptGuidanceDesc: 'Explain on-demand group activation, editor FIFO ordering, and error recovery in the system prompt. Applies only to sessions that mounted the Godot MCP (Godot preset or legacy mode).',
+  toolCallTimeout: 'Tool call timeout (ms)',
+  toolCallTimeoutDesc: 'Default 240000. Must exceed the server budget (210000), otherwise slow calls are cut off by the host before the server can explain the timeout. Changing it re-establishes the connection.',
   zhPrompt: 'Localize prompt',
   zhPromptDesc: 'When on, the injected workflow prompt uses Chinese (English by default). Tool descriptions and error messages come from the GodotMCP server and stay as provided.',
   inherited: 'Inherited',
@@ -84,7 +90,7 @@ const en = {
   pathServerDist: 'Server entry (global)',
   pathServerDistPlaceholder: '.../server-dotnet/publish/<rid>/godot-mcp-shim.exe',
   pathProjects: 'Project paths (by workspace)',
-  pathProjectsDesc: 'Each entry is { cwd, projectPath }; multiple allowed, unique by cwd; empty/duplicate cwd is marked red and not saved.',
+  pathProjectsDesc: 'Project paths are no longer configured here: the session decides via godot_connect(project), falling back to project.godot in the session cwd or the sole active instance. Entries below no longer take effect.',
   pathAddProject: 'Add',
   pathRemove: 'Remove',
   pathCwdPlaceholder: 'workspace cwd',
@@ -103,10 +109,6 @@ function projectInvalidAt(list: ProjectEntry[], index: number): boolean {
   return list.some((q, j) => j !== index && q.cwd.trim() !== '' && q.cwd.trim() === cur.cwd.trim())
 }
 
-/** 整份项目条目是否存在无效行(用于保存前的整体校验)。 */
-function hasInvalidProjects(list: ProjectEntry[]): boolean {
-  return list.some((_, i) => projectInvalidAt(list, i))
-}
 
 /** 路径区 dirty 判定:当前草稿与「已加载/已保存」基线做规范化比较(去首尾空白)。 */
 function samePaths(
@@ -137,31 +139,10 @@ interface PathSectionProps {
  * 只保留添加行局部输入态与校验提示;每条目编辑/删除经回调上抛。 */
 function PathSettingsSection(props: PathSectionProps): React.ReactElement {
   const t = props.t
-  const [addCwd, setAddCwd] = React.useState('')
-  const [addProjectPath, setAddProjectPath] = React.useState('')
-  const [addInvalid, setAddInvalid] = React.useState(false)
-
-  const invalidIndexes = props.projects.map((_, i) => i).filter(i => projectInvalidAt(props.projects, i))
-
-  const addProject = (): void => {
-    const cwdTrim = addCwd.trim()
-    const projectPathTrim = addProjectPath.trim()
-    if (cwdTrim === '' || projectPathTrim === '' || props.projects.some(p => p.cwd.trim() === cwdTrim)) {
-      setAddInvalid(true)
-      return
-    }
-    setAddInvalid(false)
-    props.onAddProject(cwdTrim, projectPathTrim)
-    setAddCwd('')
-    setAddProjectPath('')
-  }
 
   const sectionStyle = { marginTop: 10, borderTop: '1px solid var(--dsw-alias-border-l2)', paddingTop: 10 }
   const subTitleStyle = { fontSize: 13, fontWeight: 600, lineHeight: 1.5, marginBottom: 2 }
   const descStyle = { fontSize: 12, lineHeight: 1.5, color: 'var(--dsw-alias-label-tertiary)', marginBottom: 8 }
-  const addRowStyle = { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }
-  const itemRowStyle = { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }
-  const invalidHintStyle = { fontSize: 12, lineHeight: 1.5, color: 'var(--dsw-alias-state-error-primary, #d93026)', margin: '0 0 6px' }
 
   const inputFor = (value: string, placeholder: string, ariaLabel: string, invalid: boolean, onChange: (v: string) => void): React.ReactElement =>
     h('input', {
@@ -176,19 +157,6 @@ function PathSettingsSection(props: PathSectionProps): React.ReactElement {
       }),
       onChange: function (event: { target: { value: string } }) { onChange(event.target.value) },
     })
-  const addButton = (label: string): React.ReactElement =>
-    h('button', {
-      type: 'button',
-      style: Object.assign({}, uiStyles.primaryButton, { flex: 'none' }),
-      onClick: addProject,
-    }, label)
-  const removeButton = (label: string, index: number): React.ReactElement =>
-    h('button', {
-      type: 'button',
-      'aria-label': label,
-      style: Object.assign({}, uiStyles.secondaryButton, { flex: 'none', padding: '3px 10px', fontSize: 12 }),
-      onClick: function () { props.onRemoveProject(index) },
-    }, label)
 
   return h('div', { style: sectionStyle, 'data-godot-paths': '' },
     h('div', { style: subTitleStyle }, t('pathTitle')),
@@ -198,23 +166,13 @@ function PathSettingsSection(props: PathSectionProps): React.ReactElement {
       h('label', { style: { display: 'block', fontSize: 12, lineHeight: 1.5, marginBottom: 2 } }, t('pathServerDist')),
       inputFor(props.serverDist, t('pathServerDistPlaceholder'), t('pathServerDist'), false, props.onServerDistChange),
     ),
-    // 项目路径(按工作目录)批量条目。
+    // 项目路径区:表已删除,只保留说明。
+    //
+    // 之前这里是一整套「添加 / 逐行编辑 / 删除」的交互。后端已经不再持久化
+    // projects(GET 恒返回空数组、POST 忽略),留着交互会让用户加了几行、
+    // 保存、刷新后全部消失 —— 比不显示更糟。说明文字保留,讲清该去哪配。
     h('div', { style: subTitleStyle }, t('pathProjects')),
     h('div', { style: descStyle }, t('pathProjectsDesc')),
-    h('div', { style: addRowStyle },
-      inputFor(addCwd, t('pathCwdPlaceholder'), t('pathCwdPlaceholder'), addInvalid, function (v) { setAddCwd(v); setAddInvalid(false) }),
-      inputFor(addProjectPath, t('pathProjectPlaceholder'), t('pathProjectPlaceholder'), addInvalid, function (v) { setAddProjectPath(v); setAddInvalid(false) }),
-      addButton(t('pathAddProject')),
-    ),
-    addInvalid && h('div', { style: invalidHintStyle }, t('pathInvalid')),
-    invalidIndexes.length > 0 && h('div', { style: invalidHintStyle }, t('pathInvalid')),
-    props.projects.length === 0
-      ? h('div', { style: descStyle }, t('pathEmpty'))
-      : props.projects.map((item, index) => h('div', { style: itemRowStyle, key: `${item.cwd}-${index}` },
-          inputFor(item.cwd, t('pathCwdPlaceholder'), t('pathCwdPlaceholder'), invalidIndexes.includes(index), function (v) { props.onUpdateProject(index, 'cwd', v) }),
-          inputFor(item.projectPath, t('pathProjectPlaceholder'), t('pathProjectPlaceholder'), invalidIndexes.includes(index), function (v) { props.onUpdateProject(index, 'projectPath', v) }),
-          removeButton(t('pathRemove'), index),
-        )),
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 } },
       (props.loadError !== null || !props.loaded) && h('span', { style: descStyle },
         !props.loaded ? t('loading') : `${t('saveFailed')}${props.loadError ?? ''}`)),
@@ -296,16 +254,26 @@ interface SettingsValue {
   injectLegacyMode: boolean
   promptGuidance: boolean
   zhPrompt: boolean
+  /** 单次工具调用超时（毫秒）。数值字段，与其他开关一起参与 diff 与保存。 */
+  toolCallTimeoutMs: number
 }
 
 function normalized(value: unknown): SettingsValue {
   const source = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {}
   const booleanOr = (key: keyof SettingsValue): boolean =>
     typeof source[key] === 'boolean' ? source[key] as boolean : DEFAULTS[key]
+  // 超时接受数字或数字字符串（表单输入框给字符串），非法/非正数回退默认 ——
+  // 与 injection.ts 的 resolveSettings 保持同一套判据。
+  const timeoutOr = (): number => {
+    const raw = source.toolCallTimeoutMs
+    const parsed = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : Number.NaN
+    return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : DEFAULTS.toolCallTimeoutMs
+  }
   return {
     injectLegacyMode: booleanOr('injectLegacyMode'),
     promptGuidance: booleanOr('promptGuidance'),
     zhPrompt: booleanOr('zhPrompt'),
+    toolCallTimeoutMs: timeoutOr(),
   }
 }
 
@@ -437,13 +405,12 @@ function createForm(scope: any, t: (key: string) => string): (props: { view?: st
         }
         const accepted = normalized(scope.getSnapshot().value)
         if (!sameSettings(accepted, draft)) throw new Error(t('saveNotApplied'))
-        // 相关路径:整份覆盖。非法条目(cwd/projectPath 为空或 cwd 重复)不提交。
-        if (hasInvalidProjects(projects)) throw new Error(t('pathInvalid'))
+        // 相关路径:只提交 serverDist。项目路径表已删除,后端也会忽略 projects,
+        // 这里直接发空数组 —— 不发"注定被丢弃"的数据,免得日后有人以为它在生效。
         const sDist = serverDist.trim()
-        const projs = projects.map(p => ({ cwd: p.cwd.trim(), projectPath: p.projectPath.trim() }))
-        await api.savePathSettings(sDist, projs)
+        await api.savePathSettings(sDist, [])
         setSavedServerDist(sDist)
-        setSavedProjects(projs)
+        setSavedProjects([])
       } catch (saveError) {
         setError(saveError instanceof Error ? saveError.message : String(saveError))
       } finally {
@@ -474,6 +441,29 @@ function createForm(scope: any, t: (key: string) => string): (props: { view?: st
                 overridden: hasOwn(snapshot.user, 'zhPrompt'),
                 onChange: function (next: boolean) { change('zhPrompt', next) },
               }),
+              // 单次工具调用超时(毫秒)。三层预算阶梯里宿主那一层:
+              // daemon 长工具 180s < shim 210s < 宿主。改它会触发重挂。
+              h('div', { style: { marginTop: 8, marginBottom: 8 } },
+                h('label', { style: { display: 'block', fontSize: 12, lineHeight: 1.5, marginBottom: 2 } },
+                  t('toolCallTimeout')),
+                h('input', {
+                  type: 'number',
+                  min: 1000,
+                  step: 1000,
+                  value: String(draft.toolCallTimeoutMs),
+                  disabled: !editable,
+                  'aria-label': t('toolCallTimeout'),
+                  spellCheck: false,
+                  style: uiStyles.input,
+                  onChange: function (event: { target: { value: string } }) {
+                    const parsed = Number(event.target.value)
+                    // 非法输入不写进草稿:留着会让"保存"按钮永远灰着而用户不知道原因。
+                    if (Number.isFinite(parsed) && parsed > 0) change('toolCallTimeoutMs', Math.round(parsed))
+                  },
+                }),
+                h('div', { style: { fontSize: 12, lineHeight: 1.5, color: 'var(--dsw-alias-label-tertiary)' } },
+                  t('toolCallTimeoutDesc')),
+              ),
               h(PathSettingsSection, {
                 t,
                 serverDist,

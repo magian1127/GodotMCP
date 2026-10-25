@@ -1,9 +1,8 @@
 # Parallel sessions (multi-agent concurrency)
 
-Multiple agents can connect to the same Godot editor at once. Two systems
-prevent races automatically — you don't need to do anything special, but
-understanding the behaviour helps you work faster. Under contention responses
-get **slower, not broken**.
+Connect each shim session with godot_connect. Keys isolate groups/default targets, not copies of the editor scene tree/tabs; sharing a shim also shares target/groups. Pass instance for interleaved projects and sequence same-key switches/composite calls. See [instances and sessions](../../../docs/multi-instance.md) for groups and notification recovery.
+
+Multiple agents can connect to the same Godot editor at once. Instance-side serialization and scene leases govern access; still verify the returned scene and state. Increased latency can indicate contention, but is not proof that an operation succeeded.
 
 ## What happens behind the scenes
 

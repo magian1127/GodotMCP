@@ -5126,7 +5126,7 @@
         "type": "object",
         "properties": {
           "request": {
-            "description": "用于查找工具组的名称或关键词。内置组：runtime_advanced、signals、animation_authoring、input_map、resource_io、asset_ops、cleanup、user_data、scene_advanced、editor_advanced、tilemap、tileset、tileset_edit、theme、layer_naming、path_editing、3d_tools、procedural、scene_inheritance、audio、spriteframes、particles、navigation、lsp_code_analysis、lsp_code_navigation、debugger、classdb、project_config、node_advanced、scene_spatial、unsafe；也可查找扩展组。",
+            "description": "用于查找工具组的名称或关键词。内置组（共 17 个）：scene_edit、world_3d、playtest、signals、code_intel、assets、cleanup、project_config、editor_ops、build_csharp、tilemap、animation、art_fx、audio、debugger、user_data、unsafe；也可查找扩展组。",
             "anyOf": [
               {
                 "type": "string"
@@ -5273,6 +5273,33 @@
             "maximum": 540000
           }
         }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "list_instances",
+      "description": "列出当前机器上全部活跃的 Godot 实例(含项目路径、短 id、引擎版本、端口、pid、连通状态)。",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "noInstance": true
+    },
+    {
+      "name": "list_operations",
+      "description": "列出经本 daemon 观测到的在途操作(在飞/排队/执行中)。数据来源:daemon 在途请求表 + toolkit 的 _queued/_executing 进度通知;只读、无副作用。局限:仅涵盖经本 daemon 发起的调用;场景租约状态不可查询(线路契约 C1-C22 冻结且无查询面)——排队中的请求是否在等租约无法区分,lease 字段如实标注。省略 instance 时返回全部实例(daemon 全局只读视图);给定 instance 时按寻址规则严格解析。",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
       },
       "annotations": {
         "readOnlyHint": true,

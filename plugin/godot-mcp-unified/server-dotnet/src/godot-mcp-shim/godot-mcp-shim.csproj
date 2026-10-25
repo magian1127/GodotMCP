@@ -15,4 +15,11 @@
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- 让测试直接验证纯判据（DiscoverChangesState / ReadToolName）。
+         它们是"是否缓存会话状态帧"的决策核心，边界很多（activate:false 与 reset 的组合、
+         位置参数、畸形 JSON），端到端只能覆盖其中一两条。 -->
+    <InternalsVisibleTo Include="godot-mcp-daemon.tests" />
+  </ItemGroup>
+
 </Project>

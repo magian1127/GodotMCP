@@ -93,18 +93,18 @@ public class RealAcceptanceTests
             Assert.True(activate.IsError is null or false, $"全组激活失败:{TextOf(activate)}");
             var spot = new List<(string Group, string Tool, Dictionary<string, object?> Args)>
             {
-                ("editor_advanced", "editor_sync", new Dictionary<string, object?> { ["instance"] = MainProject }),
+                ("editor_ops", "editor_sync", new Dictionary<string, object?> { ["instance"] = MainProject }),
                 ("signals", "signal_list", new Dictionary<string, object?> { ["node_path"] = "/root", ["instance"] = MainProject }),
-                ("classdb", "classdb_query", new Dictionary<string, object?> { ["mode"] = "search", ["pattern"] = "Node2D", ["limit"] = 5, ["instance"] = MainProject }),
-                ("input_map", "input_map_edit", new Dictionary<string, object?> { ["action"] = "add_action", ["name"] = "acc_test_action", ["instance"] = MainProject }),
-                ("layer_naming", "layer_names_get", new Dictionary<string, object?> { ["category"] = "2d_physics", ["instance"] = MainProject }),
-                ("resource_io", "folder_create", new Dictionary<string, object?> { ["path"] = "res://acc_tmp_dir", ["instance"] = MainProject }),
+                ("code_intel", "classdb_query", new Dictionary<string, object?> { ["mode"] = "search", ["pattern"] = "Node2D", ["limit"] = 5, ["instance"] = MainProject }),
+                ("project_config", "input_map_edit", new Dictionary<string, object?> { ["action"] = "add_action", ["name"] = "acc_test_action", ["instance"] = MainProject }),
+                ("project_config", "layer_names_get", new Dictionary<string, object?> { ["category"] = "2d_physics", ["instance"] = MainProject }),
+                ("assets", "folder_create", new Dictionary<string, object?> { ["path"] = "res://acc_tmp_dir", ["instance"] = MainProject }),
                 ("user_data", "save_write", new Dictionary<string, object?> { ["path"] = "user://acc_save.dat", ["content"] = "daemon-acceptance", ["instance"] = MainProject }),
                 ("audio", "audiobus_list", new Dictionary<string, object?> { ["instance"] = MainProject }),
-                ("3d_tools", "scene_create_3d", new Dictionary<string, object?> { ["kind"] = "primitive", ["parent_path"] = "/root/Main", ["primitive"] = "box", ["instance"] = MainProject }),
-                ("scene_inheritance", "scene_create_inherited", new Dictionary<string, object?> { ["file_path"] = "res://acc_inherited.tscn", ["base_scene"] = "res://Main.tscn", ["instance"] = MainProject }),
+                ("world_3d", "scene_create_3d", new Dictionary<string, object?> { ["kind"] = "primitive", ["parent_path"] = "/root/Main", ["primitive"] = "box", ["instance"] = MainProject }),
+                ("scene_edit", "scene_create_inherited", new Dictionary<string, object?> { ["file_path"] = "res://acc_inherited.tscn", ["base_scene"] = "res://Main.tscn", ["instance"] = MainProject }),
                 ("debugger", "debug_inspect", new Dictionary<string, object?> { ["mode"] = "breakpoints", ["instance"] = MainProject }),
-                ("lsp_code_analysis", "lsp_diagnostics", new Dictionary<string, object?> { ["file_path"] = "res://runtime_counter.gd", ["instance"] = MainProject }),
+                ("code_intel", "lsp_diagnostics", new Dictionary<string, object?> { ["file_path"] = "res://runtime_counter.gd", ["instance"] = MainProject }),
             };
             var spotResults = new List<string>();
             foreach (var (group, tool, args) in spot)

@@ -1,23 +1,19 @@
-# 0002: daemon 的两个通信面——对 host 用 Streamable HTTP（DSH 走 stdio shim），对 Godot 保持 addon 为 WS server
+# 0002: daemon 的通信面——宿主统一 stdio shim，Godot 保持 WebSocket
 
-daemon 对 MCP host 暴露 loopback Streamable HTTP（MCP 2026-07-28 的推荐路径）；stdio-only 的 host（DSH 的 mini client）通过 `godot-mcp-shim` 接入——shim 负责"确保 daemon 在跑 + stdio↔HTTP 转发"，同时承担 host 侧自举。对 Godot 方向维持现状：addon 仍是 WS server（编辑器 6550–6560、运行时 6570–6585），daemon 作为客户端经机器级注册表发现并主动连接、watch 增量扩连。GDScript addon 与 C1–C22 public contract 零改动。
+中文 | [English](0002-daemon-listening-faces.en.md)
 
-## Considered Options
+## 当前决策
 
-- 反转方向（daemon 为 WS listener，addon 连出注册）：更经典的 hub 形态，但需要重写 addon 传输层与认证方向，major bump 契约并迫使所有在跑的 Godot 升级插件——为形态纯度不值得。
-- 全 stdio shim（所有 host 都经 shim）：adapter 配置改动最小，但每个会话多一跳转发进程，且放弃 HTTP 的多 host 直接复用。
+所有宿主通过 stdio shim 接入；daemon 的 loopback Streamable HTTP 是 shim 后端。shim 负责自举、读取稳定 token 和携带会话键。Godot addon 仍是 WebSocket server，daemon 按机器级注册表发现并主动连接。编辑器默认扫描 6550–6560，运行时扫描 6570–6585。
 
-## Consequences
+SDK 基线为 ModelContextProtocol 2.2.0，支持无状态核心和 legacy 握手兼容。宿主与 shim 的协商版本不等于 listen 的信封版本；当前 listen 使用 2026-07-28。具体转发与未完成的通知适配见 [daemon README](../../plugin/godot-mcp-unified/server-dotnet/README.md)。
 
-- ZCode/Codex/VSCode 的 `.mcp.json` 需切换为 http 型（实现前先验证各 host 对 http 型 server 的支持度，不成立则全量退回 shim 方案）。**→ 2026-09-23 被推翻，见文末修订记录。**
-- daemon 侧需完整实现注册表消费（含 PID + 探针活性判定）、运行时通道与 LSP 通道——这是全量 parity 的必然要求。
+## 曾考虑的方案
 
-## 修订记录
+- 反转 Godot 连接方向，使 addon 连出到 daemon：需要重写传输、鉴权和升级契约，未采用。
+- 宿主直接 HTTP：少一跳 shim，但宿主不能可靠地自行拉起本机 daemon，且漏会话头会只得到入口工具。
+- 所有宿主经 shim：增加每会话一个轻量进程，换取统一启动、会话键与本机凭据读取；当前采用。
 
-### 2026-09-23：Consequences 第 1 条（"需切换为 http 型"）被推翻
+## 修订与结果
 
-宿主条目最终定为 **stdio + 随包 shim（由 shim 自举 daemon）**，理由与取舍见
-[ADR-0005](0005-host-entry-stdio-shim.md)。本文对 host 面的判断（daemon 具备 loopback
-Streamable HTTP 能力）仍然成立，但它不再是宿主的**默认**接入形态；本文 Considered Options
-里被否的"全 stdio shim"实际成为采纳项——否它的理由（每会话多一跳转发进程）被接受，
-因为"每宿主能自行拉起服务"的价值更高。
+最初为 Codex/ZCode/VS Code 选择 HTTP、仅为 stdio-only 宿主用 shim；2026-09-23 已由 [0005](0005-host-entry-stdio-shim.md) 改成统一 shim。旧 HTTP 条目应在升级时清理。此决策不改变 addon 的 WS 方向和公开命令契约。

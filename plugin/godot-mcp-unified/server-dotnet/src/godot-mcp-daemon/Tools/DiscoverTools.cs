@@ -18,7 +18,7 @@ namespace GodotMcp.Daemon.Tools;
 /// <param name="groups">工具组服务:激活/停用/模糊匹配/目录与工具面同步。</param>
 /// <param name="extensions">扩展服务:从已连接实例拉取扩展并投影为工具组。</param>
 [McpServerToolType]
-public sealed class DiscoverTools(GroupService groups, ExtensionService extensions)
+public sealed class DiscoverTools(GroupService groups, ExtensionService extensions, Sessions.SessionKeyRegistry keys)
 {
     /// <summary>
     /// discover_tools:按名称或关键词查找并激活工具组,也是唯一的组停用(reset)与扩展组刷新入口。
@@ -38,7 +38,11 @@ public sealed class DiscoverTools(GroupService groups, ExtensionService extensio
     /// <returns>JSON 信封:success + groups(逐组状态与工具列表),可附 hint/warning/extension_refresh/deactivated/deactivated_tools。</returns>
     [McpServerTool(Name = "discover_tools", ReadOnly = true, OpenWorld = false)]
     [Description(
-        "按名称或领域关键词查找并激活工具组。仅激活当前任务需要的组，建议不超过约 5 个；同时加载过多工具组会挤满工具列表并降低回答质量。不传参数时返回完整目录。reset: true 停用全部工具组；reset: ['group_a'] 仅停用 group_a。添加、编辑或删除项目扩展后，请设置 refresh_extensions:true。")]
+        "按名称或领域关键词查找并激活工具组。共 17 个组：scene_edit、world_3d、playtest、signals、code_intel、" +
+        "assets、cleanup、project_config、editor_ops、build_csharp、tilemap、animation、art_fx、audio、debugger、" +
+        "user_data、unsafe。仅激活当前任务需要的组，建议不超过约 5 个；同时加载过多工具组会挤满工具列表并降低回答质量。" +
+        "不传参数时返回完整目录。reset: true 停用全部工具组；reset: ['group_a'] 仅停用 group_a。" +
+        "添加、编辑或删除项目扩展后，请设置 refresh_extensions:true。")]
     public async Task<CallToolResult> Discover(
         JsonElement? request = null,
         bool? activate = null,
@@ -117,15 +121,24 @@ public sealed class DiscoverTools(GroupService groups, ExtensionService extensio
                 }
             }
 
-            // 工具面对齐 + discover_tools 描述刷新(都在批内 → 与通知原子)。
+            // 只把工具面补进本请求的集合;**不再改写 discover_tools 的描述**。
+            // 描述是静态的(ADR-0007):工具对象是 DI 单例,按会话改写会串到别的会话;
+            // 而且"已加载"状态本就该由响应体(而不是工具描述)承载。
             if (collection is not null)
             {
-                groups.SyncCollection(collection);
-                if (collection["discover_tools"] is { } discoverTool)
-                {
-                    discoverTool.ProtocolTool.Description = groups.BuildDiscoverToolsDesc();
-                }
+                // spec §7:**只 Ensure、不碰集合** —— 工具面由紧接着的 tools/list 经
+                // ConfigureSessionOptions 重算;SyncCollection 会反向增删本次请求的面。
+                groups.EnsureActivatedTools();
             }
+        }
+
+        // **关键**:把本键的激活集合写回注册表。工具面的可见集是从注册表快照算的,
+        // 少了这一步就会出现"discover_tools 说已激活、tools/list 里却没有那些工具"。
+        var currentKey = groups.CurrentKey;
+        var activatedNow = groups.SnapshotGroupsForCurrentKey();
+        if (!string.IsNullOrEmpty(currentKey))
+        {
+            keys.SetGroups(currentKey, activatedNow);
         }
 
         // 真实变化才通报(幂等激活/空重置不触发):一批至多一次,与 Node batchToolRegistration 同纪律。
@@ -135,7 +148,7 @@ public sealed class DiscoverTools(GroupService groups, ExtensionService extensio
             || groupResults.Any(r => r.Status.Status == "activated")
             || refreshSummary is { Registered: > 0 } or { Deferred: > 0 })
         {
-            groups.NotifyToolSurfaceChanged();
+            groups.NotifyToolSurfaceChanged(currentKey);
         }
 
         // 无参数(或空数组且未带 reset)→ 完整目录(不激活)。

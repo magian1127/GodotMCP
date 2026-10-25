@@ -1,5 +1,7 @@
 # AGENTS.md
 
+中文 | [English](AGENTS.en.md)
+
 > 本文件只定义仓库级协作规则。用户说明见 [`README.md`](README.md)，详细事实按主题收录于 [`docs/`](docs/)。
 > 代码注释和文档以中文为主；上游术语、API、命令和标识符保留原文。
 
@@ -7,12 +9,12 @@
 
 本仓库是 GodotMCP 工作区（Godot 4 MCP 桥接工具集）与 DSH 的**接入层**：它不实现 Godot 桥接逻辑（那是 GodotMCP server 与编辑器 addon 的职责），**也不实现 MCP 客户端**——v0.5 起连接、握手、工具发现、重连与图片投影全部交给宿主自带的 `@deepseek-ai/dsh-mcp-client`，本包只决定"哪些会话需要它、它连哪个 server"。本包提供四样东西：
 
-1. **路径配置 CLI**（`dsh-godot`）：校验 server 入口/Godot 项目，把路径写入 `$DSH_HOME/godot/paths.json`（host 侧 PathStore 同源；不写 profile 的 mcp-client 行），并做体检（status）。
+1. **入口配置 CLI**（dsh-godot）：校验 shim 与项目，保存全局 serverDist，清理历史受管块并提供 status；项目参数仅作校验，不绑定会话。
 2. **Godot 工作流提示词 section**（host 插件，行 id `dsh-godot`）：教模型按需扩面、理解编辑器 FIFO 串行语义与错误恢复。蒸馏自 GodotMCP 的 godot-control / godot-playtest 技能。
-3. **按会话挂载策略 + 路径设置路由**（host/client，行 id `dsh-godot`）：默认只有 Godot preset 会话在 `agent/created` 时把官方 mcp-client 挂进该 Agent 作用域（工具名 `mcp__godot__*`），其余会话根本没有这些工具；项目路径按会话 cwd 解析并作为 `GODOT_MCP_PROJECT_PATH` 传入。`/godot-config/api/path-settings` 为插件页配置表单提供 host 侧 `PathStore` 的整份读写（详见 `docs/behavior.md` 与 `docs/development.md`）。通用工具调试界面不在本包——已迁至 `deepseek-harness-project-mcp` 的「工具调试」Tab。
+3. **挂载策略与入口设置**：默认按 Godot Agent 会话挂载官方 mcp-client，传 cwd、不注入项目路径。目标与组由 godot_connect/discover_tools 按 shim 会话维护。路径 API 只保存 serverDist，旧 projects 形状保留兼容；原版模式共享同一连接和状态。
 4. **Godot agent preset 声明**（bundle patch 行 id `preset-godot`）：DSH 0.1.6+ 起 preset 只能由 bundle patch 的 `@deepseek-ai/dsh-agent-preset` 声明行注册（`$DSH_HOME/.agent-presets/<id>/` 目录已废弃）；该行 plugins 是 shipped `standard` 的完整副本 + 本包技能目录（`skills/` 为指向上游 GodotMCP 的 junction，`customSkillDirs` 从本包 realpath 解析）。
 
-上游事实（工具目录、分组、env 变量、注册表）以 GodotMCP 仓库 `plugin/godot-mcp-unified/server/` 的源码与文档为准；本仓库文档只写接入语义，不复制上游目录。
+上游事实（工具目录、分组、env 变量、注册表）以 GodotMCP 仓库 `plugin/godot-mcp-unified/server-dotnet/` 的源码与文档为准；本仓库文档只写接入语义，不复制上游目录。
 
 ## 文档索引
 
@@ -45,7 +47,4 @@
 
 ## Git 纪律
 
-本目录是指向 GodotMCP 仓库 `adapters/dsh/deepseek-harness-godot_unified` 的 Windows
-Junction：git 命令由此解析到 GodotMCP 仓库根，源码与历史统一由该仓库管理，无独立
-远程。不主动 `git commit` / `git push`；用户明确批准后提交标题以中文开头。默认分支
-`main`。
+本目录是 GodotMCP 仓库内的普通目录，共用根仓库 Git 历史；只有 skills/ 是 junction。不同客户端目录的改动属于同一次工作区状态。不主动 git commit / git push；用户明确批准后提交标题以中文开头，默认分支 main。

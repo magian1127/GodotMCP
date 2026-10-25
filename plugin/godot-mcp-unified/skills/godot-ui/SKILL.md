@@ -7,6 +7,8 @@ description: Godot UI 系统专家知识——Control 节点、主题(Theme)定�
 
 # Godot UI
 
+先确认本会话已通过 `godot_connect(project="<Godot 项目绝对路径>")` 选择目标。未连接时只有入口工具；连接后提供 9 个核心工具，其他能力通过 `discover_tools(request=[组名], include_schemas=true)` 激活。多项目交错调用显式传 `instance`。工具路由、参数缺失与连接恢复见 [工具路由](../godot-control/references/tool-routing.md)。
+
 你是一位 Godot UI/UX 专家，深谙 Godot 的 Control 节点系统、主题(Theme)定制、响应式设计，以及菜单、HUD、背包、对话系统等常见游戏 UI 模式。
 
 # UI 核心知识
@@ -478,20 +480,20 @@ func _ready():
 
 # 通过 MCP 工具包搭建 UI
 
-所有工具来自 **godot-mcp-unified** MCP 服务器——以当前客户端实际显示的前缀调用。标注 *(组)* 的工具位于按需工具组：先通过 `discover_tools({request: "..."})` 激活，普通工作同时保持不超过三个组处于激活状态，阶段结束后用 `discover_tools({reset: [...]})` 释放。通用的工具包工作流（批量调用、错误恢复、token 纪律）遵循 godot-control 技能。
+以客户端实际显示的前缀调用工具。搭建场景前激活 `scene_edit`，主题操作加载 `art_fx`，脚本检查加载 `code_intel`，运行游戏前加载 `playtest`。使用 `discover_tools(request=[...], include_schemas=true)` 查询并激活；普通工作同时保持不超过三个组，阶段结束后用 `discover_tools(reset=[...])` 释放。通用流程遵循 godot-control。
 
 创建 UI 元素时，你应该：
 
 1. **`scene_create`** 在磁盘上创建 `.tscn`（`root_type` 可为 `CanvasLayer`、`Control` 等；`if_exists:"return"` 保证幂等）。它**不会**在编辑器中打开该场景。
 2. **`scene_open`** —— 创建后立即打开新场景。节点工具始终作用于当前打开的场景：缺少这一步要么报 `NO_SCENE`，要么改错场景。
 3. **`scene_create_node`** 搭建 Control 节点层级。幂等（重名返回 `returned` 而非报错）。父节点为 Container 时，子 Control 自动获得 `layout_mode=1`。创建时可直接内联初始属性（`properties={text:"New Game", columns:5}`），并为脚本要引用的节点标记 `unique_name:true` 以便用 `%Name` 访问——两者都能省去往返调用。
-4. **`control_set_layout`**（node_advanced 组）一次调用应用锚点预设（`PRESET_FULL_RECT`、`PRESET_BOTTOM_WIDE`、`PRESET_CENTER` 等），可附加像素级 `margins`；封装了 `set_anchors_and_offsets_preset()` 并返回 `final_rect` 供核对。记住上面的容器规则：锚点只对容器之外的 Control 有意义。
+4. **`control_set_layout`**（scene_edit 组）一次调用应用锚点预设（`PRESET_FULL_RECT`、`PRESET_BOTTOM_WIDE`、`PRESET_CENTER` 等），可附加像素级 `margins`；封装了 `set_anchors_and_offsets_preset()` 并返回 `final_rect` 供核对。记住上面的容器规则：锚点只对容器之外的 Control 有意义。
 5. **`node_set_property`** 支持单项或 `batch` 批量设置属性（`size_flags_*`、`custom_minimum_size`、`mouse_filter`、`focus_mode`、`focus_neighbor_*` 等）。支持含 `/` 的复合路径和 `theme_override_*` 属性；挂载 `.tres` 资源时使用 Resource 包装 `{type:"Resource", path:"res://themes/ui_theme.tres"}`。
 6. **`editor_save_scene`** 在结构搭建完成后保存。
-7. 用宿主的文件工具编写 GDScript，用 **`node_set_script`** 附加脚本，再用 **`script_check`** 校验（离线——无需编辑器运行）。
-8. **`asset_import`**（asset_ops 组）导入 UI 贴图、图标与字体：`source_path`（绝对路径或 `res://`）与 `base64_data` 必须且只能提供一个，外加必填的 `dest_path`。
-9. **`theme_edit`**（theme 组）用批量 `edits` 数组创建或修改 `.tres` 主题（`{type_name, property_type, property, value}`，涵盖颜色、常量、字体、字号、图标与样式框）。它是只写的——没有主题读取回传工具，因此自己记录写入了什么，并把成品资源挂载到 Control 上（见第 5 步）。
-10. **`node_groups`**（node_advanced 组）把节点加入组（例如上文无障碍一节中的 `scalable_text` 组）。
+7. 用宿主文件工具编写 GDScript，用 **`node_set_script`** 附加脚本，激活 `code_intel` 后用 **`script_check`** 做语法/解析检查；当前 daemon 路由需要已连接的编辑器。
+8. **`asset_import`**（assets 组）导入 UI 贴图、图标与字体：`source_path`（绝对路径或 `res://`）与 `base64_data` 必须且只能提供一个，外加必填的 `dest_path`。
+9. **`theme_edit`**（art_fx 组）用批量 `edits` 数组创建或修改 `.tres` 主题（`{type_name, property_type, property, value}`，涵盖颜色、常量、字体、字号、图标与样式框）。它是只写的——没有主题读取回传工具，因此自己记录写入了什么，并把成品资源挂载到 Control 上（见第 5 步）。
+10. **`node_groups`**（scene_edit 组）把节点加入组（例如上文无障碍一节中的 `scalable_text` 组）。
 11. **运行时验证**：`game_start(scene_path="res://…")` → `input_simulate`（`click_node` 配 `{node_path}` 按下按钮，无需猜测坐标；`send_text` 向聚焦的 Control 输入文本并触发真实的 `text_changed`/`text_submitted` 信号；`action` 触发已映射的输入动作）→ `capture_screenshot` / `runtime_inspect_node`。不启动游戏检查布局时，可对 `capture_screenshot` 传 `target:"editor"` 加 `node_path`，编辑器视口会聚焦并框选该节点。
 
 `unsafe` 组（`execute_code`、`node_call_method`）只有服务器以 `GODOT_MCP_UNSAFE=1` 启动时才存在。不要依赖调用编辑器侧方法来设置 UI 状态——用上面的类型化工具表达状态，并通过游玩测试验证。
@@ -499,17 +501,19 @@ func _ready():
 ## 示例工作流
 
 ```text
+0. godot_connect(project="<Godot project>", groups=["scene_edit", "code_intel"])
 1. scene_create(file_path="res://scenes/ui/main_menu.tscn", root_type="CanvasLayer")   # 新建场景文件
 2. scene_open(file_path="res://scenes/ui/main_menu.tscn")   # 打开为当前编辑场景
 3. scene_create_node(class_name="MarginContainer", parent_path=".", node_name="Margins")   # 建边距容器
 4. scene_create_node(class_name="VBoxContainer", parent_path="./Margins", node_name="Menu")   # 建垂直布局
 5. scene_create_node(class_name="Button", parent_path="./Menu",   # 建按钮
                      node_name="NewGameButton", properties={text: "New Game"}, unique_name=true)   # 内联属性并标记唯一名
-6. discover_tools({request: "node_advanced"})   # 按需加载工具组
+6. discover_tools({request: "scene_edit"})   # 按需加载工具组
    → control_set_layout(node_path="./Margins", preset="PRESET_FULL_RECT")   # 应用全屏锚点
 7. editor_save_scene()   # 保存场景
 8. 编写 main_menu.gd → node_set_script → script_check   # 挂脚本并离线校验
-9. game_start(scene_path="res://scenes/ui/main_menu.tscn")   # 启动游玩测试
+9. discover_tools(request="playtest")
+   → game_start(scene_path="res://scenes/ui/main_menu.tscn")   # 启动游玩测试
    → input_simulate → capture_screenshot   # 模拟输入并截图验证
 ```
 

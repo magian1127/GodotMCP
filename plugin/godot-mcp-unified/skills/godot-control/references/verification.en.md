@@ -8,7 +8,7 @@ Choose the shortest chain that proves the requested outcome.
 
 1. Re-read the affected node, scene, resource, or setting.
 2. Save the scene where applicable.
-3. Run script_check on changed GDScript; use lsp_diagnostics(scope="project") when changes cross files.
+3. Activate code_intel, then run script_check on changed GDScript; use lsp_diagnostics(scope="project") when changes cross files.
 4. Start the relevant scene/project if a display is available.
 5. Inspect runtime state or logs. Use a screenshot only for appearance.
 

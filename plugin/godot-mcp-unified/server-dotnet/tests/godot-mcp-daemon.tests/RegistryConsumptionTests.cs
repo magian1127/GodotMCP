@@ -177,10 +177,17 @@ public class RegistryConsumptionTests
     public async Task connected_instance_prevents_idle_exit_until_disconnected()
     {
         var stateDir = TestPaths.NewStateDir();
+
+        // **先起 fake,再起 daemon**。反过来的话 daemon 从启动起就只有一个空闲阈值
+        // (5s)的窗口去发现它 —— 机器满载时单是 WaitReady + 连客户端就可能吃掉大半,
+        // 于是 daemon 真的空闲退出,测试变红而被测语义是对的。
+        // fake 先行时注册表里已有条目,daemon 首轮 1s 轮询即 connected,余量充足。
+        // 故意不用 using:finally 里必须能在断言"断开后自行退出"之前先释放它。
+        var fake = FakeGodotInstance.Start(new FakeGodotOptions { ProjectPath = @"D:\proj\keepalive", StateDir = stateDir });
+
         using var daemon = DaemonProcess.Start(new DaemonSpawnOptions { StateDir = stateDir, IdleSeconds = 5 });
         daemon.WaitReady(DaemonProcess.ReadyTimeout);
 
-        var fake = FakeGodotInstance.Start(new FakeGodotOptions { ProjectPath = @"D:\proj\keepalive", StateDir = stateDir });
         try
         {
             await using var client = await SessionConnector.ConnectAsync(daemon.Port, daemon.WaitForToken());

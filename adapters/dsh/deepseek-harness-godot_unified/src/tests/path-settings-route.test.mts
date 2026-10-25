@@ -77,7 +77,8 @@ test('装配:webServer 缺席时返回 undefined(不抛错)', () => {
   assert.equal(mountPathSettingsRoute(ctx as never, { pathStore: tempStore() }), undefined)
 })
 
-test('GET:读整份(全局 serverDist + 批量 projects),current* 随 cwd 解析', async () => {
+
+test('GET:只读 serverDist;projects 恒为空(项目路径表已删除)', async () => {
   const store = tempStore()
   const ctx = fakeCtx()
   mountPathSettingsRoute(ctx as never, {
@@ -86,66 +87,44 @@ test('GET:读整份(全局 serverDist + 批量 projects),current* 随 cwd 解析
     projectPath: 'D:/global/proj',
   })
   const handle = ctx.captured[0]!.handler
-  // 无 cwd(配置表单场景):返回整份全局,current* 为 null。
-  const noCwd = reqRes('GET')
-  handle(noCwd.req, noCwd.res); await tick()
-  const noCwdBody = JSON.parse(noCwd.res.body)
-  assert.equal(noCwdBody.serverDist, 'D:/global/dist/index.js', '无 cwd 时 serverDist 回退全局')
-  assert.deepEqual(noCwdBody.projects, [])
-  assert.equal(noCwdBody.currentCwd, null)
-  assert.equal(noCwdBody.currentProjectPath, null)
 
-  const cwd = 'C:/proj/alpha'
-  const before = reqRes('GET', { url: `${PATH_SETTINGS_ROUTE}?cwd=${encodeURIComponent(cwd)}` })
-  handle(before.req, before.res); await tick()
-  const beforeBody = JSON.parse(before.res.body)
-  assert.equal(beforeBody.currentCwd, cwd)
-  assert.equal(beforeBody.currentProjectPath, 'D:/global/proj', 'cwd 无匹配时回退全局项目路径')
+  const plain = reqRes('GET')
+  handle(plain.req, plain.res); await tick()
+  const body = JSON.parse(plain.res.body)
+  assert.equal(body.serverDist, 'D:/global/dist/index.js', '未显式设置时回退设置卡片的生效值')
+  assert.deepEqual(body.projects, [], '项目路径表已删除,永远是空数组')
+  assert.equal(body.currentCwd, null)
+  assert.equal(body.currentProjectPath, null)
 
-  // POST 整份覆盖,随后 GET 读到新值。
-  const write = reqRes('POST', { body: JSON.stringify({
-    serverDist: 'D:/mcp/dist/index.js',
-    projects: [{ cwd, projectPath: 'C:/proj/alpha' }, { cwd: 'C:/proj/beta', projectPath: 'C:/proj/beta' }],
-  }) })
-  handle(write.req, write.res); await tick()
-  assert.equal(JSON.parse(write.res.body).ok, true)
-  assert.equal(store.getServerDist(), 'D:/mcp/dist/index.js')
-  assert.equal(store.getProjectPath(cwd), 'C:/proj/alpha')
-  assert.equal(store.getProjectPath('C:/proj/beta'), 'C:/proj/beta')
-  assert.equal(store.getProjectPath('C:/proj/gamma'), undefined, '未配置 cwd 无匹配')
-
-  const after = reqRes('GET', { url: `${PATH_SETTINGS_ROUTE}?cwd=${encodeURIComponent(cwd)}` })
-  handle(after.req, after.res); await tick()
-  const afterBody = JSON.parse(after.res.body)
-  assert.equal(afterBody.serverDist, 'D:/mcp/dist/index.js')
-  assert.equal(afterBody.projects.length, 2)
-  assert.equal(afterBody.currentProjectPath, 'C:/proj/alpha')
+  // **反向断言**:带 cwd 的 GET 也不再解析项目路径 —— 目标由 daemon 决定,
+  // 插件若继续在这里回答"你这个 cwd 对应哪个项目",就又回到了被删掉的查表语义。
+  const withCwd = reqRes('GET', { url: `${PATH_SETTINGS_ROUTE}?cwd=${encodeURIComponent('C:/proj/alpha')}` })
+  handle(withCwd.req, withCwd.res); await tick()
+  const withCwdBody = JSON.parse(withCwd.res.body)
+  assert.equal(withCwdBody.currentCwd, null, '不再按 cwd 解析')
+  assert.equal(withCwdBody.currentProjectPath, null)
+  assert.deepEqual(withCwdBody.projects, [])
 })
 
-test('POST:整份覆盖增删改;非法条目被丢弃', async () => {
+test('POST:只持久化 serverDist;请求里的 projects 被忽略', async () => {
   const store = tempStore()
   const ctx = fakeCtx()
   mountPathSettingsRoute(ctx as never, { pathStore: store })
   const handle = ctx.captured[0]!.handler
-  const w1 = reqRes('POST', { body: JSON.stringify({ serverDist: 'S', projects: [{ cwd: 'A', projectPath: 'A1' }, { cwd: 'B', projectPath: 'B1' }] }) })
-  handle(w1.req, w1.res); await tick()
-  assert.equal(store.getProjectPath('A'), 'A1')
-  assert.equal(store.getProjectPath('B'), 'B1')
-  const w2 = reqRes('POST', { body: JSON.stringify({
-    serverDist: 'S2',
-    projects: [
-      { cwd: 'A', projectPath: 'A2' },
-      { cwd: '', projectPath: 'x' },
-      { cwd: 'D', projectPath: '' },
-      { cwd: 'C', projectPath: 'C1' },
-    ],
+
+  // 老前端仍会带着 projects 提交;服务端不能把它落盘,否则用户会以为改了项目路径就生效。
+  const write = reqRes('POST', { body: JSON.stringify({
+    serverDist: 'D:/mcp/dist/index.js',
+    projects: [{ cwd: 'A', projectPath: 'A1' }, { cwd: 'B', projectPath: 'B1' }],
   }) })
-  handle(w2.req, w2.res); await tick()
-  assert.equal(store.getServerDist(), 'S2')
-  assert.equal(store.getProjectPath('A'), 'A2', '覆盖生效')
-  assert.equal(store.getProjectPath('B'), undefined, '删除生效')
-  assert.equal(store.getProjectPath('C'), 'C1')
-  assert.equal(store.getConfig().projects.length, 2, '非法条目被丢弃:cwd 为空/路径为空')
+  handle(write.req, write.res); await tick()
+  const written = JSON.parse(write.res.body)
+  assert.equal(written.ok, true)
+  assert.equal(written.serverDist, 'D:/mcp/dist/index.js')
+  assert.deepEqual(written.projects, [], '响应也不回显 projects')
+  assert.equal(store.getServerDist(), 'D:/mcp/dist/index.js')
+  assert.deepEqual(store.getConfig().projects, [], 'projects 没有被持久化')
+  assert.equal(store.getProjectPath('A'), undefined, '不再有按 cwd 的项目解析')
 })
 
 test('POST:pathStore 缺席时 400', async () => {

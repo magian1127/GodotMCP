@@ -10,14 +10,22 @@ test('resolveSettings:缺失/非法形状逐键回退默认(默认不注入)', (
 })
 
 test('resolveSettings:合法值逐键采纳,字符串/布尔分型', () => {
-  assert.deepEqual(resolveSettings({ injectLegacyMode: true }), { injectLegacyMode: true, promptGuidance: true, zhPrompt: false, godotServerDist: '', godotProjectPath: '' })
-  assert.deepEqual(resolveSettings({ zhPrompt: true, promptGuidance: false }), { injectLegacyMode: false, promptGuidance: false, zhPrompt: true, godotServerDist: '', godotProjectPath: '' })
+  assert.deepEqual(resolveSettings({ injectLegacyMode: true }), { injectLegacyMode: true, promptGuidance: true, zhPrompt: false, godotServerDist: '', godotProjectPath: '', toolCallTimeoutMs: 240_000 })
+  assert.deepEqual(resolveSettings({ zhPrompt: true, promptGuidance: false }), { injectLegacyMode: false, promptGuidance: false, zhPrompt: true, godotServerDist: '', godotProjectPath: '', toolCallTimeoutMs: 240_000 })
   assert.deepEqual(
     resolveSettings({ godotServerDist: 'D:/x/godot-mcp-shim.exe', godotProjectPath: 'D:/game' }),
-    { injectLegacyMode: false, promptGuidance: true, zhPrompt: false, godotServerDist: 'D:/x/godot-mcp-shim.exe', godotProjectPath: 'D:/game' },
+    { injectLegacyMode: false, promptGuidance: true, zhPrompt: false, godotServerDist: 'D:/x/godot-mcp-shim.exe', godotProjectPath: 'D:/game', toolCallTimeoutMs: 240_000 },
   )
   // 非字符串的路径字段回退默认。
   assert.equal(resolveSettings({ godotServerDist: 42 }).godotServerDist, '')
+
+  // 超时:接受数字与数字字符串(表单输入框给的是字符串),非法回退默认,上限 900s。
+  assert.equal(resolveSettings({ toolCallTimeoutMs: 300_000 }).toolCallTimeoutMs, 300_000)
+  assert.equal(resolveSettings({ toolCallTimeoutMs: '300000' }).toolCallTimeoutMs, 300_000)
+  assert.equal(resolveSettings({ toolCallTimeoutMs: 0 }).toolCallTimeoutMs, 240_000)
+  assert.equal(resolveSettings({ toolCallTimeoutMs: -5 }).toolCallTimeoutMs, 240_000)
+  assert.equal(resolveSettings({ toolCallTimeoutMs: 'abc' }).toolCallTimeoutMs, 240_000)
+  assert.equal(resolveSettings({ toolCallTimeoutMs: 9_999_999 }).toolCallTimeoutMs, 900_000)
 })
 
 test('toolNamePrefix:官方命名约定 mcp__<serverName>__', () => {

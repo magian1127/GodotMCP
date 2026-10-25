@@ -7,6 +7,8 @@ Language: English | [中文](SKILL.md)
 
 # Godot UI
 
+First select this session’s target with `godot_connect(project="<absolute Godot project path>")`. Before connecting, only the entry tool exists; afterward nine core tools are available. Activate other capabilities with `discover_tools(request=[group names], include_schemas=true)`. Pass `instance` when interleaving projects. See [tool routing](../godot-control/references/tool-routing.en.md) for schemas and recovery.
+
 You are a Godot UI/UX expert, fluent in Godot's Control node system, Theme customization, responsive design, and common game UI patterns: menus, HUDs, inventories, and dialogue systems.
 
 # Core UI knowledge
@@ -478,20 +480,20 @@ func _ready():
 
 # Building UI through the MCP toolkit
 
-All tools come from the **godot-mcp-unified** MCP server — call them with whatever prefix your client displays. Tools marked *(group)* live in on-demand groups: load them first with `discover_tools({request: "..."})`, keep at most three groups active at a time, and release them with `discover_tools({reset: [...]})` once the phase is done. For general toolkit workflow — batching, error recovery, token discipline — follow the godot-control skill.
+Use the prefix displayed by the client. Activate `scene_edit` for authoring, `art_fx` for themes, `code_intel` for script checks, and `playtest` before running the game. Inspect and activate with `discover_tools(request=[...], include_schemas=true)`; keep at most three groups active and release them with `discover_tools(reset=[...])` at phase boundaries. Follow godot-control for the general workflow.
 
 When creating UI elements:
 
 1. **`scene_create`** creates the `.tscn` on disk (`root_type` can be `CanvasLayer`, `Control`, …; `if_exists:"return"` keeps it idempotent). It does **not** open the scene in the editor.
 2. **`scene_open`** — open the new scene right after creating it. Node tools always operate on the currently open scene: without this step they either fail with `NO_SCENE` or modify the wrong scene.
 3. **`scene_create_node`** builds the Control hierarchy. Idempotent (a name clash returns `returned`). When the parent is a Container the child Control automatically gets `layout_mode=1`. Pass initial properties inline (`properties={text:"New Game", columns:5}`) and mark script-referenced nodes `unique_name:true` for `%Name` access — both save round-trips.
-4. **`control_set_layout`** *(node_advanced group)* applies an anchor preset in one call (`PRESET_FULL_RECT`, `PRESET_BOTTOM_WIDE`, `PRESET_CENTER`, …) plus optional pixel `margins`; it wraps `set_anchors_and_offsets_preset()` and returns `final_rect` for verification. Remember the container rule above: anchors matter only for Controls outside Containers.
+4. **`control_set_layout`** *(scene_edit group)* applies an anchor preset in one call (`PRESET_FULL_RECT`, `PRESET_BOTTOM_WIDE`, `PRESET_CENTER`, …) plus optional pixel `margins`; it wraps `set_anchors_and_offsets_preset()` and returns `final_rect` for verification. Remember the container rule above: anchors matter only for Controls outside Containers.
 5. **`node_set_property`** sets single or `batch` properties (`size_flags_*`, `custom_minimum_size`, `mouse_filter`, `focus_mode`, `focus_neighbor_*`, …). It supports `/`-composite paths and `theme_override_*` properties; assign a `.tres` resource with the Resource wrapper `{type:"Resource", path:"res://themes/ui_theme.tres"}`.
 6. **`editor_save_scene`** saves once the structure is in place.
-7. Write GDScript with the host's file tools, attach it with **`node_set_script`**, and validate with **`script_check`** (offline — works without the editor running).
-8. **`asset_import`** *(asset_ops group)* imports UI textures, icons, and fonts: exactly one of `source_path` (absolute or `res://`) or `base64_data`, plus the required `dest_path`.
-9. **`theme_edit`** *(theme group)* creates or modifies `.tres` themes with a batch `edits` array (`{type_name, property_type, property, value}` for colors, constants, fonts, font sizes, icons, and styleboxes). It is write-only — there is no theme read-back tool, so track what you wrote and apply the finished resource to Controls yourself (step 5).
-10. **`node_groups`** *(node_advanced group)* adds nodes to groups (e.g. the `scalable_text` group from the accessibility section).
+7. Write GDScript with the host’s file tools, attach it with **`node_set_script`**, activate `code_intel`, and use **`script_check`** for syntax/parsing checks. The daemon route requires a connected editor.
+8. **`asset_import`** *(assets group)* imports UI textures, icons, and fonts: exactly one of `source_path` (absolute or `res://`) or `base64_data`, plus the required `dest_path`.
+9. **`theme_edit`** *(art_fx group)* creates or modifies `.tres` themes with a batch `edits` array (`{type_name, property_type, property, value}` for colors, constants, fonts, font sizes, icons, and styleboxes). It is write-only — there is no theme read-back tool, so track what you wrote and apply the finished resource to Controls yourself (step 5).
+10. **`node_groups`** *(scene_edit group)* adds nodes to groups (e.g. the `scalable_text` group from the accessibility section).
 11. **Verify at runtime**: `game_start(scene_path="res://…")` → `input_simulate` (`click_node` with `{node_path}` presses buttons without guessing coordinates; `send_text` types into the focused Control and fires the real `text_changed`/`text_submitted` signals; `action` fires mapped input actions) → `capture_screenshot` / `runtime_inspect_node`. To check layout without running the game, `capture_screenshot` with `target:"editor"` and a `node_path` focuses and frames that node in the editor viewport.
 
 The `unsafe` group (`execute_code`, `node_call_method`) is absent unless the server was started with `GODOT_MCP_UNSAFE=1`. Never rely on calling editor-side methods to set up UI state — express state through the typed tools above and verify through playtest.
@@ -499,17 +501,19 @@ The `unsafe` group (`execute_code`, `node_call_method`) is absent unless the ser
 ## Example workflow
 
 ```text
+0. godot_connect(project="<Godot project>", groups=["scene_edit", "code_intel"])
 1. scene_create(file_path="res://scenes/ui/main_menu.tscn", root_type="CanvasLayer")
 2. scene_open(file_path="res://scenes/ui/main_menu.tscn")
 3. scene_create_node(class_name="MarginContainer", parent_path=".", node_name="Margins")
 4. scene_create_node(class_name="VBoxContainer", parent_path="./Margins", node_name="Menu")
 5. scene_create_node(class_name="Button", parent_path="./Menu", node_name="NewGameButton",
                      properties={text: "New Game"}, unique_name=true)
-6. discover_tools({request: "node_advanced"})
+6. discover_tools({request: "scene_edit"})
    → control_set_layout(node_path="./Margins", preset="PRESET_FULL_RECT")
 7. editor_save_scene()
 8. write main_menu.gd → node_set_script → script_check
-9. game_start(scene_path="res://scenes/ui/main_menu.tscn")
+9. discover_tools(request="playtest")
+   → game_start(scene_path="res://scenes/ui/main_menu.tscn")
    → input_simulate → capture_screenshot
 ```
 

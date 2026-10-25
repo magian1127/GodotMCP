@@ -1,130 +1,44 @@
-# Security Recommendations
+# Security recommendations
 
-This document describes which MCP tools carry risk, how to restrict them
-using your AI agent's built-in filtering, and how to enable the toolkit's
-read-only mode for supervised environments.
+## Boundaries in the current implementation
 
-## High-risk tools
+Hosts use stdio shims; loopback HTTP is the authenticated backend. The shim reads the stable daemon token, and the daemon reads editor tokens. Keep credentials in the machine registry. Session keys isolate target/group state, not permissions; default groups and hidden tools are not a substitute for authorization.
 
-These six tools warrant consideration for per-tool blocking depending on
-your trust model. The first two are additionally unavailable unless the MCP
-server starts with `GODOT_MCP_UNSAFE=1`:
+Bridge listeners are local. Whether tool input/output is sent to a model service depends on the host’s data policy.
 
-| Tool | Risk | Why you might block it | Side effect of blocking |
-|---|---|---|---|
-| `execute_code` | Executes arbitrary GDScript via Expression | Prevents agent from running unconstrained code at runtime | Agent loses ability to test game logic dynamically, inspect runtime state via expressions |
-| `node_call_method` | Calls any method on any scene node | Prevents agent from invoking undocumented/dangerous methods | Agent can't call custom methods on nodes --- must use dedicated tools instead |
-| `project_delete` | Deletes project files, folders, scenes, scripts, or resources | Prevents destructive project cleanup | Agent must leave obsolete project paths in place |
-| `save_write` | Writes to `user://` persistent storage | Prevents agent from modifying player saves/config | Agent can't create or update save files, config, preferences |
-| `save_delete` | Deletes from `user://` | Prevents accidental save data loss | Agent can't clean up test saves or obsolete config |
-| `user_data_read` | Reads files or lists directories under `user://` | Prevents access to potentially sensitive player data and file structure | Agent can't inspect save contents through MCP (can still use native filesystem access if unsandboxed) |
+## Tool capabilities
 
-Any tool with a `destructiveHint` MCP annotation modifies project assets or
-state. Many of these support Undo (Ctrl+Z in the editor reverts their changes).
+| Tools | Capability |
+| --- | --- |
+| execute_code, node_call_method | Arbitrary code/method execution; unsafe daemon opt-in required |
+| project_delete | Project files/scenes/folders deletion; inspect dry_run plans |
+| save_write, save_delete | Persistent user:// writes/deletion |
+| user_data_read | User-data files and directory reads |
+| Other authoring tools | Scene/resource/settings mutations, with annotations describing their behavior |
 
-## Built-in read-only mode
+readOnlyHint, destructiveHint, and idempotentHint describe operations for host policy; they are not authentication. Some mutations support Undo, but verify the actual result rather than assuming rollback.
 
-For users who want a read-only session without configuring per-tool blocking,
-`GODOT_MCP_READ_ONLY=1` is the simplest option. Set it in `.mcp.json` `env`
-and all tools annotated with `destructiveHint` are hidden from the agent ---
-this covers arbitrary code execution (`execute_code`), node method calls
-(`node_call_method`), user-folder writes (`save_write`, `save_delete`), and
-every other mutating tool.
+## Read-only configuration
 
-**What it does NOT block:** read-only tools like `user_data_read` remain
-visible. The agent can still inspect save file contents and directory
-structure (and could also read those paths via its own native filesystem
-access if unsandboxed).
+The current C# daemon **does not implement the retired Node bridge’s GODOT_MCP_READ_ONLY environment filter**. The addon UI still has compatibility configuration/status for that key; this is not evidence that mutations are blocked. Do not present the dock toggle or that env value as an enforced read-only boundary.
 
-```jsonc
-// .mcp.json -- env block
-{
-  "env": {
-    "GODOT_MCP_READ_ONLY": "1"
-  }
-}
+Use the host’s actual tool allowlist/deny/approval policy. In Codex, a standalone MCP server can be configured in a trusted project’s .codex/config.toml or user config:
+
+```toml
+[mcp_servers.godot]
+command = "<plugin root>/server-dotnet/publish/<rid>/godot-mcp-shim.exe"
+disabled_tools = ["execute_code", "node_call_method"]
 ```
 
-For finer-grained control (e.g., allow mutations but block only
-`project_delete`), use the per-tool agent-side filtering below. Leave
-`GODOT_MCP_UNSAFE` unset unless arbitrary expression and method execution are
-explicitly required.
+This example blocks only those two tools, not all writes. Use an explicit enabled_tools allowlist for a restricted workflow, remembering the godot_connect entry and the desired read tools. Installed plugin servers use plugin-specific MCP policy rather than replacing their transport command. See the installed Codex MCP configuration reference; use codex mcp --help for CLI commands.
 
-## Per-tool agent-side blocking
+Other hosts have different configuration and naming. Use the installed version’s filtering/permission controls and verify actual tool visibility/call rejection; an Agents SDK Python tool_filter is not Codex desktop configuration.
 
-### Claude Code
+## Operational guidance
 
-`.claude/settings.json` permissions system:
-
-```json
-{
-  "permissions": {
-    "deny": [
-      "mcp__godot__execute_code",
-      "mcp__godot__node_call_method"
-    ]
-  }
-}
-```
-
-Pattern: `mcp__<server-name>__<tool-name>`. Wildcards supported:
-`mcp__godot__save_*` blocks write/delete tools; block
-`mcp__godot__user_data_read` separately when reads are also sensitive.
-Deny rules take precedence over allow at all levels.
-
-### Google Gemini CLI
-
-`~/.gemini/config.json` (or project-level):
-
-```json
-{
-  "mcpServers": {
-    "godot-mcp": {
-      "excludeTools": [
-        "execute_code",
-        "node_call_method",
-        "project_delete",
-        "save_write",
-        "save_delete"
-      ]
-    }
-  }
-}
-```
-
-`excludeTools` always takes precedence over `includeTools`.
-
-### OpenAI Codex / Agents SDK
-
-Python code, tool filter at server init:
-
-```python
-from agents.mcp import MCPServerStdio, create_static_tool_filter
-
-server = MCPServerStdio(
-    params={"command": "godot-mcp-unified-server"},
-    tool_filter=create_static_tool_filter(
-        blocked_tool_names=["execute_code", "node_call_method"]
-    ),
-)
-```
-
-Supports both `allowed_tool_names` (allowlist) and `blocked_tool_names`
-(blocklist). Also supports async context-aware filter functions.
-
-### Cursor
-
-As of 2026-05-27, Cursor supports MCP tool filtering via **Hooks**
-(programmatic scripts that intercept tool calls and return allow/deny/warn).
-This requires more setup than Claude Code's or Gemini's declarative config.
-Cursor also has `permissions.json` for auto-run allowlists (controls approval
-flow, not blocking). No simple declarative `excludeTools`-style config exists
-yet. Check Cursor's latest docs for updates, as this is an actively evolving
-area.
-
-### General guidance
-
-For other MCP-compatible agents, consult their documentation for tool
-filtering. Look for allowlist/blocklist/disallow/exclude mechanisms. The MCP
-protocol exposes `destructiveHint` and `readOnlyHint` annotations per tool ---
-well-behaved clients should prompt for confirmation on destructive operations.
+- Connect first and activate only task groups. Missing tools can mean unconnected state, unloaded groups, version gates, or stale discovery.
+- Keep unsafe disabled unless a currently authorized operation requires it.
+- Retain path guards, audit logs, response caps, and untrusted-content wrappers. These are server-side checks independent of host discovery.
+- Inspect state after timeout/transport loss before resubmitting mutations.
+- Scope filesystem/model access using host permissions; an MCP tool restriction does not remove native filesystem access.
+- See [session recovery](multi-instance.md) for current notification/group limits.

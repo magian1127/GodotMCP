@@ -7,6 +7,8 @@ description: 引导用户创建 Godot MCP Unified 扩展——为 Godot MCP Unif
 
 你是 Godot MCP Unified 扩展创作助手。帮助用户创建给 Toolkit 添加自定义 MCP 工具的第三方扩展。除非用户明确要求 C#，默认使用 GDScript 示例。当用户要求构建扩展时，先用一句话提供引导式设计（见“引导式创作模式”），然后直接构建——完整引导流程是可选的，绝不会阻塞工作。
 
+通过 `godot_connect(project="<Godot 项目绝对路径>")` 连接当前会话后，再刷新与验证扩展。未分组扩展在连接后可见；分组扩展先通过 `discover_tools(request=[扩展组名], refresh_extensions=true)` 刷新并激活。以宿主最新工具列表为准；通知与重启恢复的当前边界见 [多实例与会话](../../docs/multi-instance.zh-CN.md)。
+
 ## 快速开始——完整可用的扩展
 
 粘贴下面的代码，重命名类，保存到 `addons/<your_extension>/` 下，然后重新加载（切回编辑器或调用 `discover_tools(refresh_extensions:true)`）。它注册了一个 `notes_write` 工具，将 Markdown 笔记写入 `res://` 路径，并包含路径保护、必需参数检查和两种响应封装。
@@ -92,7 +94,7 @@ C# 无法扩展 GDScript 基类，因此机制不同并且需要构建步骤。�
 
 | 动词 | 默认（省略） | 何时设置 | 设置错误的后果 |
 |------|-------------------|-------------|----------------------|
-| `mark_read_only()` | 工具视为**变更工具** | 工具只读取状态、从不写入 | 真正的读取工具省略：会在多会话下排在变更锁后（更慢），并在 `GODOT_MCP_READ_ONLY=1` 下排除；写入工具设置它：写入绕过串行化，产生竞态。 |
+| `mark_read_only()` | 工具视为**变更工具** | 工具只读取状态、从不写入 | 真正的读取工具省略：会在多会话下排在变更锁后（更慢），且没有供宿主过滤的只读提示；写入工具设置它：写入绕过串行化，产生竞态。 |
 | `mark_destructive()` | 非破坏性 | 工具删除或不可逆修改数据 | 向客户端暴露 `destructiveHint`。与 `mark_read_only()` **互斥**——同时设置时按变更工具处理并记录警告。 |
 | `mark_scene_independent()` | **依赖场景**（等待场景租约） | 处理器只触碰文件路径 / 引擎单例，不触碰 `EditorInterface.get_edited_scene_root()` | 文件工具省略：另一个会话持有标签页时不必要地排在租约后；场景读取工具设置它：竞争时可能读取错误场景。 |
 | `mark_exclusive_execution()` | 不独占 | 只读工具有不能与变更重叠的副作用（如启动 / 停止进程） | 需要时省略：副作用可能与并发变更交错。很少需要。 |
@@ -111,7 +113,7 @@ C# 无法扩展 GDScript 基类，因此机制不同并且需要构建步骤。�
 **Schema 和分组是独立决策，不是数值微调：**
 
 - `with_input_schema(schema)`——参数契约（JSON Schema），见下方 schema 速查。
-- `with_group(name, description="", keywords=[])`——将工具放在 `discover_tools` 后面按需加载（未分组工具启动时可见）。**关键词陷阱：**模糊匹配是子字符串且最少 3 个字符，因此 `"2d"`、`"3d"`、`"ui"`、`"ai"` 等短领域词必须列为显式关键词，例如 `with_group("my_2d_tools", "...", ["2d", "sprite", "tilemap"])`。
+- `with_group(name, description="", keywords=[])`——将工具放在 `discover_tools` 后面按需加载（未分组工具在会话连接后可见）。**关键词陷阱：**模糊匹配是子字符串且最少 3 个字符，因此 `"2d"`、`"3d"`、`"ui"`、`"ai"` 等短领域词必须列为显式关键词，例如 `with_group("my_2d_tools", "...", ["2d", "sprite", "tilemap"])`。
 
 **路径保护也应在构建器上声明：**`guard_project_path(param)` / `guard_user_path(param)` 是声明式 `res://` / `user://` 保护；分发器会在处理器运行前以 `PATH_DENIED` 拒绝遍历路径。
 
@@ -141,6 +143,7 @@ if guard["error"] != null:  # returns {error, reason} on a rejected path
 ```gdscript
 const Untrusted = preload("res://addons/godot_mcp_toolkit/security/untrusted.gd")
 # kind + source are labels; body is the untrusted text.
+
 # JSON.stringify(...) a Dictionary/Array body before wrapping.
 return MCPToolkitSuccess.ok({
     "content": Untrusted.wrap("config", file_path, text),
@@ -209,9 +212,9 @@ MCP 客户端发送 JSON，因此 Godot 接收的是基本类型——在处理�
 
 ## 工具组
 
-调用 `.with_group()` 注册的命令会懒加载，只有 `discover_tools` 调用后才对 LLM 可见；没有分组的命令启动时可见。根据专业程度选择：通用工具不分组（始终可用），小众工具分组以减少工具列表噪音。
+调用 `.with_group()` 注册的命令会懒加载，只有 `discover_tools` 调用后才对 LLM 可见；没有分组的命令在会话连接后可见。根据专业程度选择：通用工具不分组（始终可用），小众工具分组以减少工具列表噪音。
 
-需要多个组时，在一次 `discover_tools` 调用中加载：`discover_tools(request: ["runtime_advanced", "input_map"])`，不要每个组调用一次。每次调用都会触发 `tools/list_changed` 通知，迫使 LLM 重新获取完整工具列表；批量可只刷新一次。
+需要多个组时，在一次 `discover_tools` 调用中加载：`discover_tools(request: ["playtest", "project_config"])`，不要每个组调用一次。每次调用都会触发 `tools/list_changed` 通知，迫使 LLM 重新获取完整工具列表；批量可只刷新一次。
 
 ## 可分发插件布局
 

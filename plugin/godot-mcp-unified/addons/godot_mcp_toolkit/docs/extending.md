@@ -1,5 +1,7 @@
 # Extending the Godot MCP Unified
 
+Before MCP validation, connect the session with godot_connect(project). Ungrouped extensions become visible after connection; grouped extensions require activation. Use the host’s latest schemas and verify notification/restart behavior separately. See [multi-instance.md](multi-instance.md).
+
 ## Extensions (supported)
 
 The toolkit supports distributable third-party extensions via the
@@ -183,14 +185,7 @@ var opts = MCPToolkitExtensionOptions.new("Describe what your tool does")
 All annotation defaults are **safe**: omitting them means the tool is
 treated as mutating, non-destructive, and non-idempotent.
 
-**Read-only mode:** The `mark_read_only()` annotation is the **single source
-of truth** for read-only filtering. When the server runs with
-`GODOT_MCP_READ_ONLY=1`, only tools marked read-only appear in
-`tools/list` -- both built-in and extension tools use the same
-annotation-driven filter. If your extension tool only inspects state
-(reads nodes, queries data, lists files), call `mark_read_only()` so it
-remains available in read-only environments. Tools without this annotation
-are excluded by default (strict inclusion -- safe posture).
+**Read-only annotation:** mark_read_only() drives mutation serialization and publishes readOnlyHint for host filtering. Mark only true readers. The current C# daemon does not read the retired GODOT_MCP_READ_ONLY env filter; configure host policy and verify enforcement rather than assuming a read-only face. See [security-recommendations.md](security-recommendations.md).
 
 **Exclusivity:** `mark_read_only()` and `mark_destructive()` is a
 logical contradiction -- a read-only tool cannot be destructive. If both
@@ -425,7 +420,7 @@ change the scene tree, return, and let the client persist via the built-in
 
 Commands with a group are registered behind `discover_tools` with
 lazy-load semantics. Commands without a group stay at root level --
-always visible from startup.
+visible after the session connects.
 
 ```gdscript
 MCPToolkitExtensionOptions.new("List all physics bodies in the current scene")
@@ -1337,9 +1332,7 @@ patterns that require no special framework support.
 
 ## Hooks (Internal API)
 
-The TypeScript bridge has a hook pipeline that wraps every tool call with
-pre- and post-execution middleware. The logging hook records all tool
-invocations to the audit log.
+The retired Node bridge had pre/post hook middleware. It is not a public extension API in the current C# daemon; use the documented registry options and addon audit behavior rather than depending on TypeScript internals.
 
 **Why internal-only for 1.0:** Exposing user-extensible hooks adds security
 surface (hooks can intercept or cancel any tool call) for zero demonstrated
@@ -1355,10 +1348,7 @@ prevent hooks from escalating privilege beyond their tool's annotation level.
 
 Reusable workflows live in the bundled Codex skills rather than MCP prompts.
 This keeps procedural guidance out of the always-advertised protocol surface and
-lets each skill route to only the tool groups it needs. The server still exposes
-read-only resources (`godot://scene/{path}`, `godot://script/{path}`,
-`godot://project/info`, `godot://roots`); these providers are currently hardcoded
-in the TypeScript source.
+lets each skill route to only the tool groups it needs. The current C# daemon entry does not register the old Node resource providers. Check actual capabilities and resources/list instead of assuming godot:// endpoints exist. Resource-editing tools and host resource integration are separate capabilities.
 
 **Post-1.0 roadmap:** Resource extensibility can use the same extension-addon
 pattern as tools, allowing extensions to declare resource providers alongside

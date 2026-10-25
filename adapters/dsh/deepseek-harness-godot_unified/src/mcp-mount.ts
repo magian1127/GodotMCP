@@ -44,8 +44,19 @@ export function buildSpawnPlan(dist: string, nodeExecPath: string = process.exec
 /** 传给 GodotMCP server 的项目路径环境变量(上游同名契约)。 */
 export const PROJECT_PATH_ENV = 'GODOT_MCP_PROJECT_PATH'
 
-/** 单次工具调用/资源请求的默认超时(与官方 mcp-client 默认一致,显式写出以便审计)。 */
-export const DEFAULT_TOOL_CALL_TIMEOUT_MS = 60_000
+/**
+ * 单次工具调用/资源请求的默认超时。
+ *
+ * 240s 不是随手取的数:它是**三层截止阶梯的最高层**,必须严格大于下面两层,
+ * 否则会在 host/shim 之间重现同一种"谁先到截止点"的竞争(只是把它上移一层):
+ *
+ *   daemon 长工具 180s  <  shim tools/call 210s  <  宿主 240s
+ *
+ * 严格递减的好处是正常路径上**永远是 daemon 先给出干净的 TIMEOUT**,宿主走不到自己的
+ * 截止点;只有 daemon 自身卡死时才由 shim 兜底,那时"该操作可能已执行"才是正确文案。
+ * 任何一层改动都必须保持这个不等式。
+ */
+export const DEFAULT_TOOL_CALL_TIMEOUT_MS = 240_000
 
 /**
  * 交给 `@deepseek-ai/dsh-mcp-client` 的 Config(stdio 分支;只列本插件会设置的值)。
@@ -98,14 +109,23 @@ export function buildMountConfig(input: MountConfigInput): GodotMcpConfig {
   const dist = input.dist.trim()
   if (dist === '') throw new Error('godot server dist 未配置')
   const plan = buildSpawnPlan(dist, input.nodeExecPath)
-  const projectPath = (input.projectPath ?? '').trim()
   const cwd = (input.cwd ?? '').trim()
   return {
     transport: 'stdio',
     serverName,
     command: plan.command,
     args: plan.args,
-    env: projectPath === '' ? {} : { [PROJECT_PATH_ENV]: projectPath },
+    // **不再注入 GODOT_MCP_PROJECT_PATH**。
+    //
+    // 旧设计靠"会话 cwd → 项目路径"查表把目标塞给服务器,有两个硬伤:
+    //   ① 一个工作区常有多个 Godot 项目,而查表只能给一个;
+    //   ② 会话要连别的项目时,用户得先去配置页改表 —— 而模型自己完全可以调
+    //      godot_connect(project: "/abs/path")。
+    //
+    // 现在目标由 daemon 侧解析,优先级:godot_connect 的 project 参数 → 本会话上次的
+    // 默认目标 → shim 上报的 x-godot-cwd 下的 project.godot → 唯一活跃实例。
+    // 插件只传 cwd,不再替用户猜"要连哪个项目"。
+    env: {},
     ...(cwd === '' ? {} : { cwd }),
     toolCallTimeoutMs: input.toolCallTimeoutMs ?? DEFAULT_TOOL_CALL_TIMEOUT_MS,
     failOnStartupError: false,
@@ -123,6 +143,9 @@ export function mountConfigKey(config: GodotMcpConfig): string {
     config.args.join('\u0001'),
     Object.entries(config.env).map(([key, value]) => `${key}=${value}`).sort().join('\u0002'),
     config.cwd ?? '',
+    // **超时必须参与身份键**:它写在已挂载的配置对象里,不重挂就不生效 ——
+    // 用户改了旋钮、页面显示新值、实际调用仍按旧值超时,是最难归因的一类。
+    String(config.toolCallTimeoutMs ?? ''),
   ].join('\u0000')
 }
 

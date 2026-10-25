@@ -2,102 +2,45 @@
 
 # 安全建议
 
-本文档说明哪些 MCP 工具具有风险、如何使用 AI 智能体内置的过滤功能限制它们，以及如何为受监督环境启用 Toolkit 的只读模式。
+## 当前实现的边界
 
-## 高风险工具
+宿主使用 stdio shim，loopback HTTP 是有认证的后端。shim 读稳定 daemon token，daemon 读编辑器 token；凭据留在机器级注册表。会话键隔离目标/组，不隔离权限；初始组和隐藏工具不能代替授权。
 
-根据你的信任模型，下面六个工具值得考虑按工具单独阻止。前两个工具还要求 MCP 服务器以 `GODOT_MCP_UNSAFE=1` 启动，否则不会出现在可发现工具中：
+桥接监听仅在本地；工具输入输出是否发送给模型服务，由宿主数据策略决定。
 
-| 工具 | 风险 | 可能阻止它的原因 | 阻止后的副作用 |
-|---|---|---|---|
-| `execute_code` | 通过 Expression 执行任意 GDScript | 防止智能体在运行时执行不受约束的代码 | 智能体无法动态测试游戏逻辑，也无法通过表达式检查运行时状态 |
-| `node_call_method` | 调用任意场景节点上的任意方法 | 防止智能体调用未记录或危险的方法 | 智能体无法调用节点上的自定义方法——必须改用专用工具 |
-| `project_delete` | 删除项目文件、文件夹、场景、脚本或资源 | 防止破坏性项目清理 | 智能体必须保留过时的项目路径 |
-| `save_write` | 写入 `user://` 持久化存储 | 防止智能体修改玩家存档 / 配置 | 智能体无法创建或更新存档文件、配置和偏好设置 |
-| `save_delete` | 从 `user://` 删除内容 | 防止存档数据意外丢失 | 智能体无法清理测试存档或过时配置 |
-| `user_data_read` | 读取 `user://` 文件或列出其中目录 | 防止访问可能敏感的玩家数据和文件结构 | 智能体无法通过 MCP 检查存档（若未受沙箱限制，仍可使用原生文件系统访问） |
+## 工具能力
 
-任何带有 `destructiveHint` MCP 注释的工具都会修改项目资源或状态。其中许多工具支持 Undo（在编辑器中按 Ctrl+Z 可撤销更改）。
+| 工具 | 能力 |
+| --- | --- |
+| execute_code、node_call_method | 任意代码/方法执行，需 daemon 显式启用 unsafe |
+| project_delete | 删除项目文件/场景/目录，先检查 dry_run 计划 |
+| save_write、save_delete | user:// 持久写入/删除 |
+| user_data_read | 读取用户文件和目录 |
+| 其它创作工具 | 修改场景/资源/设置，行为由注解描述 |
 
-## 内置只读模式
+readOnlyHint、destructiveHint、idempotentHint 为宿主策略描述操作，不是身份验证。部分变更支持 Undo，但应验证实际结果，不能默认可回滚。
 
-如果希望会话只读，又不想逐个配置工具阻止，`GODOT_MCP_READ_ONLY=1` 是最简单的选项。将它设置在 `.mcp.json` 的 `env` 中，所有标注 `destructiveHint` 的工具都会对智能体隐藏——这涵盖任意代码执行（`execute_code`）、节点方法调用（`node_call_method`）、用户文件夹写入（`save_write`、`save_delete`）以及其他所有变更工具。
+## 只读配置
 
-**它不会阻止什么：**`user_data_read` 等只读工具仍然可见。智能体仍可检查存档内容和目录结构（如果智能体未受沙箱限制，也可以通过自己的原生文件系统访问读取这些路径）。
+当前 C# daemon **没有实现已退役 Node 桥的 GODOT_MCP_READ_ONLY 环境过滤**。addon UI 仍有该键的兼容配置/状态，这不能证明变更已被拦截。不要把 dock 开关或该 env 当作已经强制执行的只读边界。
 
-```jsonc
-// .mcp.json -- env block
-{
-  "env": {
-    "GODOT_MCP_READ_ONLY": "1"
-  }
-}
+使用宿主实际的允许列表、拒绝规则和审批策略。Codex 独立 MCP 服务器可配置在受信任项目的 .codex/config.toml 或用户级配置：
+
+```toml
+[mcp_servers.godot]
+command = "<plugin root>/server-dotnet/publish/<rid>/godot-mcp-shim.exe"
+disabled_tools = ["execute_code", "node_call_method"]
 ```
 
-如需更细粒度的控制（例如允许变更但只阻止 `project_delete`），请使用下面的按工具智能体侧过滤。除非明确需要任意表达式和方法执行，否则不要设置 `GODOT_MCP_UNSAFE`。
+该例只阻止两个工具，不代表全部写入被禁止。限制工作流时可用明确的 enabled_tools，保留 godot_connect 入口和所需读取工具。已安装插件的服务器使用插件级 MCP 策略，而不是改写其传输命令。见 本机 Codex 的 MCP 配置说明；CLI 命令可用 codex mcp --help 查看。
 
-## 按工具在智能体侧阻止
+其它宿主配置和命名不同。使用当前版本的过滤/权限机制，并验证真实可见性或调用拒绝；Agents SDK 的 Python tool_filter 不是 Codex 桌面端配置。
 
-### Claude Code
+## 使用原则
 
-`.claude/settings.json` 权限系统：
-
-```json
-{
-  "permissions": {
-    "deny": [
-      "mcp__godot__execute_code",
-      "mcp__godot__node_call_method"
-    ]
-  }
-}
-```
-
-格式：`mcp__<server-name>__<tool-name>`。支持通配符：`mcp__godot__save_*` 会阻止写入和删除工具；若读取也敏感，请另行阻止 `mcp__godot__user_data_read`。拒绝规则在所有层级都优先于允许规则。
-
-### Google Gemini CLI
-
-`~/.gemini/config.json`（或项目级配置）：
-
-```json
-{
-  "mcpServers": {
-    "godot-mcp": {
-      "excludeTools": [
-        "execute_code",
-        "node_call_method",
-        "project_delete",
-        "save_write",
-        "save_delete"
-      ]
-    }
-  }
-}
-```
-
-`excludeTools` 始终优先于 `includeTools`。
-
-### OpenAI Codex / Agents SDK
-
-Python 代码，在服务器初始化时设置工具过滤器：
-
-```python
-from agents.mcp import MCPServerStdio, create_static_tool_filter
-
-server = MCPServerStdio(
-    params={"command": "godot-mcp-unified-server"},
-    tool_filter=create_static_tool_filter(
-        blocked_tool_names=["execute_code", "node_call_method"]
-    ),
-)
-```
-
-同时支持 `allowed_tool_names`（允许列表）和 `blocked_tool_names`（阻止列表），也支持异步、带上下文的过滤函数。
-
-### Cursor
-
-截至 2026-05-27，Cursor 支持通过 **Hooks** 进行 MCP 工具过滤（拦截工具调用并返回 allow/deny/warn 的程序化脚本）。这比 Claude Code 或 Gemini 的声明式配置需要更多设置。Cursor 还提供 `permissions.json` 自动运行允许列表（控制审批流程，而不是阻止）。目前还没有简单的声明式 `excludeTools` 风格配置。请查看 Cursor 的最新文档，因为这一领域仍在快速演进。
-
-### 通用建议
-
-对于其他兼容 MCP 的智能体，请查阅其工具过滤文档。寻找 allowlist/blocklist/disallow/exclude 机制。MCP 协议会为每个工具公开 `destructiveHint` 和 `readOnlyHint` 注释——行为良好的客户端应在执行破坏性操作前请求确认。
+- 先连接再按任务激活组。缺工具可能是未连接、未加载组、版本门控或目录陈旧。
+- 只有当前已授权操作需要时才启用 unsafe。
+- 保留路径守卫、审计、响应上限、不可信内容包装；这些服务端检查与宿主发现是不同层。
+- 超时/传输中断后先读状态，再决定是否重提变更。
+- 文件系统和模型访问由宿主权限限制，MCP 工具限制不会取消原生文件读取能力。
+- 通知与组恢复的当前边界见 [会话恢复](multi-instance.zh-CN.md)。

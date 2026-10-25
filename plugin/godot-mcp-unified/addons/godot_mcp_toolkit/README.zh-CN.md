@@ -4,7 +4,10 @@
 
 一个 Godot 4.2+ 编辑器插件。它运行本地主机 WebSocket 服务器，让 AI 编码助手或任何兼容 MCP 的客户端能够在编辑器中创建场景、编辑脚本、检查节点并运行试玩。插件只是整个技术栈的一半：真正干活的是机器级 daemon，而助手是通过 MCP 客户端自己 spawn 的**随包 stdio shim**（`server-dotnet/publish/<rid>/godot-mcp-shim`）连上它的。daemon 尚未运行时由 shim 自举拉起，daemon 再经机器注册表回连这个 WebSocket 服务器。
 
-所有操作都在本地完成，不会有任何内容离开你的计算机。
+桥接监听在本地；工具输入输出是否发送给模型服务，由宿主控制。
+
+
+先通过 stdio shim 握手，再调用 godot_connect(project) 选择会话目标。初始只有入口，连接后是 core 9，更多能力通过 discover_tools(request=[...]) 激活。通知与恢复的当前限制见随附的多实例与会话指南。
 
 ## 快速开始
 
@@ -22,7 +25,7 @@
 
 ## 只读模式
 
-对于受监督环境（课堂、CI、演示），打开 dock 的只读开关（或在 `.mcp.json` 的 `env` 块设置 `GODOT_MCP_READ_ONLY=1`）。所有变更工具都会对智能体隐藏。关闭开关并重新连接客户端即可恢复完整访问——工具列表在连接时决定。
+addon UI 保留旧只读配置/状态，但当前 C# daemon 不读取 GODOT_MCP_READ_ONLY。不能把开关视为强制拦截，应配置宿主工具策略并验证。工具缺失也可能是未连接、组未激活或版本门控。
 
 ## 文档
 
@@ -36,7 +39,7 @@
 
 插件还随附[智能体技能](docs/companion-skills.md)——一个工作流技能和一个扩展创作技能——位于 `addons/godot_mcp_toolkit/CompanionSkills/`；将技能文件夹复制到客户端的技能目录即可使用。
 
-完整的生成工具参考位于本地整合包的 `server/docs/tool-reference/README.zh-CN.md`。
+工具/schema 以连接后的 tools/list 为准，组通过 discover_tools 查询；旧 Node 参考路径已退役。
 
 ## 卸载
 

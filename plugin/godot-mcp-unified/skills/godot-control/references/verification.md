@@ -8,7 +8,7 @@
 
 1. 重新读取受影响的节点、场景、资源或设置。
 2. 在适用时保存场景。
-3. 对变更后的 GDScript 运行 `script_check`；变更跨文件时使用 `lsp_diagnostics(scope="project")`。
+3. 激活 `code_intel` 后，对变更后的 GDScript 运行 `script_check`；变更跨文件时使用 `lsp_diagnostics(scope="project")`。
 4. 如果有可用显示器，启动相关场景/项目。
 5. 检查运行时状态或日志。仅在验证外观时使用截图。
 

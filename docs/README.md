@@ -1,5 +1,7 @@
 # Godot MCP Unified 文档导航
 
+中文 | [English](README.en.md)
+
 这里是本项目中文维护文档的总入口。阅读时优先使用中文主文档；英文版本用于对照、追溯和与上游同步。
 
 ## 文档约定
@@ -20,8 +22,12 @@
 
 - [统一插件 README](../plugin/godot-mcp-unified/README.md) —— Godot MCP Unified 插件的安装和使用入口。
 - [daemon README](../plugin/godot-mcp-unified/server-dotnet/README.md) —— C# 单例 daemon 与 stdio shim 的构建、发布和运行说明（Node 桥已退役，退役前全量状态见提交 `2bff02a`）。
-- [架构决策记录](adr/) —— ADR-0001 ~ 0005：单例 daemon、监听面、实例寻址、生命周期/本地安全，以及宿主条目形态（stdio + 自举 shim）。
+- [架构决策记录](adr/) —— ADR-0001 ~ 0008：单例 daemon、监听面、实例寻址、生命周期/本地安全，以及宿主条目形态（stdio + 自举 shim）。
 - [Toolkit 插件 README](../plugin/godot-mcp-unified/addons/godot_mcp_toolkit/README.zh-CN.md) —— Godot MCP Toolkit 插件本体的配置、文档和卸载说明。
+
+## 会话工具面
+
+当前行为与已知缺口以 [daemon README](../plugin/godot-mcp-unified/server-dotnet/README.md) 为准：初始入口、连接后扩面、每键默认目标、17 组、超时和通知恢复。ADR 记录取舍，不替代运行证据；旧版本历史的组数/环境变量不能作为当前配置指引。
 
 ## 六个配套技能
 

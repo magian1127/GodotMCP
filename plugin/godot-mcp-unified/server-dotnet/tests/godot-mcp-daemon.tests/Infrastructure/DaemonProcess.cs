@@ -25,6 +25,15 @@ internal sealed class DaemonSpawnOptions
 
     /// <summary>true 时不注入端口环境变量,用于验证默认端口 6590。</summary>
     public bool UseDefaultPort { get; init; }
+
+    /// <summary>
+    /// 追加注入的环境变量(后注入者覆盖先注入者)。
+    /// </summary>
+    /// <remarks>
+    /// 用于把会话键 TTL 压到秒级 —— <c>NoStreamTtl</c> 默认 10 分钟、<c>ConnectedTtl</c> 24 小时,
+    /// 不压缩就无法在一次测试里观察"回收是否发生",守护测试会退化成假绿。
+    /// </remarks>
+    public Dictionary<string, string> Environment { get; init; } = [];
 }
 
 /// <summary>
@@ -102,6 +111,36 @@ internal sealed class DaemonProcess : IDisposable
     /// </summary>
     /// <param name="options">拉起参数(状态目录、端口、idle 秒数、unsafe 门控等)。</param>
     /// <returns>已启动但未必就绪的 daemon 进程句柄。</returns>
+    /// <summary>
+    /// 以 <c>--status</c> 跑一次 daemon 进程（只读诊断），返回退出码与输出。
+    /// </summary>
+    /// <param name="stateDir">状态目录（决定它读哪个 sessions.json）。</param>
+    /// <param name="port">报告用的端口（只影响显示）。</param>
+    /// <returns>退出码与 stdout+stderr。</returns>
+    /// <remarks>
+    /// <b>不取单例锁</b>：这正是 --status 的用途 —— 在 daemon 正在运行时查它的现状。
+    /// 若它也要拿锁，那么"daemon 在跑"这个最需要它的场景反而用不了。
+    /// </remarks>
+    public static (int ExitCode, string Output) RunStatus(string stateDir, int port)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            Arguments = $"exec \"{TestPaths.DaemonDll}\" --status",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+        startInfo.Environment[DaemonOptions.StateDirEnvVar] = stateDir;
+        startInfo.Environment[DaemonOptions.PortEnvVar] = port.ToString();
+
+        using var process = Process.Start(startInfo)!;
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit(TimeSpan.FromSeconds(60));
+        return (process.ExitCode, stdout + stderr);
+    }
     public static DaemonProcess Start(DaemonSpawnOptions options)
     {
         var stateDir = options.StateDir ?? TestPaths.NewStateDir();
@@ -130,6 +169,12 @@ internal sealed class DaemonProcess : IDisposable
         if (options.UnsafeEnabled)
         {
             startInfo.Environment["GODOT_MCP_UNSAFE"] = "1";
+        }
+
+        // 放在最后:允许调用方覆盖上面任何一项(例如把会话 TTL 压到秒级)。
+        foreach (var (name, value) in options.Environment)
+        {
+            startInfo.Environment[name] = value;
         }
 
         var process = new Process { StartInfo = startInfo };
@@ -246,6 +291,7 @@ internal sealed class DaemonProcess : IDisposable
             if (!Process.HasExited)
             {
                 Process.Kill(entireProcessTree: true);
+                Process.WaitForExit(10000);
             }
         }
         catch (InvalidOperationException)

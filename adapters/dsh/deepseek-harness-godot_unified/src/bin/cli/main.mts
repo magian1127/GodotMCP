@@ -20,7 +20,7 @@ const USAGE = [
   `        --profile <name>        目标 profile(默认 web;仅用于状态语义)`,
   `        --server-dist <file>    server 入口绝对路径(优先级最高):随包 shim 可执行文件(标准形态)`,
   `        --godot-mcp-root <dir>  GodotMCP 工作区根目录(取 server-dotnet/publish/<rid>/godot-mcp-shim[.exe])`,
-  `        --cwd <dir>             绑定的会话工作目录(默认当前目录;按 cwd 匹配生效)`,
+  `        --cwd <dir>             兼容参数(默认当前目录;不再按 cwd 绑定项目)`,
   `        --server-name <name>    保留参数(工具命名空间,默认 ${SERVER_NAME_DEFAULT})`,
   `        --row-id <id>           保留参数(patch 行 id,默认 ${MCP_ROW_ID})`,
   `        --link <dir>            同时以 link: 把本包装进 profile bundles(开发安装)`,
@@ -182,21 +182,18 @@ async function cmdInstall(argv: string[]): Promise<number> {
     }
   }
 
-  // 路径写入 host 侧 PathStore 同源文件($DSH_HOME/godot/paths.json),
-  // 由 Godot preset 会话创建时按 cwd 解析并挂载宿主官方 MCP 客户端;
-  // 本 CLI 不再写 profile 的 mcp-client 行(实测:那会把项目路径固化在 profile 里)。
-  const cwd = args.cwd ?? process.cwd()
-  const current = readGodotPaths()
-  const projects = current.projects.filter(entry => entry.cwd !== cwd)
-  projects.push({ cwd, projectPath: project.path })
-  writeGodotPaths({ serverDist: dist.path, projects })
+  // 只写 serverDist。**不再写按 cwd 的项目路径条目** —— 项目路径表已删除:
+  // 一个工作区常有多个 Godot 项目,查表只能给一个;会话要连别的项目还得先改表。
+  // 现在目标由 daemon 侧解析(godot_connect 的 project 参数 → 本会话默认目标 →
+  // shim 上报的 x-godot-cwd 下的 project.godot → 唯一活跃实例)。
+  writeGodotPaths({ serverDist: dist.path, projects: [] })
   // 清理历史官方 mcp-client 受管块(v0.5 由插件按会话挂载,静态行会与它双轨)。
   // desktop profile 的 patch 文件由桌面应用管理,CLI 不触碰。
   if (args.profile.toLowerCase() !== 'desktop' && removeManagedRow(args.profile)) {
     console.log(`[${PKG}] 已清理旧的静态 mcp-client 行(v0.5 改为进入 Godot preset 会话时按会话挂载)`)
   }
-  console.log(`[${PKG}] 路径配置已写入 $DSH_HOME/godot/paths.json:serverDist + cwd=${cwd} → ${project.path}`)
-  console.log(`[${PKG}] 进入 Godot preset 会话时挂载官方 MCP 客户端;侧栏「插件」页 → 本包页面可继续按 cwd 增改`)
+  console.log(`[${PKG}] 路径配置已写入 $DSH_HOME/godot/paths.json:仅 serverDist(项目路径不再记录)`)
+  console.log(`[${PKG}] 进入 Godot preset 会话后由模型调 godot_connect 选择项目`)
   console.log(`[${PKG}] 前提:目标 Godot 编辑器已运行且项目装了 godot_mcp_toolkit addon;否则工具调用会返回可行动错误`)
   if (args.readOnly || args.unsafe || args.rateLimit !== null || args.editorPort !== null || args.runtimePort !== null || args.timeoutMs !== null) {
     console.warn(`[${PKG}] 警告: --read-only/--unsafe/--rate-limit/--editor-port/--runtime-port/--timeout-ms 原为静态行的 env 参数,本包不再写入;相关能力暂由 server 默认/项目设置提供`)
@@ -249,7 +246,7 @@ async function cmdStatus(argv: string[]): Promise<number> {
   } else {
     const distOk = paths.serverDist !== undefined ? validateServerDistFile(paths.serverDist) : null
     console.log(`  server dist:   ${paths.serverDist === undefined ? '(未设置)' : (distOk?.ok ?? false) ? '存在' : '缺失(先发布服务:dotnet publish plugin/godot-mcp-unified/server-dotnet/src/godot-mcp-shim -c Release -p:PublishProfile=<rid>)'} — ${paths.serverDist ?? '-'}`)
-    console.log(`  项目条目:      ${paths.projects.length} 条(按 cwd 匹配)`)
+    console.log(`  项目条目:      ${paths.projects.length} 条(历史数据，不参与会话路由)`)
     for (const entry of paths.projects) {
       console.log(`    ${entry.cwd} → ${validateGodotProject(entry.projectPath).ok ? '有效' : '无效(缺 project.godot)'} ${entry.projectPath}`)
     }

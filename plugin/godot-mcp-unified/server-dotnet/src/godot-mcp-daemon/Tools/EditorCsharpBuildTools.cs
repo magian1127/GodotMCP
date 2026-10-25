@@ -20,6 +20,30 @@ public sealed class EditorCsharpBuildTools(InstanceManager instances)
     /// <summary>单次状态调用超时(快照只做文件/pid 读取,秒级)。</summary>
     private static readonly TimeSpan StatusTimeout = TimeSpan.FromSeconds(10);
 
+    /// <summary>
+    /// <c>editor_build_csharp_wait</c> 的默认等待预算(毫秒)。
+    /// </summary>
+    /// <remarks>
+    /// <b>必须压在 shim 的 <c>tools/call</c> 预算(210s)之下</b>。旧值 240s 比 shim 还长:
+    /// C# 项目首次全量构建(NuGet restore + 编译)超过 210s 时,shim 会先 abort 并回
+    /// "工具调用超时,**该操作可能已经在 Godot 侧执行**,不要直接重试" —— 而这是一个
+    /// <c>ReadOnly</c> 的**等待**工具,什么都没执行过,那句文案纯属误导;同时 daemon 里
+    /// 那份带 <c>wait_timed_out</c> 与最终快照的正常结果被丢弃,用户拿不到任何有用信息。
+    /// </remarks>
+    private const int DefaultWaitMs = 180_000;
+
+    /// <summary>等待预算下界。</summary>
+    private const int MinWaitMs = 1_000;
+
+    /// <summary>
+    /// 等待预算上界。
+    /// </summary>
+    /// <remarks>
+    /// 200s:仍低于 shim 的 210s,给传输与 daemon 收尾留 10s 余量。
+    /// 超过这个量级的构建应该用 <c>editor_build_csharp</c> + 轮询 status,而不是一次长等。
+    /// </remarks>
+    private const int MaxWaitMs = 200_000;
+
     /// <summary>等待循环的轮询间隔。</summary>
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(500);
 
@@ -47,7 +71,8 @@ public sealed class EditorCsharpBuildTools(InstanceManager instances)
         if (configuration is not null) args["configuration"] = configuration;
         if (timeout_s is not null) args["timeout_s"] = timeout_s;
         if (alc_timeout_s is not null) args["alc_timeout_s"] = alc_timeout_s;
-        return ToolRouting.RouteAsync(instances, instance, "editor.build_csharp", args);
+        // 传工具名:首次 restore + 编译常超 30s(台账 180s)。
+        return ToolRouting.RouteAsync(instances, instance, "editor.build_csharp", args, "editor_build_csharp");
     }
 
     /// <summary>editor_build_csharp_status:当前构建快照(status/exit_code/errors/tail/alc)。只读。</summary>
@@ -56,13 +81,16 @@ public sealed class EditorCsharpBuildTools(InstanceManager instances)
     [McpServerTool(Name = "editor_build_csharp_status", ReadOnly = true, Idempotent = true, OpenWorld = false, Destructive = false)]
     [Description("读取 C# 构建任务快照：status（idle/running/succeeded/build_failed/alc_failed）、exit_code、errors/warnings、日志 tail 与 alc 观测。快照恒为成功信封，构建成败看其中的 ok 与 status 字段。")]
     public Task<CallToolResult> EditorBuildCsharpStatus(string? instance = null)
-        => ToolRouting.RouteAsync(instances, instance, "editor.build_csharp_status", []);
+        => ToolRouting.RouteAsync(instances, instance, "editor.build_csharp_status", [], "editor_build_csharp_status");
 
     /// <summary>
     /// editor_build_csharp_wait:阻塞轮询直到构建离开 running(或超时),返回最终/当前快照。
     /// 对齐 editor_sync 的等待型先例 —— agent 一次调用完成等待,禁止盲 sleep 轮询。
     /// </summary>
-    /// <param name="timeout_ms">最长等待毫秒数,默认 240000,钳制到 1000..540000;超时返回当前快照(仍为 running)。</param>
+    /// <param name="timeout_ms">
+    /// 最长等待毫秒数,默认 <see cref="DefaultWaitMs"/>,钳制到 <see cref="MinWaitMs"/>..<see cref="MaxWaitMs"/>。
+    /// 超时返回当前快照(仍为 running)。
+    /// </param>
     /// <param name="instance">目标 Godot 实例:规范化项目路径或 12 位短 id;恰好一个实例时省略。</param>
     /// <returns>终态(或超时时刻)的构建快照。</returns>
     [McpServerTool(Name = "editor_build_csharp_wait", ReadOnly = true, Idempotent = true, OpenWorld = false, Destructive = false)]
@@ -71,7 +99,7 @@ public sealed class EditorCsharpBuildTools(InstanceManager instances)
         int? timeout_ms = null,
         string? instance = null)
     {
-        var clamped = Math.Clamp(timeout_ms ?? 240_000, 1_000, 540_000);
+        var clamped = Math.Clamp(timeout_ms ?? DefaultWaitMs, MinWaitMs, MaxWaitMs);
         var deadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(clamped);
         try
         {

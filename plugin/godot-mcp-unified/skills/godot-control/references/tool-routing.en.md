@@ -2,24 +2,46 @@ Language: English | [中文](tool-routing.md)
 
 # Tool routing
 
-Start with the always-visible tools, then load only the group that owns the missing operation.
+## Connect this session
 
-| Need | Prefer |
-|---|---|
-| Current scene, nodes, properties | scene_get_tree, scene_query, node_inspect; load scene_spatial for layout measurements |
-| Scene/node changes | scene_create, scene_create_node, node_manage, node_set_property, node_set_script, scene_delete_node, editor_save_scene |
-| Scripts | Codex workspace reads/patches and script_check; load LSP groups for engine-backed diagnostics/symbols |
-| Project configuration | project_get_settings; load project_config for writes/autoloads, node_advanced for node groups, and input_map for input mappings |
-| Resources and files | resource_io, asset_ops, cleanup, user_data; resource_io includes folder_create |
-| 2D authoring | path_editing, tilemap, tileset, tileset_edit, spriteframes, particles, navigation, procedural |
-| 3D authoring | scene_create_3d from 3d_tools, particles, navigation, procedural, plus ordinary scene/node/property tools |
-| UI and themes | node_advanced, theme, and ordinary node/property tools; load signals for signal operations |
-| Animation and audio | animation_authoring, runtime_advanced, audio |
-| Playtest/runtime | game_start, game_stop, capture_screenshot, runtime_inspect_node, input_simulate, node_set_property(channel="runtime"); load runtime_advanced for animation/time control |
-| Debugger | log_read and script_check; load debugger for debug_inspect/breakpoint control and LSP groups when needed |
-| Engine API discovery | load classdb and use classdb_query before guessing class names, methods, properties, enums, or defaults |
-| Placeholder assets | read placeholder-assets.md and run the bundled scripts; use asset_import for supplied assets |
+Before connecting, only `godot_connect` exists. Call `godot_connect(project="<absolute Godot project path>", groups=[...])`, then start with the nine core tools. Without a project, resolution uses this session’s default target, `project.godot` directly in cwd, then the only active instance; it does not scan recursively. Ordinary tools resolve explicit `instance` before the session default, then the only active instance.
 
-After external file changes, load editor_advanced and call editor_sync.
+Use names from the latest tool list. The entry is `godot_connect`; other native names such as `scene_get_tree` have no common `godot_` prefix. Hosts may add a namespace: DSH normally shows `mcp__godot__godot_connect` and `mcp__godot__scene_get_tree`.
 
-execute_code and node_call_method live in the default-disabled unsafe group. They are RCE-equivalent escape hatches; load them only when the server started with GODOT_MCP_UNSAFE=1, the user explicitly authorized the current operation, and no typed tool can express it.
+## Load by task
+
+Activate with `discover_tools(request=[group names], include_schemas=true)`. `activate=false` only browses; `reset=[group names]` unloads selected groups and `reset=true` unloads all groups. `include_schemas=true` alone activates nothing. Track groups loaded for this phase and release those the next phase no longer needs.
+
+| Need | Core tools or group to activate first |
+| --- | --- |
+| Inspect scenes/nodes | Core `scene_get_tree`, `scene_query`, `node_inspect` |
+| Create/edit nodes and scenes, attach scripts, save, inspect spatial layout | `scene_edit` |
+| Refresh external edits, wait for imports, editor windows/dialogs | `editor_ops` |
+| GDScript checks, LSP, engine API lookup | `code_intel`: `script_check`, `lsp_*`, `classdb_query` |
+| C# build, status, wait | `build_csharp` |
+| Project settings, autoloads, layer names, input maps | `project_config` |
+| Resource I/O, asset lookup/import, directory creation | `assets` |
+| Close scenes, delete project files | `cleanup` |
+| TileMap and TileSet | `tilemap` |
+| Keyframes, AnimationTree, SpriteFrames | `animation` |
+| Particles, gradients/curves/noise, Theme, Path2D, texture collisions | `art_fx` |
+| 3D scenes and navigation | `world_3d`; general node editing remains in `scene_edit` |
+| Inspect/connect/emit signals | `signals`; runtime emission also belongs to `playtest` |
+| Start/stop games, input, runtime inspection, time/animation control | `playtest`; screenshots and logs are core |
+| Debugger, breakpoints, continue | `debugger` |
+| Audio buses | `audio` |
+| User-data reads, save writes/deletes | `user_data` |
+| Arbitrary code/method calls | `unsafe`: `execute_code`, `node_call_method` |
+| Placeholder assets | [placeholder-assets.en.md](placeholder-assets.en.md); import existing assets with `assets` |
+
+Use the static description and catalog of `discover_tools` for current group names. Tool and group names differ: `tileset_edit`, `input_map_edit`, `theme_edit`, and `classdb_query` belong to `tilemap`, `project_config`, `art_fx`, and `code_intel` respectively.
+
+## Schemas and recovery
+
+- Use schemas in the host’s latest tool list. Currently `include_schemas=true` returns names alone for some resident group tools; inspect `tools/list` after activation rather than guessing.
+- Confirm that the host refreshed its tool list after connecting/activating. `ttlMs=0` does not guarantee every host reloads. A programmatic client’s success does not prove tools were mounted in the current chat. Use the host’s actual reconnect action or a new session when necessary.
+- Recheck targets/groups after a daemon restart. The shim currently replays only the most recent connect/discover requests, which cannot preserve an arbitrary sequence of group changes; host listen streams are not automatically restored. Reconnect and activate this task’s groups.
+- Adjust existing groups with `discover_tools(reset=...)`. A browse can currently restore an old group bucket after `godot_connect(groups=...)` replaces groups; verify the actual list after unloading.
+- Pass `instance` when interleaving projects. Sequence target switches and composite calls within one session to avoid crossing projects mid-call.
+- For `SESSION_HEADER_MISSING` and related header errors, inspect the stdio shim configuration; repeated connect calls cannot repair missing transport headers. For `TARGET_NOT_RUNNING`, start the editor at the reported project path and retry a read.
+- Inspect state after a timeout or transport interruption before resubmitting a mutation. `unsafe` requires daemon startup with `GODOT_MCP_UNSAFE=1`, current user authorization, and an operation that dedicated tools cannot express.

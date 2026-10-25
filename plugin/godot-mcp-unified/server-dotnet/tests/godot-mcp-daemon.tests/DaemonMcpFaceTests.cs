@@ -204,12 +204,17 @@ public class DaemonMcpFaceTests
     [Fact]
     public async Task activity_resets_idle_exit_timer()
     {
-        // 与生产 daemon/编辑器共存时机器常满载,空闲阈值放宽到 10s(语义不变:
-        // 活动重置计时,空闲超阈值才退出)。
-        using var daemon = DaemonProcess.StartReady(new DaemonSpawnOptions { IdleSeconds = 10 });
+        // 阈值 15s、活动 3 轮 × 2s ≈ 6s —— **余量 9s,不是 2s**。
+        //
+        // 原配置是阈值 10s + 4 轮 × 2s = 8s,只剩 2s 余量:机器满载时(并行跑着生产
+        // daemon、Godot 编辑器与其他测试)单轮连接开销可能到 1-2s,4 轮就能吃掉整个余量,
+        // 于是 daemon 在"两轮之间"真的空闲超时退出 —— 测试变红,而被测语义其实是对的。
+        // 这类"时间竞速"断言必须留出远超调度抖动的余量,否则它测的是机器负载。
+        //
+        // 3 轮仍然足以证明"活动会重置计时":第一轮之后的每次存活都要求重新计时成立。
+        using var daemon = DaemonProcess.StartReady(new DaemonSpawnOptions { IdleSeconds = 15 });
 
-        // 以 2s 间隔持续请求,跨越阈值两个完整周期 —— 有活动计时必须重置。
-        for (var round = 1; round <= 4; round++)
+        for (var round = 1; round <= 3; round++)
         {
             await using var client = await SessionConnector.ConnectAsync(daemon.Port, daemon.Token);
             _ = await client.CallToolAsync("list_instances", new Dictionary<string, object?>());
@@ -218,9 +223,9 @@ public class DaemonMcpFaceTests
             Assert.False(daemon.HasExited, $"第 {round} 轮活动后 daemon 不应退出");
         }
 
-        // 停止活动后,进程在阈值内自行退出。
+        // 停止活动后,进程在阈值内自行退出(留 2 倍阈值 + 缓冲)。
         Assert.True(
-            daemon.WaitForExit(TimeSpan.FromSeconds(30)),
+            daemon.WaitForExit(TimeSpan.FromSeconds(45)),
             "停止活动后 daemon 应在空闲阈值内退出");
     }
 

@@ -70,7 +70,14 @@ public sealed record ExtensionRefreshSummary(int Registered, int Deferred, int C
 /// <param name="logger">结构化日志。</param>
 public sealed class ExtensionService(InstanceManager instances, ILogger<ExtensionService> logger)
 {
-    /// <summary>未分组扩展工具的默认超时(Node DEFAULT_EXTENSION_TIMEOUT_MS)。</summary>
+    /// <summary>
+    /// 未分组扩展工具的默认超时(Node <c>DEFAULT_EXTENSION_TIMEOUT_MS</c> 同值)。
+    /// </summary>
+    /// <remarks>
+    /// 取 <see cref="Tools.ToolCallTimeouts.Default"/> 而不是裸数字,保证"超时只有一个源"。
+    /// <b>本值必须与 Node 桥保持一致</b> —— 它是扩展协议的一部分,不是本地性能参数;
+    /// 需要更久的扩展应通过 <c>registry.add()</c> 的 <c>timeout_ms</c> 自行声明(见下方文案)。
+    /// </remarks>
     private const int DefaultTimeoutMs = 30_000;
 
     /// <summary>全局锁:保护下方三张登记结构;读写一律持锁(方法名以 Locked 结尾表示调用前已持锁)。</summary>

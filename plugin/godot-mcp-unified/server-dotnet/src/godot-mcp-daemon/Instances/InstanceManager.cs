@@ -145,28 +145,101 @@ public sealed class InstanceManager : BackgroundService
     /// <param name="error">失败时的寻址错误;成功为 null。</param>
     /// <returns>目标连接;失败为 null。</returns>
     internal InstanceConnection? ResolveConnection(string? instance, out InstanceCallException? error)
+        => ResolveConnection(instance, DefaultTargetProvider?.Invoke(), out error);
+
+    /// <summary>
+    /// 本键默认目标的提供者(ADR-0008)。由组合根接成
+    /// <c>() =&gt; SessionTargetResolver.DefaultTargetOfCurrentSession()</c>。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>为什么用委托而不直接注入 resolver</b>:<c>SessionTargetResolver</c> 依赖本类
+    /// (它要调 <c>ResolveConnection</c>),直接注入就成环。一个 <c>Func&lt;string?&gt;</c> 把
+    /// 依赖方向扳正,同时让<b>所有</b>寻址入口
+    /// (<c>CallInstanceAsync</c>/<c>CallRuntimeAsync</c>/<c>GetLspClientAsync</c>)
+    /// 一次性获得默认目标支持 —— 在调用点逐个接线必然漏掉一两处,而那些漏掉的工具会继续报
+    /// <c>AMBIGUOUS_INSTANCE</c>,表现为"有的工具能用、有的不能",极难归因。</para>
+    /// <para>为 null 或返回 null 时行为与改造前完全一致(显式 instance &gt; 唯一活跃实例 &gt; 报错)。</para>
+    /// </remarks>
+    internal Func<string?>? DefaultTargetProvider { get; set; }
+
+    /// <summary>
+    /// 实例寻址,带<b>本会话键的默认目标</b>(ADR-0008)。
+    /// </summary>
+    /// <remarks>
+    /// <para>优先级:<b>显式 <paramref name="instance"/> &gt; 本键默认目标 &gt; 唯一活跃实例 &gt; 报错列清单</b>。</para>
+    /// <para>为什么需要这一层:同一台机器常同时开多个 Godot 项目,而一个 MCP 会话通常只服务其中一个。
+    /// 没有默认目标时,不带 <c>instance</c> 的调用会报 <c>AMBIGUOUS_INSTANCE</c> —— 但模型刚 connect 过,
+    /// 它当然知道自己在哪个项目上,这个错误完全是噪声。</para>
+    /// <para>默认目标<b>不在线</b>时给 <c>TARGET_NOT_RUNNING</c> 而不是 <c>INSTANCE_NOT_FOUND</c>:
+    /// 前者可行动(去启动编辑器),后者会让模型以为参数写错了。</para>
+    /// </remarks>
+    /// <param name="instance">显式实例标识;null/空表示不指定。</param>
+    /// <param name="defaultTarget">本会话键的默认目标(规范化项目路径);null 表示未设置。</param>
+    /// <param name="error">失败时的寻址错误;成功为 null。</param>
+    /// <returns>目标连接;失败为 null。</returns>
+    internal InstanceConnection? ResolveConnection(
+        string? instance,
+        string? defaultTarget,
+        out InstanceCallException? error)
     {
         error = null;
         var snapshot = Snapshot();
-        if (string.IsNullOrWhiteSpace(instance))
+
+        // ① 显式 instance 最优先(它与默认目标冲突时由调用方权威)。
+        if (!string.IsNullOrWhiteSpace(instance))
         {
-            if (snapshot.Count == 0)
-            {
-                error = new InstanceCallException("NO_INSTANCE", "no active instances", HintNoInstance);
-                return null;
-            }
-            if (snapshot.Count > 1)
-            {
-                error = new InstanceCallException(
-                    "AMBIGUOUS_INSTANCE",
-                    "multiple active instances; specify the instance parameter (project path or short id)",
-                    HintSpecifyInstance,
-                    Summaries(snapshot));
-                return null;
-            }
-            return snapshot[0];
+            return ResolveExplicit(instance, snapshot, out error);
         }
 
+        // ② 本键默认目标。
+        if (!string.IsNullOrWhiteSpace(defaultTarget))
+        {
+            var canonical = RegistryReader.Canonical(defaultTarget);
+            var byDefault = snapshot.FirstOrDefault(c => c.Key.Equals(canonical, StringComparison.Ordinal));
+            if (byDefault is not null)
+            {
+                return byDefault;
+            }
+
+            // 目标已设定但此刻没有实例 —— 这是"项目没开着",不是"参数错了"。
+            error = new InstanceCallException(
+                "TARGET_NOT_RUNNING",
+                $"default target is not running: {canonical}",
+                $"启动该项目的 Godot 编辑器后重试:godot --headless --editor --path \"{canonical}\"",
+                Summaries(snapshot));
+            return null;
+        }
+
+        // ③ 唯一活跃实例(隐式选中)。
+        if (snapshot.Count == 0)
+        {
+            error = new InstanceCallException("NO_INSTANCE", "no active instances", HintNoInstance);
+            return null;
+        }
+        if (snapshot.Count > 1)
+        {
+            error = new InstanceCallException(
+                "AMBIGUOUS_INSTANCE",
+                "multiple active instances; specify the instance parameter (project path or short id)",
+                HintSpecifyInstance,
+                Summaries(snapshot));
+            return null;
+        }
+
+        return snapshot[0];
+    }
+
+    /// <summary>按显式标识寻址:规范化路径精确命中 → 12 位短 id(大小写不敏感)→ INSTANCE_NOT_FOUND。</summary>
+    /// <param name="instance">显式标识(路径或短 id)。</param>
+    /// <param name="snapshot">当前连接快照。</param>
+    /// <param name="error">失败时的寻址错误。</param>
+    /// <returns>目标连接;失败为 null。</returns>
+    private static InstanceConnection? ResolveExplicit(
+        string instance,
+        List<InstanceConnection> snapshot,
+        out InstanceCallException? error)
+    {
+        error = null;
         var canonical = RegistryReader.Canonical(instance);
         var byPath = snapshot.FirstOrDefault(c => c.Key.Equals(canonical, StringComparison.Ordinal));
         if (byPath is not null)

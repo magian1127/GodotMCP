@@ -21,6 +21,7 @@ using GodotMcp.Daemon;
 using GodotMcp.Daemon.Extensions;
 using GodotMcp.Daemon.Groups;
 using GodotMcp.Daemon.Instances;
+using GodotMcp.Daemon.Sessions;
 using GodotMcp.Daemon.Tools;
 using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Protocol;
@@ -29,6 +30,15 @@ using ModelContextProtocol.Server;
 try
 {
     var options = DaemonOptions.FromEnvironment();
+
+    // --status：只读查询，**不取单例锁**，因此可以在 daemon 正在运行时执行
+    // （这正是它的用途：连不上时先看现状）。spec §10。
+    if (args.Any(a => string.Equals(a, "--status", StringComparison.OrdinalIgnoreCase)))
+    {
+        return DaemonStatus.Print(options);
+    }
+
+    using var machineSingleton = MachineSingleton.Acquire();
     using var state = DaemonState.Acquire(options);
 
     var builder = WebApplication.CreateBuilder(args);
@@ -46,31 +56,43 @@ try
                 Name = "godot-mcp-unified",
                 Version = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
             };
+            // 三句说明:模型在 tools/list 之前就会读到它,因此必须讲清"为什么只看到一个工具"。
+            // 不长篇罗列工具 —— 那正是本次改造要削减的上下文成本。
+            o.ServerInstructions =
+                "这个服务器操作 Godot 编辑器与运行中的游戏。**未连接时只会看到一个工具 godot_connect**，" +
+                "这是设计如此:请先调用它(可带 project 绝对路径、instance 短 id 或 groups 数组),工具面才会展开为" +
+                "9 个核心工具 + 所选工具组。之后可用 discover_tools 按名称或关键词激活更多组(共 17 组);" +
+                "激活只影响当前会话。";
             // tools.listChanged 必须广播:无状态 HTTP 下 host 只能经 subscriptions/listen
             // 长请求流接收 tools/list_changed(2026-07-28 修订);能力旗标与实际投递一致(issue 12)。
             o.Capabilities = new ServerCapabilities
             {
                 Tools = new ToolsCapability { ListChanged = true },
             };
+            // 未命中兜底:被隐藏的工具(未激活组 / 从未创建的懒建工具 / 会话未就绪)由这里
+            // 返回带原因的 isError,而不是让 SDK 回 JSON-RPC "Unknown tool"(ADR-0007)。
+            o.Handlers.CallToolHandler = static (request, cancellationToken) =>
+            {
+                var fallback = request.Services!.GetRequiredService<ToolCallFallback>();
+                return fallback.HandleAsync(request, cancellationToken);
+            };
+            // tools/list 缓存语义:ttlMs=0 + cacheScope=private。
+            // 缺这两项 SDK 只 warn 不 fail,而客户端会按默认值缓存 —— 工具面"该变不变"。
+            // 注意:过滤器在 Options.Filters.Request 下,不在 Handlers 下。
+            o.Filters.Request.ListToolsFilters.Add(ToolListMetadata.Create());
         })
         .WithHttpTransport(o =>
         {
             o.SessionMode = HttpServerSessionMode.Stateless;
-            // 每个请求会话:把工具面对齐到 daemon 全局的组激活状态(issue 12)——
-            // 已激活组工具在、未激活不在;无隐藏会话状态。
+            // 每个请求:把工具面裁剪到"本会话键可见的集合"(ADR-0007)。
+            // 未连接(无 header / 键不存在)→ 只有 godot_connect;已连接 → core 9 ∪ 本键组。
+            // 调试面(GODOT_MCP_DEBUG_UNKEYED=1 且无 header)→ 全量。
             o.ConfigureSessionOptions = (httpContext, serverOptions, _) =>
             {
                 if (serverOptions.ToolCollection is { } collection)
                 {
-                    httpContext.RequestServices.GetRequiredService<GroupService>()
-                        .ConfigureSession(collection);
-                    // 常驻工具的 schema 换用 Node 表内 zod 派生版(issue 13 parity;
-                    // 组工具构造时已带表内 schema,此处只覆盖 eager 面)。
-                    NodeToolTable.ApplyProtocolSchemas(collection);
-                    // 版本门控可见性(issue 14):实例集无法提供的门控工具从本请求隐藏
-                    // (单实例与 Node 注册门控一致;多实例并集)。
-                    httpContext.RequestServices.GetRequiredService<GroupService>()
-                        .ApplyVersionGates(collection);
+                    var services = httpContext.RequestServices;
+                    services.GetRequiredService<ToolFaceComposer>().Compose(httpContext, collection);
                 }
                 return Task.CompletedTask;
             };
@@ -82,11 +104,15 @@ try
         .WithSubscriptionsListenHandler(async (request, cancellationToken) =>
         {
             var groups = request.Services!.GetRequiredService<GroupService>();
+            // 本流的会话键:通知只投给同键的流(ADR-0006 §1.7)。
+            // 取不到(atypical)时传 null → 退化为"接收全部",不会因此断流。
+            var sessionKey = request.Services!.GetService<SessionKeyAccessor>()?.CurrentKey;
             return await GroupListenStream.ServeAsync(
                 groups,
                 request.Server,
                 request.JsonRpcRequest.Id,
                 request.Params?.Notifications,
+                sessionKey,
                 cancellationToken);
         });
 
@@ -94,9 +120,31 @@ try
     builder.Services.AddSingleton(options);
     builder.Services.AddSingleton(idleMonitor);
     builder.Services.AddHostedService<IdleExitService>();
+    // 会话键(ADR-0006):无状态 HTTP 下唯一持有"会话身份"的地方。
+    // 策略是纯内存常量(会话过期三档 + 键数上限),生产不读环境变量;
+    // TimeProvider 注入使状态机与 reaper 可以用假时钟测试,不必真等 30s/10min。
+    builder.Services.AddSingleton(TimeProvider.System);
+    builder.Services.AddSingleton(SessionKeyPolicy.FromEnvironment());
+    builder.Services.AddSingleton<SessionKeyRegistry>();
+    builder.Services.AddHttpContextAccessor();
+    builder.Services.AddSingleton<SessionKeyAccessor>();
+    builder.Services.AddSingleton<SessionKeyDiagnostics>();
+    // 进程身份:shim 靠它判断"我手里的会话状态还算数吗"(见 DaemonEpoch)。
+    builder.Services.AddSingleton<DaemonEpoch>();
+    builder.Services.AddHostedService<SessionKeyReaper>();
+
+    // 会话快照落 state/sessions.json:--status 与用户都能直接读"现在有哪些会话"。
+    builder.Services.AddHostedService<SessionSnapshotWriter>();
     builder.Services.AddSingleton<InstanceManager>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<InstanceManager>());
+    // 会话态载体(请求作用域):GroupService / ConnectTool / ToolCallFallback /
+    // SessionTargetResolver 都从它读"当前是哪个会话",避免四处各读一套。
+    builder.Services.AddSingleton<SessionRequestScope>();
+    // 按本键默认目标寻址(ADR-0008)。必须先于 GroupService:它的构造依赖它。
+    builder.Services.AddSingleton<SessionTargetResolver>();
     builder.Services.AddSingleton<GroupService>();
+    builder.Services.AddSingleton<ToolFaceComposer>();
+    builder.Services.AddSingleton<ToolCallFallback>();
     builder.Services.AddSingleton<ExtensionService>();
 
     var app = builder.Build();
@@ -112,6 +160,37 @@ try
     // (Instances → Extensions 的依赖边留在组合根,保持两者互不引用)。
     var instanceManager = app.Services.GetRequiredService<InstanceManager>();
     var extensionService = app.Services.GetRequiredService<ExtensionService>();
+
+    // ADR-0008 接线:让**所有**寻址入口都拿到本会话键的默认目标。
+    // 用委托而不是让 InstanceManager 直接依赖 SessionTargetResolver —— 后者依赖前者,会成环。
+    // 必须在 app.Build() 之后尽早接:漏接会让不带 instance 的调用继续报 AMBIGUOUS_INSTANCE,
+    // 表现为"有的工具能用、有的不能"。
+    var targetResolver = app.Services.GetRequiredService<SessionTargetResolver>();
+    instanceManager.DefaultTargetProvider = targetResolver.DefaultTargetOfCurrentSession;
+
+    // 键被回收 → 清掉该键的组桶。不接这条线:桶无界增长,而且同一 UUID 重连后
+    // 一次"只浏览"的 discover_tools 会把旧组静默复活。
+    var sessionKeys = app.Services.GetRequiredService<SessionKeyRegistry>();
+    var groupService = app.Services.GetRequiredService<GroupService>();
+    var sessionDiagnostics = app.Services.GetRequiredService<SessionKeyDiagnostics>();
+    sessionKeys.KeyRecycled += groupService.ForgetKey;
+
+    // 会话变化(建键 / 连接 / 组 / 默认目标)立刻刷新快照:
+    // 等周期定时器会让排查的人看到旧值,而"现在到底连没连上"正是他要看的。
+    var snapshotWriter = app.Services.GetServices<IHostedService>()
+        .OfType<SessionSnapshotWriter>()
+        .FirstOrDefault();
+    if (snapshotWriter is not null)
+    {
+        sessionKeys.Changed += () => snapshotWriter.WriteOnce();
+    }
+    sessionKeys.KeyRecycled += key => sessionDiagnostics.KeyRecycled(
+        key.Length <= 8 ? key : key[..8],
+        "过期或容量淘汰");
+
+    // 启动即打印生效策略:事后核对"当时用的是哪套 TTL"时,这一行是唯一依据。
+    sessionDiagnostics.PolicyInEffect(app.Services.GetRequiredService<SessionKeyPolicy>());
+
     instanceManager.ExtraMethodGates = extensionService.GateForMethod;
     instanceManager.ConnectionNotification += (_, type, notificationParams) =>
     {
@@ -121,7 +200,27 @@ try
         }
     };
 
+    // 进程身份头必须写在**所有中间件之前**（审核 S3）：token 中间件会给 401 直接短路，
+    // 若头写在它之后，shim 在"令牌不匹配"这条最需要检测的路径上反而看不到 epoch，
+    // 只能等下一轮 —— 而那一轮可能又是 401。放在最前面，任何响应（含 401/400/503）都带。
+    var daemonEpoch = app.Services.GetRequiredService<DaemonEpoch>();
+    app.Use(async (context, next) =>
+    {
+        context.Response.Headers[DaemonEpoch.HeaderName] = daemonEpoch.Value;
+        await next(context).ConfigureAwait(false);
+    });
+
     app.UseMiddleware<RequireDaemonTokenMiddleware>(state.Token);
+    // 会话键:读 x-godot-session,驱动注册表的在途计数,并把键写进 HttpContext.Items
+    // 供工具实现读取。放在 token 之后 —— 401 探测不该产生会话活动。
+    app.Use(async (context, next) =>
+    {
+        var registry = context.RequestServices.GetRequiredService<SessionKeyRegistry>();
+        var accessor = context.RequestServices.GetRequiredService<SessionKeyAccessor>();
+        var diagnostics = context.RequestServices.GetRequiredService<SessionKeyDiagnostics>();
+        await SessionKeyMiddleware.HandleAsync(context, registry, accessor, diagnostics, next)
+            .ConfigureAwait(false);
+    });
     // 空闲计量只覆盖通过认证的请求:401 探测不算活动。
     app.Use(async (context, next) =>
     {
@@ -151,6 +250,11 @@ try
     }
 
     return ExitCodes.Ok;
+}
+catch (DaemonAlreadyRunningException ex)
+{
+    Console.Error.WriteLine($"[godot-mcp-daemon] {ex.Message}");
+    return ExitCodes.SingletonLockUnavailable;
 }
 catch (SingletonLockUnavailableException ex)
 {

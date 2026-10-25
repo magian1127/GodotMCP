@@ -5,3 +5,5 @@
 当用户要求为脚本编写测试时，先检查项目实际使用 GUT、GdUnit4 或其他框架，不要根据偏好猜测。读取被测脚本及现有测试，沿用目录、基类、命名和断言风格。
 
 使用 Codex 工作区文件工具创建或补丁式编辑测试。至少覆盖请求涉及的公开行为、边界输入和失败路径；不要机械地为每个方法生成空泛测试。编辑后调用 `editor_sync`，对相关 GDScript 使用 `script_check`，跨文件影响使用 `lsp_diagnostics(scope="project")`。如果仓库提供测试命令，运行最窄的相关命令并报告实际结果。
+
+MCP 验证前先连接会话；外部编辑后的刷新需要 editor_ops，script_check/LSP 需要 code_intel。仅传 include_schemas 不会激活这些组。

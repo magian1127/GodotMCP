@@ -1,12 +1,26 @@
 # 发布说明
 
+中文 | [English](release.en.md)
+
+
+## 当前未发布变更：会话工具面
+
+本节覆盖下面版本历史中的旧行为，历史条目保留为迁移记录。
+
+- 所有宿主使用随包 stdio shim，升级后清理旧 HTTP 直连；新键先 godot_connect，再按 17 组扩面。
+- 不再注入项目路径环境变量，paths.json 只使用 serverDist，projects 为空；CLI --project 仍用于校验。
+- toolCallTimeoutMs 默认 240000ms；当前超时单改不重挂既有按会话连接，新会话读取新值。
+- 当前通知恢复、组替换/重放、常驻 schema、debug/eager 与在途目标存在已复现限制。以 [daemon README](../../../../plugin/godot-mcp-unified/server-dotnet/README.md) 为准，不能仅凭现有单测全绿声明发布完成。
+- 发布前除 typecheck/build/test/verify，还需真实宿主验证初始入口、connect 后目录自动更新、组变更、重启恢复、截图附件；五宿主 × 版本与混跑矩阵尚未完成。
+
+
 ## 发布前验证
 
 1. `npm run typecheck && npm run build && npm test && npm run verify` 全绿。
 2. `node bin/dsh-godot.mjs`（无参数）退出码 2 且打印用法。
-3. 沙盒 install 冒烟：临时 `$DSH_HOME` 下 install → 检查 `paths.json` 只有 `serverDist` 与一条 `{cwd, projectPath}` 条目、且未向 profile 写 mcp-client 行 → uninstall → `projects` 归零（`{"projects": []}`）；若该 profile 的 patch 里有历史静态 mcp-client 受管块，确认已被 install 清理。
+3. 沙盒 install 冒烟：临时 `$DSH_HOME` 下 install → 检查 `paths.json` 只有 `serverDist` 与空 `projects` 数组、且未向 profile 写 mcp-client 行 → uninstall → `projects` 归零（`{"projects": []}`）；若该 profile 的 patch 里有历史静态 mcp-client 受管块，确认已被 install 清理。
 4. `dsh --profile <p> --dump-config | grep godot`：`dsh-godot` 与 `preset-godot` 行都在组合树中。
-5. （有运行中的 Godot 编辑器时）一次性会话验证挂载链路：插件激活 → 官方 `@deepseek-ai/dsh-mcp-client` 挂到该会话 → 工具名以 `mcp__godot__` 开头 → 调一个只读工具成功 → 截图类工具返回**图片附件**（不再是文本占位）。
+5. （有运行中的 Godot 编辑器时）一次性会话验证挂载链路：插件激活 → 官方 `@deepseek-ai/dsh-mcp-client` 挂到该会话 → 先调用 godot_connect → 宿主目录更新 → 调一个核心只读工具成功 → 截图类工具返回**图片附件**（不再是文本占位）。
 6. 归零构建目录再验：删除/改名源文件后清理 `lib/`、`bin/`、`.tsbuild/` 再 `npm run build`——`tsc` 不清理 `outDir`，已删模块/测试的陈旧产物仍会被 `node --test` 或宿主加载（v0.5 重写时实测）。
 
 ### 发布阻塞项：tarball 必须自带 skills 快照

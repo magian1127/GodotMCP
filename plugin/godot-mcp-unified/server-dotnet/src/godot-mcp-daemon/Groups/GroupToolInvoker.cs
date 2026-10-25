@@ -17,8 +17,14 @@ namespace GodotMcp.Daemon.Groups;
 /// </summary>
 internal sealed class GroupToolInvoker(InstanceManager instances)
 {
-    /// <summary>组工具单次 wire 调用上限(与 ToolRouting.CallTimeout 一致)。</summary>
-    private static readonly TimeSpan CallTimeout = TimeSpan.FromSeconds(30);
+    /// <summary>组工具单次 wire 调用上限:<b>按工具名取台账</b>(spec §2.2)。</summary>
+    /// <remarks>
+    /// 不能沿用单一 30 秒:<c>execute_code</c>/<c>node_call_method</c>/<c>editor_save_scene</c>
+    /// 这类长操作会被 daemon 自己判超时,而写可能只做了一半。
+    /// 也不能统一抬到 180 秒:本类同时服务 <c>tilemap_read_cells</c>/<c>signal_list</c> 等读工具,
+    /// 抬上去会让"编辑器卡住"的反馈从 30 秒变成 3 分钟。
+    /// </remarks>
+    private static TimeSpan CallTimeoutFor(NodeToolDef def) => ToolCallTimeouts.For(def.Name);
 
     /// <summary>组工具统一入口:按工具名分发到特例处理器或默认调用路径。</summary>
     /// <para>逻辑链:11 个特例工具(signal_emit、execute_code、asset_query、classdb_query、
@@ -384,7 +390,7 @@ internal sealed class GroupToolInvoker(InstanceManager instances)
 
     /// <summary>统一调用与包装:按通道发起 wire 调用,成功附 successHint,失败按通道补崩溃上下文。</summary>
     /// <para>逻辑链:从 args 抽 instance → runtime 为真走 CallRuntimeAsync,否则
-    /// CallInstanceAsync(均 30 秒超时)→ toolkit 失败信封转 isError,成功且定义带
+    /// CallInstanceAsync(均按工具名取 <see cref="ToolCallTimeouts"/> 的上限)→ toolkit 失败信封转 isError,成功且定义带
     /// SuccessHint 时注入 hint 后透传;InstanceCallException → runtime 错误经
     /// RuntimeErrors.WithCrashContextAsync 补崩溃上下文,编辑器错误走通用错误信封。</para>
     /// <param name="def">工具表定义(取 SuccessHint)。</param>
@@ -407,8 +413,8 @@ internal sealed class GroupToolInvoker(InstanceManager instances)
         {
             var paramsJson = parameters.ToJsonString();
             var result = runtime
-                ? await instances.CallRuntimeAsync(instance, method, paramsJson, CallTimeout, cancellationToken)
-                : await instances.CallInstanceAsync(instance, method, paramsJson, CallTimeout, cancellationToken);
+                ? await instances.CallRuntimeAsync(instance, method, paramsJson, CallTimeoutFor(def), cancellationToken)
+                : await instances.CallInstanceAsync(instance, method, paramsJson, CallTimeoutFor(def), cancellationToken);
             if (!ToolResults.IsFailure(result) && def.SuccessHint is not null)
             {
                 return ToolResults.Json(InjectSuccessHint(result, def.SuccessHint));
@@ -515,6 +521,7 @@ internal sealed class GroupToolInvoker(InstanceManager instances)
     /// <param name="args">调用方入参。</param>
     /// <returns>instance 字符串;缺省为 null。</returns>
     private static string? InstanceOf(IDictionary<string, JsonElement> args) => StringArg(args, "instance");
+
 
     /// <summary>取字符串参数;缺失或非字符串返回 null。</summary>
     /// <param name="args">调用方入参。</param>

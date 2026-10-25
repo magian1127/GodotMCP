@@ -229,7 +229,7 @@ test('非 Godot preset 会话:不挂载、无提示词(不是 deny,是根本没�
   assert.equal(ctx.sections.length, 0)
 })
 
-test('Godot preset 会话:挂载官方 mcp-client(stdio + 项目路径 env + 会话 cwd)', async () => {
+test('Godot preset 会话:挂载官方 mcp-client(stdio + 会话 cwd)', async () => {
   const ctx = makeCtx({ agents: [{ presetId: 'godot', id: 's1', cwd: 'D:/game' }], settings: MOUNTED_SETTINGS })
   apply(ctx as never, ctx.configRef)
   await ctx.emit('agent/created', { agent: ctx.agents[0] })
@@ -243,9 +243,11 @@ test('Godot preset 会话:挂载官方 mcp-client(stdio + 项目路径 env + 会
     serverName: 'godot',
     command: 'D:/gmcp/godot-mcp-shim.exe',
     args: [],
-    env: { GODOT_MCP_PROJECT_PATH: 'D:/game' },
+    // 项目路径不再注入(目标由 daemon 侧解析:project 参数 / 本键默认目标 / cwd 发现)。
+    env: {},
     cwd: 'D:/game',
-    toolCallTimeoutMs: 60_000,
+    // 与 mcp-mount 的 DEFAULT_TOOL_CALL_TIMEOUT_MS 对齐(三层阶梯的最高层 240s)。
+    toolCallTimeoutMs: 240_000,
     failOnStartupError: false,
   })
   // 提示词 section 与工具一起出现,且用官方命名。

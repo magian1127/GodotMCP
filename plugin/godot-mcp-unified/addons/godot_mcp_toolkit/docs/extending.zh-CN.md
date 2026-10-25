@@ -2,6 +2,8 @@
 
 # 扩展 Godot MCP Unified
 
+MCP 验证前先 godot_connect(project)。未分组扩展在连接后可见，分组扩展需激活。以宿主最新 schema 为准，单独验证通知与重启行为。见 [multi-instance.zh-CN.md](multi-instance.zh-CN.md)。只读策略见 [security-recommendations.zh-CN.md](security-recommendations.zh-CN.md)。
+
 ## 扩展（支持）
 
 Toolkit 通过 `MCPToolkitExtension` 基类和基于反射的发现机制支持第三方扩展。每个扩展是 `addons/<extension_name>/` 中的独立可分发目录；GDScript 直接继承该基类，C# 使用 `[GlobalClass]` 的 `RefCounted` 类。扩展注册工具、参数 schema、行为标记和错误响应，随后可像内置工具一样被 MCP 客户端发现。
@@ -391,7 +393,7 @@ func _screenshot_bodies(params: Dictionary) -> Dictionary:
 
 ## 发现、命名和错误契约
 
-未分组工具启动时可见，`.with_group()` 工具由 `discover_tools` 按需加载。命名使用 `<namespace>.<action>`；`scene.*`、`script.*`、`editor.*`、`node.*`、`runtime.*`、`server.*`、`resource.*`、`folder.*`、`file.*`、`signal.*`、`playtest.*`、`project.*`、`input_map.*`、`animation.*`、`tilemap.*`、`asset.*`、`save.*`、`meta.*`、`game.*`、`diff.*`、`autoload.*`、`extensions.*` 是保留命名空间。
+未分组工具在会话连接后可见，`.with_group()` 工具由 `discover_tools` 按需加载。命名使用 `<namespace>.<action>`；`scene.*`、`script.*`、`editor.*`、`node.*`、`runtime.*`、`server.*`、`resource.*`、`folder.*`、`file.*`、`signal.*`、`playtest.*`、`project.*`、`input_map.*`、`animation.*`、`tilemap.*`、`asset.*`、`save.*`、`meta.*`、`game.*`、`diff.*`、`autoload.*`、`extensions.*` 是保留命名空间。
 
 成功响应至少包含 `success: true`：
 
@@ -534,4 +536,4 @@ public void Register(GodotObject registry, Node server)
 
 扩展 API 覆盖注册、发现、执行、错误、提示、取消、Undo/Redo 与热重载。当前限制包括：没有场景变更 / 文件保存生命周期钩子、没有持久化配置 API、长操作无进度流、扩展之间没有正式通信、Godot 4.2 会话内编辑已有扩展不生效。这些都有实际替代方案：连接 `EditorInterface` 信号、使用 `ProjectSettings` / `ConfigFile`、注册轮询状态工具、直接调用注册表命令，并在 4.2 重启编辑器。
 
-TypeScript bridge 内部为每次工具调用运行前后钩子和审计日志。可复用工作流放在随附的 Codex 技能中，而不是 MCP prompts；这样程序性说明不会进入始终公布的协议面，每个技能也只需加载自己需要的工具组。服务器仍提供只读 resources（`godot://scene/{path}`、`godot://script/{path}`、`godot://project/info`、`godot://roots`），其提供器目前硬编码在 TypeScript 源码中。post-1.0 可沿用工具扩展模式开放 resource providers；新的可复用工作流通常应新增为技能。
+已退役 Node 桥的前后钩子中间件不是当前 C# daemon 的公开扩展 API。使用文档化的 registry 选项和 addon 审计，不依赖 TypeScript 内部实现。可复用流程放在配套技能中，按阶段加载组。当前 C# 入口未注册旧 Node 的资源提供器，应核对 capabilities 与 resources/list，不能假定 godot:// 端点存在；资源编辑工具、宿主资源集成和 MCP resource provider 是不同能力。

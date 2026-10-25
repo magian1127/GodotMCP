@@ -147,69 +147,16 @@ ceiling (fewer downgrades), it is not required to make captures work.
 
 ## Listen ports (editor & runtime)
 
-Two of the toolkit's three MCP channels bind a **dynamic** TCP port. By default
-each **scans** a small band and publishes the bound port to the machine-wide
-registry, so the MCP server discovers it with no configuration. You can instead
-**pin** an exact port or **relocate** the scan band, per channel. These are read
-from the process environment (the `.mcp.json` `env` block, or a shell `export`
-before launch) — the toolkit never writes them.
+These environment variables configure addon listeners, not the C# daemon dial address.
 
-| Env var | Channel | Effect | Default |
-|---|---|---|---|
-| `GODOT_MCP_EDITOR_PORT` | Editor channel | **Pin** — bind this exact port or fail | — (scan) |
-| `GODOT_MCP_EDITOR_PORT_MIN` / `_MAX` | Editor channel | **Relocate** the scan band (inclusive) | `6550` / `6560` |
-| `GODOT_MCP_RUNTIME_PORT` | Runtime channel (the running game) | **Pin** — bind this exact port or fail | — (scan) |
-| `GODOT_MCP_RUNTIME_PORT_MIN` / `_MAX` | Runtime channel | **Relocate** the scan band (inclusive) | `6570` / `6585` |
+| Variable | Listener effect | Default |
+| --- | --- | --- |
+| GODOT_MCP_EDITOR_PORT | Pin editor WS or fail | Scan |
+| GODOT_MCP_EDITOR_PORT_MIN / _MAX | Editor scan range | 6550 / 6560 |
+| GODOT_MCP_RUNTIME_PORT | Pin runtime WS or fail | Scan |
+| GODOT_MCP_RUNTIME_PORT_MIN / _MAX | Runtime scan range | 6570 / 6585 |
 
-The same `GODOT_MCP_EDITOR_PORT` / `GODOT_MCP_RUNTIME_PORT` are **also read by the
-MCP server** to decide which port to **dial** — inherited by both processes, a pin
-makes listen and dial agree with zero discovery. The `_MIN`/`_MAX` band vars are
-**listen-side only** (the server never reads them; discovery covers the scanned
-case). The third channel — the GDScript **LSP** — is Godot's to bind, so it stays
-**connect-pin-only** via the server-side `GODOT_MCP_LSP_PORT` / `GODOT_MCP_LSP_HOST`
-(next section).
-
-### Pinned vs. Scanned — the two modes are exclusive
-
-- **Pinned** (a `*_PORT` pin is set): the listener binds that **exact** port or
-  **fails loudly** — it never scans to a different port. If the port is occupied it
-  retries the same port briefly (to ride out a previous instance still releasing
-  it), then surfaces a **dock warning** (editor) or a loud game-console error
-  (runtime) naming the port. A pin makes the `_MIN`/`_MAX` band **irrelevant** — it
-  is ignored (a one-line note is logged).
-- **Scanned** (no pin): the listener scans the band (default, or `_MIN`/`_MAX` if
-  set), binds the first free port, and publishes it for discovery. This is the
-  **low-friction** default — you don't have to manage env on both sides. If the
-  **whole band** is occupied, the editor shows the same dock warning naming the
-  range and keeps retrying.
-
-A malformed pin, an out-of-range port (valid range `1–65535`), or `MIN > MAX` is a
-**clear error** on the dock + console, never a silent fall-back to the default.
-
-### An environment variable is not a sync channel
-
-The editor process (which **listens**) and the MCP server process (which **dials**)
-read the environment **independently**. A pin only makes them agree if **both**
-processes inherit the **same** value:
-
-- **The normal `.mcp.json` case sets `env` for the server only.** If you also launch
-  the Godot editor from a **desktop shortcut**, that shortcut does **not** inherit a
-  shell's transient `export` (notably on Windows), so the pin reaches the server but
-  not the editor — the server would then dial a port nobody is listening on. It now
-  **fails fast** with a precise message instead of hanging (and the editor dock shows
-  the mismatch), but the real fix is to make both sides inherit the pin.
-- **The supported pattern (harness / parallel tests):** `export` the pin **once**,
-  then launch the editor **and** the MCP server/client as children of that same
-  environment so both inherit it:
-
-  ```bash
-  export GODOT_MCP_EDITOR_PORT=6557
-  godot --editor --path /path/to/project &   # editor inherits the pin (listens on 6557)
-  # …launch the MCP client from the same shell so its server inherits it too (dials 6557)
-  ```
-
-- **Prefer Scanned mode** if you don't want to manage env on both sides — registry
-  discovery keeps the two in agreement automatically.
+Pins ignore scan ranges and fail if invalid/occupied. Set them on the listening editor/runtime process; the shim env alone does not configure Godot. The daemon reads published registry endpoints. Pinning does not bypass discovery or authentication; prefer scanning unless deterministic ports are needed.
 
 ## macOS: launching your MCP client (stdio shim)
 
@@ -231,22 +178,9 @@ GUI-launched client cannot connect, work through these:
 
 ## Language server (LSP)
 
-The `lsp_diagnostics`, `lsp_symbols`, `lsp_hover`, `lsp_completion`, and
-`lsp_navigate` tools connect to Godot's built-in GDScript language server. The MCP
-server discovers the right endpoint per project from the registry, so a **single
-editor needs no configuration**. These two env vars (set in a project's
-`.mcp.json` `env` block) override discovery — needed only when running the LSP in
-**more than one editor at once** (see `docs/multi-instance.md`).
+Activate code_intel for lsp_diagnostics, lsp_symbols, lsp_hover, lsp_completion, lsp_navigate. C# reads per-instance registry lsp_host/lsp_port with guarded fallback 6005. The addon publishes EditorSettings network/language_server/remote_host and remote_port.
 
-### `GODOT_MCP_LSP_PORT` — default: discovered (else `6005`)
-
-The GDScript LSP port this project's server connects to. Top priority — bypasses
-registry discovery. Set it to the `--lsp-port` you launched that editor with.
-
-### `GODOT_MCP_LSP_HOST` — default: discovered (else `127.0.0.1`)
-
-The host for the GDScript LSP. Rarely needed — the LSP is localhost-only. Mirrors
-the familiar `lsp.serverHost` client setting.
+A consumed --lsp-port override is not reflected in these settings. Match the actual listener and published endpoint. Old GODOT_MCP_LSP_PORT/HOST overrides belong to the retired Node bridge; current C# does not read them, even when old error hints mention them. See [multi-instance.md](multi-instance.md).
 
 ## Editor responsiveness while unfocused
 

@@ -19,13 +19,15 @@ namespace GodotMcp.Daemon.Tests;
 /// </summary>
 public class GroupParityTests
 {
-    /// <summary>允许 daemon 在 Node 表之外附加的工具白名单(状态面对 Node 的已记录扩展)。</summary>
-    private static readonly string[] DaemonOnlyExtras = ["list_instances", "list_operations"];
+    /// <summary>允许 daemon 在 Node 表之外附加的工具白名单。</summary>
+    /// <remarks>list_instances / list_operations 已随 P1 补进表内,不再是"表外附加"。
+    /// godot_connect 是 daemon 自己的入口工具(不在 Node 表内)——它是唯一允许的表外附加项。</remarks>
+    private static readonly string[] DaemonOnlyExtras = ["godot_connect"];
 
     /// <summary>全激活(含 unsafe)后 tools/list 与 Node 桥导出表对齐:名称、schema、描述三方 parity。</summary>
     /// <para>
     /// Arrange:UnsafeEnabled 拉起 daemon,起 4.7.0 假实例使版本门控工具进入并集面,
-    /// 经 discover_tools 激活 GroupCatalogue 全部 31 组,取 tools/list 按名建字典。
+    /// 经 discover_tools 激活 GroupCatalogue 全部 17 组,取 tools/list 按名建字典。
     /// Assert ①名称:Node 表全部条目都在(daemon 附加工具恰为 DaemonOnlyExtras);
     /// ②schema:逐工具剥离 $schema 与 instance 参数(见 Strip)、对象键序规整(见 Canonical)后
     /// 与 Node 表 DeepEquals;③描述:除动态目录 discover_tools(DescriptionDynamic)外逐字相等。
@@ -51,7 +53,7 @@ public class GroupParityTests
         });
         await WaitConnectedAsync(client, @"D:\proj\parity");
 
-        // 激活全部 31 组。
+        // 激活全部 17 组。
         var discover = await client.CallToolAsync("discover_tools", new Dictionary<string, object?>
         {
             ["request"] = GroupCatalogue.Groups.Select(g => g.Name).ToList(),
@@ -92,7 +94,7 @@ public class GroupParityTests
     /// <summary>unsafe 组门控:默认隐藏且拒绝激活,工具与 discover_tools 描述目录均不出现。</summary>
     /// <para>
     /// Arrange:默认配置(未启用 unsafe)拉起 daemon 接入。
-    /// Assert 目录:discover_tools 返回 31 组,unsafe 行 status 为 "available"、description 为
+    /// Assert 目录:discover_tools 返回 17 组,unsafe 行 status 为 "available"、description 为
     /// UnsafeDisabledMessage、tools 为空;Act:请求激活 "unsafe"。
     /// Assert 拒绝:unsafe 行仍为 "available"+禁用说明,tools/list 不含 execute_code/node_call_method,
     /// discover_tools 自身描述的目录同样跳过禁用组(不含 "unsafe [" 行)。
@@ -109,7 +111,7 @@ public class GroupParityTests
         using (var payload = JsonDocument.Parse(TextOf(catalog)))
         {
             var groups = payload.RootElement.GetProperty("groups");
-            Assert.Equal(31, groups.GetArrayLength());
+            Assert.Equal(17, groups.GetArrayLength());
             var unsafeRow = groups.EnumerateArray().Single(g => g.GetProperty("name").GetString() == "unsafe");
             Assert.Equal("available", unsafeRow.GetProperty("status").GetString());
             Assert.Equal(GroupService.UnsafeDisabledMessage, unsafeRow.GetProperty("description").GetString());
@@ -131,9 +133,13 @@ public class GroupParityTests
         var after = await client.ListToolsAsync();
         Assert.DoesNotContain(after, t => t.Name is "execute_code" or "node_call_method");
 
-        // discover_tools 的描述目录同样跳过禁用组(Node buildDiscoverToolsDesc 同规矩)。
+        // discover_tools 的描述现在是**静态**的(ADR-0007):不再内嵌"组名 [已加载|可用]"目录。
+        // 那类动态目录会写到 DI 单例工具对象上,分会话时必然串。
+        // 组目录改由无参 discover_tools 的**响应体**提供 —— 响应体才会按会话跳过禁用组。
+        // 注意:静态描述里出现组名 unsafe 是正确的(它是组目录的一部分),不能用它判"unsafe 泄漏"。
         var discoverTool = after.Single(t => t.Name == "discover_tools");
-        Assert.DoesNotContain("unsafe [", discoverTool.Description);
+        Assert.DoesNotContain("已加载", discoverTool.Description);
+        Assert.DoesNotContain("可用]", discoverTool.Description);
     }
 
     // ── schema 规整 ──────────────────────────────────────────────

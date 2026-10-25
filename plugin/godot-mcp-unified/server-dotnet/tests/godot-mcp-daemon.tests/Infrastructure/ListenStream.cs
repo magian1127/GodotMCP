@@ -64,8 +64,12 @@ internal sealed class ListenStream : IAsyncDisposable
     /// → 非 2xx 抛出 → 包装为 ListenStream 并启动读取循环。</summary>
     /// <param name="port">daemon HTTP 端口。</param>
     /// <param name="token">Bearer 令牌(状态目录中的稳定 token)。</param>
+    /// <param name="sessionKey">
+    /// 会话键。<b>必填</b>:daemon 对无键 listen 回 400(spec §1.6「绝不开无键流」),
+    /// 而且不登记流的 listen 会让键在 10 分钟后被 reaper 静默回收。
+    /// </param>
     /// <returns>已打开的长流客户端(读取循环已启动)。</returns>
-    public static async Task<ListenStream> OpenAsync(int port, string token)
+    public static async Task<ListenStream> OpenAsync(int port, string token, string sessionKey)
     {
         var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         var body =
@@ -83,6 +87,7 @@ internal sealed class ListenStream : IAsyncDisposable
         request.Headers.TryAddWithoutValidation("Accept", "application/json, text/event-stream");
         request.Headers.TryAddWithoutValidation("MCP-Protocol-Version", "2026-07-28");
         request.Headers.TryAddWithoutValidation("Mcp-Method", "subscriptions/listen");
+        request.Headers.TryAddWithoutValidation("x-godot-session", sessionKey);
 
         var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
         response.EnsureSuccessStatusCode();

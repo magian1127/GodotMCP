@@ -2,6 +2,8 @@
 
 # Godot 版本兼容性
 
+工具可见性也取决于会话和组：先连接，检查/LSP 加载 code_intel，以最新 tools/list 为准。引擎支持不等于已暴露工具。见 [multi-instance.zh-CN.md](multi-instance.zh-CN.md)。
+
 ## 版本层级
 
 | Godot 版本 | 支持级别 | 说明 |
@@ -22,7 +24,7 @@
 | `editor_sync` | 4.2 | 对指定 `file_paths` 逐文件刷新；省略时执行完整 `scan()`，随后等待导入管线空闲。两个阶段在所有版本有效 |
 | `discover_tools(refresh_extensions:true)` | 4.2 | 4.2 上**编辑已有**扩展不会在会话内应用（缓存读取可避免引擎重导入崩溃，见下文）；`extension_refresh.hint` 会指出扩展并要求重启。增删扩展即时应用；4.3+ 所有变更即时应用 |
 | `node_call_method` | 4.2 | **< 4.4** 上，若方法存在于节点磁盘上的 `.gd`（但活动实例过旧），`INVALID_METHOD` 会带重启 `hint`；真正拼写错误不会。4.4+ 有显示器的编辑器支持热重载，调用直接成功；但 **4.4+ 无头**编辑器不会重新实例化重载节点，因此也会触发旧代码 `hint`（无头提示：重新创建节点或重启有显示器的编辑器） |
-| `lsp_diagnostics`、`lsp_symbols`、`lsp_hover`、`lsp_completion`、`lsp_navigate` | 4.2 | 4.2+ 可用。**< 4.5 的多编辑器冲突检测降级**：跨项目根不匹配检查需要 4.5+，所以 4.2–4.4 为每个编辑器提供不同的 `--lsp-port` + `GODOT_MCP_LSP_PORT`（见 [multi-instance.md](multi-instance.md)） |
+| `lsp_diagnostics`、`lsp_symbols`、`lsp_hover`、`lsp_completion`、`lsp_navigate` | 4.2 | 4.2+ 可用。**< 4.5 的多编辑器冲突检测降级**：跨项目根不匹配检查需要 4.5+，所以 4.2–4.4 为每个编辑器提供不同的 匹配的实际 LSP 监听与注册表端点（见 [multi-instance.md](multi-instance.md)） |
 | `log_read(channel:"editor")` | 4.2 | 所有版本捕获运行时输出（错误 / 警告 / 打印）。**编辑器解析错误**（`editor_sync` 重新编译脚本产生）只在 **4.5+** 出现（Logger API 会挂接编辑器诊断）；4.2–4.4 不写入 `godot.log`，因此 `source="buffer"` 与 `source="file"` 都无法返回——改用 `script_check` 或 `lsp_diagnostics`。能够捕获的多行错误（`SCRIPT ERROR: …` + `   at: <script>.gd:LINE`）按整体分级，因此用文件名 + `level_filter:["error"]` 查询可找到位置行。4.5+ 使用同步 Logger（每个错误一条，零延迟） |
 | `animationtree_edit` | 4.2 | 4.2+ 所有操作有效（set_root、add/remove_node、add/remove_transition、set_property；所有版本都可枚举 transitions） |
 | `animationtree_list` | 4.2 | 4.2+ 可列出，但**节点枚举需要 4.5+**：`AnimationNodeStateMachine.get_node_list()` 是 4.5 的脚本 API，4.2–4.4 不存在，因此返回 `nodes: []`、`nodes_count` 为 0；通过 `animationtree_edit` 的增删 / has 操作仍可用 |

@@ -1,76 +1,60 @@
 # Godot MCP Unified
 
-中文版：[README.md](README.md)
+[中文](README.md) | English
 
-Godot MCP Unified is a local plugin for controlling Godot 4 editor projects and debugging game sessions. The capability surface includes 83 built-in tools, 159 operations, 31 on-demand groups, MCP resources, and five agent skills; only 19 business tools plus `discover_tools` are visible by default.
+Godot MCP Unified provides local MCP control for Godot 4 editors and running games, with six companion workflow skills. Hosts use **stdio → godot-mcp-shim → loopback HTTP → godot-mcp-daemon**. The daemon discovers editor/runtime endpoints in the registry; HTTP is its backend, not the supported direct host entry.
 
-The control plane is a machine-level singleton **godot-mcp-daemon** (.NET self-contained single file, built from `server-dotnet/` in this repo): it exposes a loopback Streamable HTTP face to all hosts (default `127.0.0.1:6590`, Bearer auth) with on-demand spawn and self-heal (the Godot editor addon sidecar / the godot-mcp-shim for stdio hosts can both spawn it). MCP tool prose defaults to Chinese independently of client or editor language. After refreshing plugin caches, use a new Codex task or restart ZCode so its windows load the updated content.
+The built-in catalog has **92 unique names**. Before connecting, only `godot_connect` exists; afterward the surface is **nine core tools plus this session’s active groups**. Seventeen groups contain 85 member slots and 83 unique tools. Extensions are additional; engine versions and unsafe gates filter visibility. The [daemon README](server-dotnet/README.en.md) owns detailed behavior, settings, and current limits.
 
-| Client | Adapter | How it loads |
-| --- | --- | --- |
-| Codex | `.codex-plugin/` (plugin.json + mcp.json, stdio form: `${PLUGIN_ROOT}` points at the bundled shim) | Personal/repo plugin marketplace, or `codex plugins add` pointing at this directory |
-| ZCode | `.zcode-plugin/plugin.json` + root `.mcp.json` (stdio form: `${ZCODE_PLUGIN_ROOT}` points at the bundled shim) | Local plugin marketplace whose root is the repository root (see root `marketplace.json`) |
-| VS Code | `adapters/vscode/` (repo access layer: README + mcp.json example + install script) | Project-level `.vscode/mcp.json` written by the install script (stdio form + bundled shim) |
-| DSH (stdio-only) | the bundled shim (`server-dotnet/publish/<rid>/`, spawned natively); `adapters/dsh/godot-http-bridge.mjs` is the node fallback | point DSH's `serverDist` at the bundled shim (`dsh-godot install --server-dist`, or the plugin page path field) |
+## Install
 
-> To adapt a new client, add a small adapter directory/file at the plugin root — do **not** copy the whole plugin.
+1. Install the addon, build the bridge, and validate loading:
 
-The validated Godot target: Godot 4.7.2 stable (.NET/mono build); the verified binary reports 4.7.2.stable.mono.official.ed1daf0bf.
+   ```powershell
+   & "<仓库>/plugin/godot-mcp-unified/scripts/install-godot-project.ps1" -ProjectPath "<Godot 项目>" -GodotExecutable "<Godot 可执行文件>"
+   ```
 
-## What is included
+   The installer backs up the addon and project.godot, copies/enables the toolkit, writes a project-root stdio .mcp.json, and performs a headless editor load. -Template accepts empty, default, 2d-platformer, or 3d-fps. Godot 4.7.2 stable .NET/mono is the validated target; check --headless --version. Local executable paths belong in repository-root .env.
 
-- Editor authoring: scenes, nodes, properties, signals, scripts, resources, project settings, input maps, autoloads, 2D/3D helpers, animation, audio, particles, navigation, TileSet/TileMap, placeholders, and assets.
-- Language/debug: GDScript parse checks, Godot LSP diagnostics/navigation, debugger state and breakpoints, editor/game logs, crash context.
-- Runtime/playtest: live node state, script variables, input sequences, screenshots, animation control, property changes, arbitrary-expression escape hatch, and bounded freeze/step/step-until time control.
-- Security: loopback-only sockets, rotating session tokens, project path guards, read-only mode, tool annotations, audit logs, response caps, and untrusted-content envelopes.
-- Skills: `godot-control`, `godot-debug`, `godot-playtest`, `godot-project-setup`, and `godot-mcp-extension`.
+2. Choose the host entry:
 
-## Client install
+   | Host | Configuration/management |
+   | --- | --- |
+   | Codex | `.codex-plugin/plugin.json` and `.codex-plugin/mcp.json`; development linking uses `<repo>/adapters/codex/link-codex-plugin.ps1` |
+   | ZCode | `.zcode-plugin/plugin.json` and plugin-root `.mcp.json`; use adapters/zcode/install-zcode-plugin.ps1 or the link script from the repository root |
+   | DSH | [Adapter guide](../../adapters/dsh/deepseek-harness-godot_unified/README.en.md); serverDist points to the bundled shim |
+   | VS Code | [Project configuration](../../adapters/vscode/README.en.md), using install-vscode-mcp.ps1 |
+   | Claude desktop | [Package/link guide](../../adapters/claude/README.md) |
 
-### Codex
+   Both binaries publish to `server-dotnet/publish/<rid>/`. Development dll builds can launch the shim with dotnet exec and select its matching daemon through GODOT_MCP_DAEMON_EXE. Remove old direct-HTTP entries after upgrading. Hosts do not configure tokens.
 
-Codex reads the plugin from `.codex-plugin/plugin.json` (skills and the MCP server config live in `.codex-plugin/mcp.json`, **stdio form**: `command` uses `${PLUGIN_ROOT}` to reach the repo's single service entry `server-dotnet/publish/<rid>/godot-mcp-shim[.exe]`, which makes sure the machine-level daemon is running and then forwards stdio to the daemon's HTTP face). Register this directory as a personal/repo marketplace plugin, or run `codex plugins add <absolute path>` and enable `godot-mcp-unified`; for local development prefer `adapters/codex/link-codex-plugin.ps1`, which turns the plugin cache into a junction to the single source so edits need no redeploy. The stdio form needs no Bearer token (the shim reads it from the machine-level registry); `GODOT_MCP_DAEMON_TOKEN` is only for url-type consumers such as DSH's `godot-http-bridge.mjs`.
+3. Open the target Godot editor, then call:
 
-### ZCode
+   ```text
+   godot_connect(project="<Godot 项目绝对路径>", groups=["scene_edit"])
+   list_instances()
+   scene_get_tree()
+   discover_tools(request=["code_intel", "editor_ops"], include_schemas=true)
+   ```
 
-ZCode installs through the local plugin marketplace whose root is the repo root (`marketplace.json`), with the plugin source pointing at this directory. ZCode reads `.zcode-plugin/plugin.json` and the root `.mcp.json` (**stdio form**: `command` uses `${ZCODE_PLUGIN_ROOT}` to reach the repo's single service entry `server-dotnet/publish/<rid>/godot-mcp-shim[.exe]`, which makes sure the daemon is running and then forwards stdio to the daemon's HTTP face — **no Bearer token needed**).
+   Use the names displayed by the host. DSH’s default entry is mcp__godot__godot_connect; other native names such as scene_get_tree have no common godot_ prefix. Target/groups belong to each shim; hosts sharing a shim also share that state.
 
-Install/update: run `& ".\adapters\zcode\install-zcode-plugin.ps1"` from the repo root (publishes daemon+shim, validates the plugin contract, migrates away the user-level http registration that would shadow it, pre-warms the daemon; idempotent) or `& ".\adapters\zcode\link-zcode-plugin.ps1"` (junction deploy), then restart ZCode.
+## Connect and update
 
-### VS Code
+- The daemon starts the bridge, not the editor. Cwd discovery checks project.godot directly; pass project when a workspace contains several projects.
+- Load scene_edit for authoring, code_intel for checks, playtest for game operations. See [skill routing](skills/godot-control/references/tool-routing.en.md).
+- Validate native tool discovery separately from programmatic probes. Hosts may cache lists; ttlMs=0 does not guarantee refresh. Use the host’s actual reconnect mechanism or load in a new session.
+- Linked skills/addons follow source files. Daemon/shim changes still need rebuilding/publishing and verification of running versions; a new shim does not replace an existing old daemon.
+- Notification recovery, group replacement/replay, resident schemas, and diagnostic switches have known limits in the daemon README. Design intentions and passing tests are not verified host behavior.
 
-VS Code has no marketplace/plugin-package concept; it consumes a project-level `.vscode/mcp.json`. Run:
+## Capabilities and skills
 
-    & "<repo>\adapters\vscode\install-vscode-mcp.ps1" -ProjectPath "D:\Games\MyProject"
+Editor capabilities cover scenes, nodes, scripts, resources, project settings, 2D/3D, animation, audio, TileMap/TileSet, LSP, and debugging. Runtime tools cover input, state, screenshots, and bounded stepping. Unsafe is disabled by default and requires daemon opt-in and authorization for the current operation.
 
-The script writes `.vscode/mcp.json` into the target project (**stdio form**: `type: stdio` + `command` pointing at the bundled shim, no token required; other MCP server entries in the same file are preserved). Open the project in VS Code and the `godot` server (`mcp__godot__*`) is available. Full details in [`../../adapters/vscode/README.md`](../../adapters/vscode/README.md).
+Six skills: [godot-control](skills/godot-control/SKILL.en.md), [godot-debug](skills/godot-debug/SKILL.en.md), [godot-playtest](skills/godot-playtest/SKILL.en.md), [godot-project-setup](skills/godot-project-setup/SKILL.en.md), [godot-mcp-extension](skills/godot-mcp-extension/SKILL.en.md), [godot-ui](skills/godot-ui/SKILL.en.md). The addon also carries project-facing CompanionSkills.
 
-## Install into a Godot project
+## Build and verify
 
-Run:
+Run dotnet test tests/godot-mcp-daemon.tests from server-dotnet. Its README covers builds, publishing, and acceptance scope. [test-project](../../test-project/README.en.md) owns Godot regressions. Headless editors support structured reads; screenshots and rendered behavior need a display.
 
-    & "<plugin-root>\scripts\install-godot-project.ps1" -ProjectPath "D:\Games\MyProject" -GodotExecutable "<Godot executable>"
-
-The installer:
-
-1. verifies Godot 4;
-2. backs up any existing addon and `project.godot`;
-3. installs `addons/godot_mcp_toolkit` and enables it (the sidecar auto-spawns the daemon on demand);
-4. writes the project-root `.mcp.json` (**stdio form**: points at the bundled shim, no token) while preserving other servers and `GODOT_MCP_*` keys;
-5. launches a headless editor and requires a confirmed authenticated loopback listener.
-
-Use `-Template empty`, `default`, `2d-platformer` or `3d-fps` to create a new project in an empty target directory.
-
-## Verification
-
-Automated acceptance (regression entry):
-
-    dotnet test tests/godot-mcp-daemon.tests --filter "FullyQualifiedName~AcceptanceHarnessTests"
-
-Full suite: `dotnet test tests/godot-mcp-daemon.tests`.
-
-## Architecture
-
-All hosts (ZCode/Codex via http config, DSH via the stdio bootstrap bridge) connect to the machine-level singleton **godot-mcp-daemon**; the daemon discovers the matching project in the toolkit's machine registry and authenticates over localhost WebSocket to the editor; during playtest it additionally opens an authenticated runtime channel. With the plugin export hook enabled, game exports exclude the addon.
-
-This is a locally maintained integration with no third-party runtime dependencies; upstream licenses and attributions live in the plugin's `LICENSE` and `addons/godot_mcp_toolkit/ATTRIBUTIONS.md`.
+See the [workspace README](../../README.en.md), [adapter overview](../../adapters/README.en.md), LICENSE, and addons/godot_mcp_toolkit/ATTRIBUTIONS.md for layout and attribution.

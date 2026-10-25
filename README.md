@@ -6,11 +6,11 @@
 
 ## 核心能力
 
-- **83 个内置 MCP 工具**：启动面 19 常驻 + 1 个 `discover_tools` 元工具；另有 31 组 64 个按需工具组，按需激活以控制上下文成本。
+- **92 个内置工具名称**：未连接时只有 `godot_connect`；连接后提供 9 个核心工具 + 本会话激活的 17 个按需组（85 个成员槽位 / 83 个组内唯一工具）。实际列表受组、引擎版本与 unsafe 门控影响，扩展另计。
 - **确定性游玩测试**：运行游戏、输入模拟、运行时状态检查、时间控制与逐帧步进、截图内联返回。
 - **多实例并行**：机器级注册表自动发现所有运行中的 Godot 实例，daemon 多路复用，一台机器可同时开发多个项目。
 - **本地优先安全**：仅监听回环地址 + Bearer token 鉴权；游戏导出构建自动剥离插件。
-- **多客户端接入**：Codex、ZCode、DSH、VS Code 各有适配层；MCP 工具统一以 `godot` 服务器/key 提供（`mcp__godot__<tool>`，DSH 门面为 `godot_<tool>`）。
+- **多客户端接入**：Codex、ZCode、DSH、VS Code 各有适配层；MCP 工具统一以 `godot` 服务器/key 提供（DSH 默认为 `mcp__godot__<原生工具名>`；其它宿主以实际工具列表为准）。
 
 ## 快速开始
 
@@ -19,9 +19,12 @@
        & "<仓库>\plugin\godot-mcp-unified\scripts\install-godot-project.ps1" -ProjectPath "<Godot 项目>" -GodotExecutable "<Godot 可执行文件>"
 
 2. **接入你的 AI 客户端**：通道总览见 [`adapters/README.md`](adapters/README.md)（Codex / ZCode / DSH / VS Code 各一行入口与专用文档）。
-3. **可选**：复制 `.env.example` 为 `.env` 填入本机 Godot 路径，脚本即可免参数使用（该文件不入版本管理）。
+3. **连接会话**：调用 `godot_connect(project="<Godot 项目绝对路径>")`，再用 `list_instances`、`scene_get_tree` 确认目标；更多能力用 `discover_tools(request=[组名])` 激活。
+4. **可选**：复制 `.env.example` 为 `.env` 填入本机 Godot 路径，脚本即可免参数使用（该文件不入版本管理）。
 
 前提：Godot 4.x（.NET/mono 版），目标项目的编辑器处于运行状态。完整前置与故障排查见各客户端适配文档。
+
+工具面、寻址、超时和已复现限制的单一维护入口见 [daemon README](plugin/godot-mcp-unified/server-dotnet/README.md)。当前通知恢复和部分组状态仍有已知缺口；现有测试通过不等于五宿主发布验收完成。
 
 ## 仓库地图
 

@@ -50,26 +50,46 @@ public static class NodeToolTable
 {
     /// <summary>嵌入资源名(与 Node 桥导出的工具表 JSON 同源)。</summary>
     private const string ResourceName = "GodotMcp.Daemon.Groups.NodeToolTable.json";
-    /// <summary>完整性校验:期望条目总数(88 工具 + discover_tools)。</summary>
-    private const int ExpectedEntryCount = 89;
-    /// <summary>完整性校验:期望组工具条数(按需注册面)。</summary>
+    /// <summary>完整性校验:期望条目总数(见 <see cref="ExpectedEntryCount"/> 的说明)。</summary>
+    private const int ExpectedEntryCount = 91;
+    /// <summary>
+    /// 完整性校验:期望的<b>懒加载工具</b>条数(即 JSON 里带 <c>group</c> 字段的条目)。
+    /// </summary>
+    /// <remarks>
+    /// 这个数字是"懒加载面的大小",<b>不是</b>"组归属"的任何度量 —— 真正的组划分
+    /// (17 组 / 85 槽位 / 83 唯一)由 <see cref="GroupCatalogue"/> 定义,这里是 64
+    /// 只是因为它恰好等于"不属于常驻面的工具数"。
+    /// </remarks>
     private const int ExpectedGroupToolCount = 64;
 
     /// <summary>进程级共享的工具表 JSON 文档(启动期一次加载)。</summary>
     private static readonly JsonDocument Document = LoadDocument();
 
-    /// <summary>全部条目(88 工具 + discover_tools;Node 目录顺序)。</summary>
+    /// <summary>全部条目(Node 目录顺序;条数见 <see cref="ExpectedEntryCount"/>)。</summary>
     public static IReadOnlyList<NodeToolDef> AllEntries { get; } = LoadEntries();
 
     /// <summary>工具名 → 定义索引(序数比较)。</summary>
     private static readonly Dictionary<string, NodeToolDef> ByName =
         AllEntries.ToDictionary(t => t.Name, StringComparer.Ordinal);
 
-    /// <summary>组工具(64 个按需注册的工具;Node GROUPS 装配顺序)。</summary>
+    /// <summary>
+    /// <b>懒加载工具</b>(JSON 里带 <c>group</c> 字段的条目)。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>不要用它的 <see cref="NodeToolDef.Group"/> 回答"某工具属于哪个组"</b>:
+    /// JSON 的 <c>group</c> 是 Node 桥时代的单值字段,而新分组里一个工具可以属于多组
+    /// (<c>node_set_property</c> 在 <c>scene_edit</c> 与 <c>playtest</c>,
+    /// <c>signal_emit</c> 在 <c>playtest</c> 与 <c>signals</c>)—— 单值字段表达不了,
+    /// 所以那些值仍是旧组名,只保留作与 Node 的对账线索。</para>
+    /// <para>组归属的唯一真源是 <see cref="GroupCatalogue"/>。</para>
+    /// </remarks>
     public static IReadOnlyList<NodeToolDef> GroupTools { get; } =
         AllEntries.Where(t => t.Group is not null).ToList();
 
-    /// <summary>组工具名集合(激活报告的成员判定)。</summary>
+    /// <summary>
+    /// 懒加载工具名集合(用于"该工具是否属于按需注册面"的判定)。
+    /// </summary>
+    /// <remarks>组归属请查 <see cref="GroupCatalogue"/>,不要用这里的 <see cref="NodeToolDef.Group"/>。</remarks>
     public static IReadOnlySet<string> GroupToolNames { get; } =
         GroupTools.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
 

@@ -23,6 +23,7 @@ internal static class GroupListenStream
     /// <param name="server">请求绑定的 McpServer(消息自动路由回本请求的响应流)。</param>
     /// <param name="subscriptionId">listen 请求的 JSON-RPC id,标注在通知 _meta 供多路分解。</param>
     /// <param name="requested">客户端请求订阅的通知类型;null 视为未订阅任何类型。</param>
+    /// <param name="sessionKey">本流的会话键;只接收该键自己的工具面变更(ADR-0006 §1.7)。</param>
     /// <param name="cancellationToken">客户端断开时取消,驱动长流收尾退订。</param>
     /// <returns>EmptyResult;长流挂起时仅在断开后返回。</returns>
     public static async ValueTask<EmptyResult> ServeAsync(
@@ -30,6 +31,7 @@ internal static class GroupListenStream
         McpServer server,
         RequestId subscriptionId,
         SubscriptionsListenNotifications? requested,
+        string? sessionKey,
         CancellationToken cancellationToken)
     {
         // 只授予本 daemon 确实会投递的类型(能力旗标与实际投递一致,issue 12)。
@@ -46,7 +48,7 @@ internal static class GroupListenStream
         }
 
         // 订阅工具面变更 —— 每条变更经此长流投递;客户端断开(cancellationToken)即退订收尾。
-        using (groups.SubscribeToolSurface(() => _ = SendListChangedAsync(server, subscriptionId)))
+        using (groups.SubscribeToolSurface(sessionKey, () => _ = SendListChangedAsync(server, subscriptionId)))
         {
             var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             using (cancellationToken.Register(static state => ((TaskCompletionSource)state!).TrySetResult(), closed))

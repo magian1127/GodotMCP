@@ -1,0 +1,5 @@
+{
+  "maxParallelThreads": 1,
+  "parallelizeTestCollections": false,
+  "longRunningTestSeconds": 60
+}

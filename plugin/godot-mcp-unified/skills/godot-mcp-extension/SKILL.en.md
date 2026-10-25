@@ -1,11 +1,13 @@
 ---
 name: godot-mcp-extension
-description: Add or update project-specific Godot MCP tools using the Godot MCP Unified extension API. Use when the user asks for a new MCP tool, a custom project operation, an extension pack, or behavior the built-in 83-tool surface cannot express cleanly.
+description: Add or update project-specific Godot MCP tools using the Godot MCP Unified extension API. Use when the user asks for a new MCP tool, a custom project operation, an extension pack, or behavior the built-in tools cannot express cleanly.
 ---
 
 Language: English | [中文](SKILL.md)
 
 # Godot MCP Extension
+
+First select this session’s target with `godot_connect(project="<absolute Godot project path>")`. Before connecting, only the entry tool exists; afterward nine core tools are available. Activate other capabilities with `discover_tools(request=[group names], include_schemas=true)`. Pass `instance` when interleaving projects. See [tool routing](../godot-control/references/tool-routing.en.md) for schemas and recovery.
 
 Before editing, read ../../addons/godot_mcp_toolkit/docs/extending.md, resolved relative to this skill.
 

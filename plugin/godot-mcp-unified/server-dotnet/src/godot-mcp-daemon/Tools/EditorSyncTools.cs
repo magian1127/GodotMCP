@@ -38,7 +38,7 @@ public sealed class EditorSyncTools(InstanceManager instances)
             // 组合为 {success:true, refresh, idle}。
             var refreshParams = file_paths is null ? null : JsonSerializer.Serialize(new { file_paths });
             var refreshed = await instances.CallInstanceAsync(
-                instance, "editor.refresh", refreshParams, TimeSpan.FromSeconds(30), CancellationToken.None);
+                instance, "editor.refresh", refreshParams, ToolCallTimeouts.For("editor_sync"), CancellationToken.None);
             if (ToolResults.IsFailure(refreshed))
             {
                 return ToolResults.FromToolkitResult(refreshed);
@@ -46,7 +46,7 @@ public sealed class EditorSyncTools(InstanceManager instances)
 
             var idleParams = timeout_ms is null ? null : JsonSerializer.Serialize(new { timeout_ms });
             var idle = await instances.CallInstanceAsync(
-                instance, "editor.wait_for_idle", idleParams, TimeSpan.FromSeconds(30), CancellationToken.None);
+                instance, "editor.wait_for_idle", idleParams, ToolCallTimeouts.For("editor_sync"), CancellationToken.None);
             if (ToolResults.IsFailure(idle))
             {
                 return ToolResults.FromToolkitResult(idle);
@@ -73,7 +73,8 @@ public sealed class EditorSyncTools(InstanceManager instances)
     {
         var args = new Dictionary<string, object?>();
         if (file_path is not null) args["file_path"] = file_path;
-        return ToolRouting.RouteAsync(instances, instance, "editor.save_scene", args);
+        // 传工具名:editor_save_scene 在 ToolCallTimeouts.LongNames 里(180s)。大场景保存常超 30s。
+        return ToolRouting.RouteAsync(instances, instance, "editor.save_scene", args, "editor_save_scene");
     }
 
     /// <summary>project_get_settings:列出 ProjectSettings 的键与值,可按前缀筛选;匹配敏感键模式(密码/token/密钥类)的条目由服务端基础过滤移除。</summary>

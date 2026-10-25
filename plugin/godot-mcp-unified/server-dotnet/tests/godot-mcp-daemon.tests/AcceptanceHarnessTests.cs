@@ -318,7 +318,7 @@ public class AcceptanceHarnessTests
         var port = TestPorts.GetFreePort();
 
         // 双路同时拉起:直启(等价 addon 边车拉起路径)与 shim 自举,同状态目录同端口竞态。
-        var direct = DaemonProcess.Start(new DaemonSpawnOptions
+        using var direct = DaemonProcess.Start(new DaemonSpawnOptions
         {
             StateDir = stateDir,
             Port = port,

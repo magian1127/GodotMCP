@@ -88,38 +88,16 @@ user_data_read  mode=file  path=user://saves/big.dat  offset=800  max_bytes=400
 
 ## 监听端口（编辑器与运行时）
 
-Toolkit 的三个 MCP 通道中有两个绑定**动态** TCP 端口。默认情况下，每个通道都会**扫描**一小段端口，并将绑定端口发布到机器范围的注册表，让 MCP 服务器无需配置即可发现。你也可以按通道**固定**精确端口，或**迁移**扫描范围。这些值从进程环境读取（`.mcp.json` 的 `env` 块，或启动前 shell 中的 `export`）——Toolkit 从不写入它们。
+这些环境变量配置 addon 监听器，不是 C# daemon 的拨号地址。
 
-| 环境变量 | 通道 | 作用 | 默认值 |
-|---|---|---|---|
-| `GODOT_MCP_EDITOR_PORT` | 编辑器通道 | **固定**——绑定此精确端口，否则失败 | —（扫描） |
-| `GODOT_MCP_EDITOR_PORT_MIN` / `_MAX` | 编辑器通道 | **迁移**扫描范围（含首尾） | `6550` / `6560` |
-| `GODOT_MCP_RUNTIME_PORT` | 运行时通道（运行中的游戏） | **固定**——绑定此精确端口，否则失败 | —（扫描） |
-| `GODOT_MCP_RUNTIME_PORT_MIN` / `_MAX` | 运行时通道 | **迁移**扫描范围（含首尾） | `6570` / `6585` |
+| 变量 | 监听侧作用 | 默认 |
+| --- | --- | --- |
+| GODOT_MCP_EDITOR_PORT | 固定编辑器 WS 或报错 | 扫描 |
+| GODOT_MCP_EDITOR_PORT_MIN / _MAX | 编辑器扫描范围 | 6550 / 6560 |
+| GODOT_MCP_RUNTIME_PORT | 固定运行时 WS 或报错 | 扫描 |
+| GODOT_MCP_RUNTIME_PORT_MIN / _MAX | 运行时扫描范围 | 6570 / 6585 |
 
-MCP 服务器也会读取相同的 `GODOT_MCP_EDITOR_PORT` / `GODOT_MCP_RUNTIME_PORT` 来决定要**拨号**的端口——两个进程继承同一值时，固定端口让监听和拨号无需发现即可一致。`_MIN` / `_MAX` 范围变量**仅用于监听端**（服务器不会读取；扫描场景由发现机制覆盖）。第三个通道——GDScript **LSP**——由 Godot 负责绑定，因此只能通过服务器侧的 `GODOT_MCP_LSP_PORT` / `GODOT_MCP_LSP_HOST` 进行**仅连接固定**（下一节）。
-
-### 固定与扫描——两种模式互斥
-
-- **固定**（设置了 `*_PORT` 固定值）：监听器绑定该**精确**端口，否则**明确失败**——绝不会扫描其他端口。如果端口已占用，会短暂重试同一个端口（等待之前的实例释放），然后报告**dock 警告**（编辑器）或响亮的游戏控制台错误（运行时），并写出端口。固定值会让 `_MIN` / `_MAX` 范围**无关**——它会被忽略（日志会记录一行说明）。
-- **扫描**（没有固定值）：监听器扫描范围（默认范围，或设置的 `_MIN` / `_MAX`），绑定第一个空闲端口并发布用于发现。这是**低摩擦**默认方式——无需在两侧管理环境变量。如果**整个范围**都被占用，编辑器会显示同样的 dock 警告，写出范围并持续重试。
-
-格式错误的固定值、超出范围的端口（有效范围 `1–65535`），或 `MIN > MAX` 都会在 dock + 控制台中给出**明确错误**，绝不会静默回退到默认值。
-
-### 环境变量不是同步通道
-
-编辑器进程（**监听**）和 MCP 服务器进程（**拨号**）会**独立**读取环境。只有当**两个**进程继承相同值时，固定值才会让它们一致：
-
-- **普通 `.mcp.json` 情况只为服务器设置 `env`。** 如果你还从**桌面快捷方式**启动 Godot 编辑器，该快捷方式不会继承 shell 的临时 `export`（Windows 上尤其明显），因此固定值只到达服务器，编辑器却没有——服务器随后会拨号到无人监听的端口。现在它会用精确消息**快速失败**而不是挂起（编辑器 dock 也会显示不匹配），但真正的修复是让双方继承固定值。
-- **支持的模式（测试工具 / 并行测试）：**只 `export` 一次固定值，然后从同一环境启动编辑器**和** MCP 服务器 / 客户端，使两者都继承它：
-
-  ```bash
-  export GODOT_MCP_EDITOR_PORT=6557
-  godot --editor --path /path/to/project &   # editor inherits the pin (listens on 6557)
-  # …launch the MCP client from the same shell so its server inherits it too (dials 6557)
-  ```
-
-- 如果不想在两侧管理环境，请**优先使用扫描模式**——注册表发现会自动保持两侧一致。
+固定值忽略扫描范围，无效或占用时报错。应传给实际监听的编辑器/运行时，只放进 shim env 不会配置 Godot。daemon 读取发布的注册表端点。固定端口不绕过身份发现或鉴权，没有确定性端口需求时优先扫描。
 
 ## macOS：启动 MCP 客户端（stdio shim）
 
@@ -133,15 +111,9 @@ MCP 服务器也会读取相同的 `GODOT_MCP_EDITOR_PORT` / `GODOT_MCP_RUNTIME_
 
 ## 语言服务器（LSP）
 
-`lsp_diagnostics`、`lsp_symbols`、`lsp_hover`、`lsp_completion` 和 `lsp_navigate` 连接 Godot 内置的 GDScript 语言服务器。MCP 服务器通过注册表按项目发现正确端点，因此**单个编辑器无需配置**。以下两个环境变量（在项目的 `.mcp.json` `env` 块中设置）会覆盖发现机制——仅在**同时有多个编辑器运行 LSP**时需要（参见 `docs/multi-instance.md`）。
+先激活 code_intel，再用 lsp_diagnostics、lsp_symbols、lsp_hover、lsp_completion、lsp_navigate。C# 读取每实例注册表 lsp_host/lsp_port，缺失时受保护地回退 6005。addon 发布 EditorSettings network/language_server/remote_host、remote_port。
 
-### `GODOT_MCP_LSP_PORT` —— 默认：发现（否则为 `6005`）
-
-项目服务器连接的 GDScript LSP 端口。优先级最高——绕过注册表发现。将它设置为启动该编辑器时使用的 `--lsp-port`。
-
-### `GODOT_MCP_LSP_HOST` —— 默认：发现（否则为 `127.0.0.1`）
-
-GDScript LSP 的主机。很少需要——LSP 仅位于 localhost。对应熟悉的 `lsp.serverHost` 客户端设置。
+引擎消费的 --lsp-port 不会回写这些设置，应核对真实监听与发布值。历史 GODOT_MCP_LSP_PORT/HOST 属于退役 Node 桥，当前 C# 不读取，即使旧错误提示仍提及。详见 [multi-instance.zh-CN.md](multi-instance.zh-CN.md)。
 
 ## 编辑器失去焦点时的响应性
 

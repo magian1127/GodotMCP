@@ -126,10 +126,10 @@ function parseYamlScalar(raw: string): string {
  * (仅 stdio 兜底桥或回滚通道)才经 node 执行 → `command: node` + `args: [路径]`。
  */
 export function mcpRowBlock(opts: McpRowOptions): string {
-  const env: Array<[string, string]> = [
-    ['GODOT_MCP_PROJECT_PATH', opts.projectPath],
-    ['GODOT_MCP_CONFIG_VERSION', '1'],
-  ]
+  // **不再注入 GODOT_MCP_PROJECT_PATH**:目标改由 daemon 侧解析
+  // (godot_connect 的 project 参数 / 本会话默认目标 / shim 上报的 x-godot-cwd /
+  // 唯一活跃实例)。插件不再替用户猜"要连哪个项目"。
+  const env: Array<[string, string]> = [['GODOT_MCP_CONFIG_VERSION', '1']]
   if (opts.readOnly) env.push(['GODOT_MCP_READ_ONLY', '1'])
   if (opts.rateLimit !== null && opts.rateLimit > 0) env.push(['GODOT_MCP_RATE_LIMIT', String(opts.rateLimit)])
   if (opts.unsafe) env.push(['GODOT_MCP_UNSAFE', '1'])
@@ -164,9 +164,7 @@ export function mcpRowBlock(opts: McpRowOptions): string {
   if (opts.godotMcpRoot !== undefined && opts.godotMcpRoot !== '') {
     configLines.push(`    godotMcpRoot: ${yamlScalar(opts.godotMcpRoot)}`)
   }
-  if (opts.projectPath !== '') {
-    configLines.push(`    projectPath: ${yamlScalar(opts.projectPath)}`)
-  }
+  // projectPath 不再写进 bundle config —— 它是被删掉的"路径表"的最后残留。
   if (opts.unsafe === true) configLines.push('    unsafe: true')
   lines.push(...configLines)
   lines.push(ROW_END)
@@ -183,8 +181,10 @@ export function parseMcpRowBlock(block: string): { serverName: string; serverDis
     const parsedCommand = parseYamlScalar(command)
     serverDist = parsedCommand === 'node' ? block.match(/^ {10}- '([^']+)'$/m)?.[1] : parsedCommand
   }
-  const projectPath = block.match(/^ {10}GODOT_MCP_PROJECT_PATH: '([^']+)'$/m)?.[1]
-  if (serverName === undefined || serverDist === undefined || projectPath === undefined) return null
+  // projectPath 已不再写入(目标由 daemon 解析),所以这里只是**兼容读取**:
+  // 老配置里还留着这一行时能读出来用于诊断,新配置没有它也算合法块。
+  const projectPath = block.match(/^ {10}GODOT_MCP_PROJECT_PATH: '([^']+)'$/m)?.[1] ?? ''
+  if (serverName === undefined || serverDist === undefined) return null
   return { serverName, serverDist, projectPath, readOnly: /GODOT_MCP_READ_ONLY: '1'/.test(block) }
 }
 

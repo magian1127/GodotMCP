@@ -4,9 +4,6 @@ description: >
   Build, inspect, debug, and playtest Godot 4 projects through the Godot MCP Unified.
   Covers the current consolidated tool surface, on-demand group lifecycle, safety,
   and evidence-based completion.
-when_to_use: >
-  When an MCP-connected agent works on a Godot project through tools such as
-  scene_get_tree, node_inspect, node_set_property, game_start, or discover_tools.
 ---
 
 # Godot MCP Unified
@@ -15,23 +12,25 @@ Drive the live editor through the smallest capable tool surface and leave the pr
 
 ## Tool-surface lifecycle
 
-The startup surface contains 19 business tools plus `discover_tools`. Load a group only for the current work phase, track the groups you loaded, keep at most three active in ordinary work, and release groups the next phase no longer needs with `discover_tools(reset=[...])`. A cross-domain task may temporarily use up to five groups.
+Call `godot_connect(project="<absolute Godot project path>", groups=[...])` first. Before connecting, only the entry exists; afterward the surface contains nine core tools plus this session’s active groups, from 17 built-in groups. Load by phase with `discover_tools(request=[group names], include_schemas=true)`, keep at most three groups active in ordinary work or five temporarily, and release with `discover_tools(reset=[...])`. `include_schemas=true` alone does not activate.
 
 Use `discover_tools(refresh_extensions:true)` after adding, editing, or removing a project extension. On Godot 4.2, a changed existing extension may require an editor restart; inspect `extension_refresh.hint`.
 
 The `unsafe` group is absent unless the server starts with `GODOT_MCP_UNSAFE=1`. Enable it only for an explicitly authorized operation that typed tools cannot express.
 
+See [instances and sessions](../../docs/multi-instance.md) for discovery, recovery, and current implementation limits. `include_schemas=true` currently returns names alone for some resident tools; use the latest list’s schemas after activation. Pass `instance` when interleaving projects.
+
 ## Current routing
 
 | Goal | Tool or group |
 |---|---|
-| Inspect a scene | `scene_get_tree`, `scene_query`, `node_inspect`; load `scene_spatial` for geometry |
+| Inspect a scene | `scene_get_tree`, `scene_query`, `node_inspect`; load `scene_edit` for geometry |
 | Edit nodes | `scene_create_node`, `node_manage`, `node_set_property`, `node_set_script`, `scene_delete_node` |
-| Edit project files | Use the host's file read/patch tools, then load `editor_advanced` and call `editor_sync` |
-| Project configuration | `project_get_settings`; load `project_config`, `node_advanced`, `input_map`, or `layer_naming` as needed |
-| Assets/resources | Load `asset_ops`, `resource_io`, or `cleanup`; `project_delete` owns typed project-path deletion |
-| Runtime/playtest | `game_start`, `runtime_inspect_node`, `input_simulate`, `capture_screenshot`, `log_read`; load `runtime_advanced` for time/animation control |
-| GDScript intelligence | `script_check`; load `lsp_code_analysis`, `lsp_code_navigation`, or `classdb` |
+| Edit project files | Use the host's file read/patch tools, then load `editor_ops` and call `editor_sync` |
+| Project configuration | Load `project_config` for settings, autoloads, layer names, input maps; `scene_edit` for node groups |
+| Assets/resources | `assets`; `cleanup` for deletion and `user_data` for user data |
+| Runtime/playtest | `game_start`, `runtime_inspect_node`, `input_simulate`, `capture_screenshot`, `log_read`; load `playtest` for time/animation control |
+| GDScript intelligence | Load `code_intel` for `script_check`, `lsp_*`, and `classdb_query` |
 | Debugger | `log_read`; load `debugger` for `debug_inspect`, breakpoints, and continue |
 | 3D/tiles/animation | Load the narrow domain group; use `scene_create_3d`, `tileset_edit`, and `spriteframes_create` rather than retired per-action tools |
 
@@ -48,7 +47,7 @@ Read [input-events.md](references/input-events.md) only for detailed `input_simu
 
 ## Deterministic playtests
 
-Start with `game_start(wait_for_runtime=true)`. Capture a structured baseline with `runtime_inspect_node` and `log_read`. For timing-sensitive behavior, freeze and advance with `runtime_time_control`; send input as one bounded `input_simulate` sequence when possible. Use `capture_screenshot(target="runtime")` for visual evidence only. Always thaw and release held input during cleanup.
+Activate `playtest`, then start with `game_start(wait_for_runtime=true)`. Capture a structured baseline with `runtime_inspect_node` and `log_read`. For timing-sensitive behavior, freeze and advance with `runtime_time_control`; send input as one bounded `input_simulate` sequence when possible. Use `capture_screenshot(target="runtime")` for visual evidence only. Always thaw and release held input during cleanup.
 
 ## Safety and errors
 

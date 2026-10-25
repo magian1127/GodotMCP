@@ -9,6 +9,8 @@ GDScript examples unless the user explicitly asks for C#. When the user asks you
 build an extension, open with a one-line offer of guided design (see "Guided
 authoring mode"), then build it — the full guided flow is opt-in and never blocks.
 
+Connect this session with `godot_connect(project="<absolute Godot project path>")` before refreshing and validating extensions. Ungrouped extensions are visible after connecting; refresh and activate grouped extensions with `discover_tools(request=[extension group names], refresh_extensions=true)`. Use the host’s latest tool list; see [instances and sessions](../../docs/multi-instance.md) for notification and restart limits.
+
 ## Quick start — a complete working extension
 
 Paste this, rename the class, save it under `addons/<your_extension>/`, and
@@ -110,7 +112,7 @@ for the default* (never true/false; there is no author-facing `is_*` form).
 
 | Verb | Default (omitted) | Set it when | Consequence if wrong |
 |------|-------------------|-------------|----------------------|
-| `mark_read_only()` | tool treated as **mutating** | the tool only reads state, never writes | Omitted on a real reader: it serializes behind the mutation lock (slower under multi-session) and is excluded under `GODOT_MCP_READ_ONLY=1`. Set on a writer: its writes bypass serialization → races. |
+| `mark_read_only()` | tool treated as **mutating** | the tool only reads state, never writes | Omitted on a real reader: it serializes behind the mutation lock (slower under multi-session) and lacks a read-only hint for host filtering. Set on a writer: its writes bypass serialization → races. |
 | `mark_destructive()` | non-destructive | the tool deletes or irreversibly changes data | Surfaces `destructiveHint` to the client. **Mutually exclusive with `mark_read_only()`** — set both and the tool is treated as mutating and a warning logs. |
 | `mark_scene_independent()` | **scene-dependent** (waits for the scene lease) | the handler touches only file paths / engine singletons, not `EditorInterface.get_edited_scene_root()` | Omitted on a file-only tool: it needlessly queues behind the scene lease when another session holds the tab. Set on a scene-reading tool: it may read the wrong scene under contention. |
 | `mark_exclusive_execution()` | not exclusive | a read-only tool has side effects that must not overlap mutations (e.g. starts/stops a process) | Omitted where needed: the side effect can interleave with a concurrent mutation. Rarely needed. |
@@ -131,7 +133,7 @@ for the default* (never true/false; there is no author-facing `is_*` form).
 - `with_input_schema(schema)` — the parameter contract (JSON Schema). See the
   input-schema crib below.
 - `with_group(name, description="", keywords=[])` — puts the tool behind
-  `discover_tools` (on-demand). Ungrouped tools are eager (visible at startup).
+  `discover_tools` (on-demand). Ungrouped tools join the connected session’s surface.
   **Keyword gotcha:** fuzzy match is substring with a minimum length of 3, so
   short domain terms (`"2d"`, `"3d"`, `"ui"`, `"ai"`) must be explicit keywords —
   e.g. `with_group("my_2d_tools", "...", ["2d", "sprite", "tilemap"])`.
@@ -175,6 +177,7 @@ tool's output), wrap it so the LLM treats it as data, not instructions:
 ```gdscript
 const Untrusted = preload("res://addons/godot_mcp_toolkit/security/untrusted.gd")
 # kind + source are labels; body is the untrusted text.
+
 # JSON.stringify(...) a Dictionary/Array body before wrapping.
 return MCPToolkitSuccess.ok({
     "content": Untrusted.wrap("config", file_path, text),
@@ -285,12 +288,12 @@ the C# form: `references/cancellation.md`.
 
 Commands registered with `.with_group()` are lazily loaded — they only become
 visible to the LLM after `discover_tools` is called. Commands without a group are
-eager (visible from startup). Choose based on how specialized the tool is:
-general-purpose tools ungrouped (always available), niche tools grouped to reduce
+visible after the session connects. Choose based on how specialized the tool is:
+general-purpose tools ungrouped (available after connection), niche tools grouped to reduce
 tool-list noise.
 
 When several groups are needed, load them in a **single** `discover_tools` call —
-`discover_tools(request: ["runtime_advanced", "input_map"])`, not one call per
+`discover_tools(request: ["playtest", "project_config"])`, not one call per
 group. Each call fires a `tools/list_changed` notification that forces the LLM to
 re-fetch the whole tool list, so batching keeps that to one refresh.
 

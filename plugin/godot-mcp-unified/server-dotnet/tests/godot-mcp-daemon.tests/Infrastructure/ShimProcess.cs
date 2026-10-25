@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace GodotMcp.Daemon.Tests.Infrastructure;
 
@@ -30,6 +32,7 @@ internal sealed class ShimProcess : IDisposable
 
     /// <summary>保护 _stderr 的锁(异步事件回调与快照读取并发)。</summary>
     private readonly object _gate = new();
+    private readonly List<int> _spawnedDaemons = [];
 
     /// <summary>私有构造:由 Start 拉起进程后调用,并挂接 stderr 异步行收集(stdout 由测试逐行读取)。</summary>
     /// <param name="process">已启动的 shim 子进程(标准三流均已重定向)。</param>
@@ -43,6 +46,9 @@ internal sealed class ShimProcess : IDisposable
                 lock (_gate)
                 {
                     _stderr.AppendLine(e.Data);
+                    var spawned = Regex.Match(e.Data, @"^\[shim\] 已拉起 daemon \(pid (\d+)\)");
+                    if (spawned.Success)
+                        _spawnedDaemons.Add(int.Parse(spawned.Groups[1].Value));
                 }
             }
         };
@@ -94,7 +100,13 @@ internal sealed class ShimProcess : IDisposable
     public async Task<string> SendAsync(string json, TimeSpan timeout)
     {
         await WriteLineAsync(json);
-        return await ReadLineAsync(timeout);
+        while (true)
+        {
+            var line = await ReadLineAsync(timeout);
+            using var message = JsonDocument.Parse(line);
+            if (!message.RootElement.TryGetProperty("method", out _))
+                return line;
+        }
     }
 
     /// <summary>仅发送一行消息不等待响应(通知发送或"先发多条再收"的编排用)。</summary>
@@ -151,5 +163,23 @@ internal sealed class ShimProcess : IDisposable
         {
         }
         Process.Dispose();
+        // 测试拥有本 shim 自举出的进程；复用的外部 daemon 不在这个列表中。
+        lock (_gate)
+        {
+            foreach (var pid in _spawnedDaemons)
+            {
+                try
+                {
+                    using var daemon = Process.GetProcessById(pid);
+                    if (!daemon.HasExited)
+                    {
+                        daemon.Kill(entireProcessTree: true);
+                        daemon.WaitForExit(10000);
+                    }
+                }
+                catch (ArgumentException) { }
+                catch (InvalidOperationException) { }
+            }
+        }
     }
 }

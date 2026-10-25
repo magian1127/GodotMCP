@@ -7,10 +7,12 @@ description: 通过 MCP 驱动的确定性游玩测试验证 Godot 游戏玩法�
 
 # Godot 游玩测试
 
+先确认本会话已通过 `godot_connect(project="<Godot 项目绝对路径>")` 选择目标。未连接时只有入口工具；连接后提供 9 个核心工具，其他能力通过 `discover_tools(request=[组名], include_schemas=true)` 激活。多项目交错调用显式传 `instance`。工具路由、参数缺失与连接恢复见 [工具路由](../godot-control/references/tool-routing.md)。
+
 建立有界且可重复的证据循环。
 
-1. 记录游戏是否已经在运行。仅在需要时使用 `game_start(wait_for_runtime=true)` 启动；只停止由你启动的会话。
-2. 使用 `discover_tools(include_schemas=true)` 加载 runtime_advanced，并记录该组是否由本次测试加载。
+1. 先用 `discover_tools(request="playtest", include_schemas=true)` 激活运行时组，并记录是否由本次测试加载。
+2. 记录游戏是否已在运行。仅在需要时用 `game_start(wait_for_runtime=true)` 启动，只停止由本次测试启动的游戏。
 3. 使用 `runtime_inspect_node`、信号或 `log_read(channel="runtime")` 捕获结构化基线。将 `capture_screenshot(target="runtime")` 保留给外观验证。
 4. 对时间敏感的行为：
    - `runtime_time_control(action="freeze")`。
@@ -18,6 +20,6 @@ description: 通过 MCP 驱动的确定性游玩测试验证 Godot 游戏玩法�
    - 使用 `runtime_time_control(action="step", frames=N, report=[...])` 推进，或者使用 `action="step_until"`、`until` 和 `max_frames` 在有界条件下停止。
    - 再次推进前，检查冻结停止帧的状态。
 5. 将观察到的状态与明确的预期值比较。使用截图验证布局/外观，使用结构化状态/日志验证行为。
-6. 清理时始终解除冻结。释放按住的输入；如果本次运行启动了游戏，则停止游戏；如果 runtime_advanced 是本次测试加载且后续阶段不再需要，则使用 `discover_tools(reset=["runtime_advanced"])` 释放。
+6. 清理时始终解除冻结。释放按住的输入；如果本次运行启动了游戏，则停止游戏；如果 playtest 是本次测试加载且后续阶段不再需要，则使用 `discover_tools(reset=["playtest"])` 释放。
 
 避免盲目的墙上时钟休眠；`click_node` 可用时不要猜测坐标；对于有状态行为不要仅凭截图下结论。通过的游玩测试应说明初始条件、输入序列、帧数/条件边界和最终观察值。

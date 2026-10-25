@@ -2,7 +2,7 @@
 
 英文版：[README.en.md](README.en.md)
 
-本目录统一收纳所有"代理客户端 → Godot MCP Unified"的接入管理层。目标只有两条：**文件不重复、改动免部署**——每个客户端都直接消费仓库唯一真源 `plugin/godot-mcp-unified`，不在客户端目录里维护插件副本。
+本目录统一收纳所有"代理客户端 → Godot MCP Unified"的接入管理层。维护原则：**文件不重复、真源明确**——每个客户端都直接消费仓库唯一真源 `plugin/godot-mcp-unified`，不在客户端目录里维护插件副本。
 
 ## 通道总览
 
@@ -18,7 +18,7 @@
 - `zcode/` —— ZCode 链接/复制部署与服务发布：`link-zcode-plugin.ps1`、`sync-zcode-plugin.ps1`、`register-zcode-plugin.py`、`install-zcode-plugin.ps1`（发布 daemon+shim 到 `server-dotnet/publish/<rid>/`、校验插件根 `.mcp.json` 的 stdio 契约、迁移掉会盖住契约的用户级 http 注册）。
 - `codex/` —— Codex 链接部署：`link-codex-plugin.ps1`。
 - `vscode/` —— VS Code 项目级接入：`install-vscode-mcp.ps1`（生成 `.vscode/mcp.json`）、`mcp.json.example`（手动模板）与 `README.md`（接入指南）。
-- `dsh/` —— DSH 接入层独立仓库 `deepseek-harness-godot_unified` 与联接维护脚本 `link-dsh-plugin.ps1`：仓库本体独立版本管理与发布流程，被本仓库 `.gitignore` 排除（脚本正常跟踪）；可选的本地布局：本机 DSH 插件工作区的联接(junction)反向指向这里（`link-dsh-plugin.ps1 -LinkPath` 维护）。
+- `dsh/` —— DSH 接入层与联接脚本；接入层是本仓库普通目录，共用 Git 历史，只有其 skills/ 是指向插件技能真源的 junction。
 
 ## 为什么清单槽位不搬进本目录
 
@@ -28,7 +28,7 @@
 
 所有客户端都指向**仓库内唯一的一份**服务产物，不在各自目录里维护副本：
 
-- 落点：`plugin/godot-mcp-unified/server-dotnet/publish/<rid>/`（`godot-mcp-daemon[.exe]` + `godot-mcp-shim[.exe]`，均不依赖 .NET runtime；daemon 为自包含单文件、shim 在本机发布时为 NativeAOT，见 [server-dotnet 发布](../plugin/godot-mcp-unified/server-dotnet/README.md#发布)）。本地开发下每个 Godot 工程把 addon 目录链接到真源，因此**一次发布即服务所有工程**，无需任何搬运。
+- 落点：`plugin/godot-mcp-unified/server-dotnet/publish/<rid>/`（`godot-mcp-daemon[.exe]` + `godot-mcp-shim[.exe]`，均不依赖 .NET runtime；daemon 为自包含单文件、shim 在本机发布时为 NativeAOT，见 [server-dotnet 发布](../plugin/godot-mcp-unified/server-dotnet/README.md#构建验证与发布)）。本地开发下每个 Godot 工程把 addon 目录链接到真源，因此**一次发布即服务所有工程**，无需任何搬运。
 - 生产：`dotnet publish plugin/godot-mcp-unified/server-dotnet/src/godot-mcp-shim -c Release -p:PublishProfile=<rid>`（daemon 同理）。
 - 随包分发（把插件整份复制给别的机器）才需要把产物同步进 addon 的 `bin/<rid>/`：加 `-p:CopyPublishToAddonBin=true` 显式打开（见 `server-dotnet/Directory.Build.targets`）。
 
@@ -39,7 +39,11 @@
 ## 排障
 
 - 链接是否生效：`Get-Item <客户端缓存目录> | Select-Object LinkType, Target` 应显示 `Junction` 与真源路径。
-- 客户端默认走 **stdio + 随包 shim**（Codex / ZCode / DSH / VS Code），由 shim 自举 daemon；daemon 的 HTTP 面仍在（`Test-NetConnection 127.0.0.1 -Port 6590`），供 url 型消费者（如 DSH 的 `godot-http-bridge.mjs` 兜底桥）与临时探活使用，token 见注册表目录 `daemon-token`。
+- 所有宿主使用 stdio + 随包 shim；loopback HTTP 是 shim 后端。升级后删除旧的 HTTP 直连条目；token 由 shim 从机器级注册表读取。
 - 客户端读的是哪个文件：Codex → `.codex-plugin/mcp.json`；ZCode → 插件根 `.mcp.json`；VS Code → 工程 `.vscode/mcp.json`；DSH → `$DSH_HOME/godot/paths.json` 的 `serverDist`。四者都指向同一份 `server-dotnet/publish/<rid>/godot-mcp-shim[.exe]`。
 - ZCode 复制部署在链接态会被 `sync-zcode-plugin.ps1` 主动拒绝——先 `-Unlink` 再同步，防止 robocopy `/MIR` 穿透联接改写真源。
-- DSH 对话框 `/` 菜单的技能来自 `~/.dsh/.agent-presets/godot/skills/`：`link-dsh-plugin.ps1` 会把仓库 `plugin/godot-mcp-unified/skills/` 的每个技能维护为该处的联接（与仓库逐字节一致的旧副本自动换链，有差异则跳过并告警）；刷新 DSH 页面或新开会话即可看到。
+- DSH 技能由 Godot preset 的 dsh-skill-filesystem 行通过包内 skills/ 提供，customSkillDirs 从包 realpath 解析；旧 .agent-presets 目录已废弃。
+
+## 会话连接与验收
+
+先调用 `godot_connect`，再按本会话激活组。配置已启用、MCP 握手成功、真实编辑器调用、当前聊天工具列表更新是不同证据。宿主的重新加载入口与生效时机以实际版本为准；通知与组恢复的当前限制见 [daemon README](../plugin/godot-mcp-unified/server-dotnet/README.md)。二进制变化需要重新发布并重连进程，磁盘联接不等于运行中 daemon 已更新。

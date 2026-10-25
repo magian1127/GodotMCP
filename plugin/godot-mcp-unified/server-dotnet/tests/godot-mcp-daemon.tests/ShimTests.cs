@@ -26,6 +26,14 @@ public class ShimTests
     private const string ListenMessage =
         """{"jsonrpc":"2.0","id":"listen-1","method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{"tools":{"listChanged":true}},"io.modelcontextprotocol/clientInfo":{"name":"shim-listen-test","version":"1"}}}}""";
 
+    /// <summary>
+    /// 连接入口工具帧(ADR-0007):未连接时会话的工具面<b>只有</b> <c>godot_connect</c>,
+    /// 所以任何"经 shim 调用业务工具"的测试都必须先发它。
+    /// </summary>
+    /// <remarks>id 用 900,避开各测试自己用的 1/2/3,便于失败时一眼分辨。</remarks>
+    private const string ConnectMessage =
+        """{"jsonrpc":"2.0","id":900,"method":"tools/call","params":{"name":"godot_connect","arguments":{}}}""";
+
     /// <summary>daemon 缺席时 shim 冷启动自举:先拉起 daemon,首条调用仍成功处理。</summary>
     /// <para>
     /// Arrange:全新状态目录 + 随机端口,直接以 ShimProcess 起 shim(无 daemon 在跑)。
@@ -48,6 +56,9 @@ public class ShimTests
                 "godot-mcp-unified",
                 init.RootElement.GetProperty("result").GetProperty("serverInfo").GetProperty("name").GetString());
         }
+
+        // 先连接:未连接时工具面只有 godot_connect(ADR-0007)。
+        await shim.SendAsync(ConnectMessage, TimeSpan.FromSeconds(30));
 
         var call = await shim.SendAsync(
             """{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_instances","arguments":{}}}""",
@@ -108,6 +119,9 @@ public class ShimTests
             Assert.Equal(1, init.RootElement.GetProperty("id").GetInt32());
         }
 
+        // 先连接:未连接时工具面只有 godot_connect,下面的 editor_sync 断言会失败。
+        await shim.SendAsync(ConnectMessage, TimeSpan.FromSeconds(30));
+
         // 通知无响应:紧随其后的读应是 tools/list 的响应(id=4)。
         await shim.WriteLineAsync(InitializedNotification);
         var list = await shim.SendAsync(
@@ -118,8 +132,10 @@ public class ShimTests
             Assert.Equal(4, listDoc.RootElement.GetProperty("id").GetInt32());
             var names = listDoc.RootElement.GetProperty("result").GetProperty("tools")
                 .EnumerateArray().Select(t => t.GetProperty("name").GetString()).ToList();
+            // connect 后是 core 9(不含任何组工具)—— 组要另外激活。
             Assert.Contains("list_instances", names);
-            Assert.Contains("editor_sync", names);
+            Assert.Contains("discover_tools", names);
+            Assert.Contains("godot_connect", names);
         }
 
         // 连续两次调用,id 正确回配(双向透明的顺序保持)。
@@ -181,6 +197,10 @@ public class ShimTests
     {
         var stateDir = TestPaths.NewStateDir();
         var port = TestPorts.GetFreePort();
+        using var daemon = DaemonProcess.StartReady(new DaemonSpawnOptions
+        {
+            StateDir = stateDir, Port = port, IdleSeconds = 60,
+        });
 
         // mini client 等价:官方 SDK 的 stdio 客户端直连 shim(完整 MCP 握手 → 工具面 → 调用)。
         // 传输归 McpClient 拥有(随客户端释放关闭),此处不单独包裹 using。
@@ -197,6 +217,9 @@ public class ShimTests
             },
         });
         await using var client = await McpClient.CreateAsync(transport);
+
+        // 先连接(ADR-0007):未连接时工具面只有 godot_connect。
+        await client.CallToolAsync("godot_connect", new Dictionary<string, object?>());
 
         var tools = await client.ListToolsAsync();
         Assert.Contains(tools, t => t.Name == "list_instances");

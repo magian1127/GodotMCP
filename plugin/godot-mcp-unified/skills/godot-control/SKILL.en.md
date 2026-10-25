@@ -7,6 +7,8 @@ Language: English | [中文](SKILL.md)
 
 # Godot Control
 
+First select this session’s target with `godot_connect(project="<absolute Godot project path>")`. Before connecting, only the entry tool exists; afterward nine core tools are available. Activate other capabilities with `discover_tools(request=[group names], include_schemas=true)`. Pass `instance` when interleaving projects. See [tool routing](../godot-control/references/tool-routing.en.md) for schemas and recovery.
+
 Drive the live editor through MCP and leave the project in a verified state.
 
 ## Establish the target
@@ -17,10 +19,10 @@ Drive the live editor through MCP and leave the project in a verified state.
 
 ## Work through the smallest capable surface
 
-Use eager tools first. Activate an on-demand group with discover_tools(include_schemas=true) only for the current work phase, and track which groups this skill loaded. Keep at most three groups active; only a cross-domain task may temporarily reach five. At the end of the phase, release groups this skill loaded and the next phase no longer needs with discover_tools(reset=[...]). Read [tool-routing.md](references/tool-routing.md) when choosing among scene, resource, 2D/3D, language, or runtime tools.
+Start with the core tools after connecting. Activate this phase’s groups with `discover_tools(request=[group names], include_schemas=true)` and track groups this skill loaded. `include_schemas=true` alone browses without activating. Keep at most three groups active, or five temporarily for a cross-domain task. Release groups the next phase no longer needs with `discover_tools(reset=[...])`.
 
 - Prefer a purpose-built tool over execute_code.
-- Use Codex workspace file tools to read and patch scripts; then load editor_advanced, call editor_sync, and run script_check.
+- Use Codex workspace file tools to read and patch scripts; load `editor_ops` for `editor_sync` and `code_intel` for `script_check`.
 - Use a tool's batch input for repeated operations instead of many single calls.
 - Send project files as canonical res:// paths and save edited scenes explicitly.
 - For create operations, choose if_exists deliberately. Default to returning the existing object; replace only when the requested final state requires replacement.

@@ -28,7 +28,7 @@ import { PKG, SECTION_NAME, SECTION_ORDER } from './constants.js'
 import { resolveSettings, isGodotPreset, shouldInjectPrompt, type GodotSettings } from './injection.js'
 import { buildMountConfig, errorName, mountConfigKey, type GodotMcpConfig } from './mcp-mount.js'
 import { mountPathSettingsRoute } from './path-settings-route.js'
-import { PathStore, projectPathToDir } from './path-store.js'
+import { PathStore } from './path-store.js'
 import { loadMcpClient, loadSchemastery } from './profile-modules.js'
 import { notConfiguredSectionText, sectionText } from './section-text.js'
 import type {
@@ -64,6 +64,8 @@ interface GodotSchemaFactory {
   object(shape: Record<string, unknown>): unknown
   boolean(): GodotSchemaField
   string(): GodotSchemaField
+  /** 数值字段（schemastery 的 `number()`）；旧版没有该成员，调用点用可选兜底。 */
+  number?(): GodotSchemaField
 }
 
 function markVolatile(field: GodotSchemaField): GodotSchemaField {
@@ -100,6 +102,14 @@ export const Config =
         zhPrompt: markVolatile(configSchemaFactory.boolean().default(false)),
         godotServerDist: markVolatile(configSchemaFactory.string().default('')),
         godotProjectPath: markVolatile(configSchemaFactory.string().default('')),
+        // 宿主层预算(毫秒)。必须 > shim 的 210s:否则慢调用会先被宿主掐断,
+        // 拿不到 daemon 给出的清晰超时说明。改它会触发重挂(mountConfigKey 含它)。
+        // 旧版 schemastery 没有 number():退化成字符串字段,resolveSettings 两者都接受。
+        toolCallTimeoutMs: markVolatile(
+          typeof configSchemaFactory.number === 'function'
+            ? configSchemaFactory.number().default(240_000)
+            : configSchemaFactory.string().default('240000'),
+        ),
       })
 
 /**
@@ -186,21 +196,23 @@ export function apply(ctx: HostContext, config: Record<string, unknown> = {}): v
   let current: GodotSettings = resolveSettings(readSettingsSnapshot())
   let stopped = false
 
-  // ---- 路径存储(跨会话持久):serverDist 全局单值 + 项目路径按 cwd 批量条目。 ----
+  // ---- 路径存储:只保留 serverDist(服务器安装位置)。 ----
+  //
+  // 项目路径表已经删掉:一个工作区常有多个 Godot 项目,而查表只能给一个;
+  // 会话要连别的项目还得先去配置页改表。现在目标由 daemon 侧解析
+  // (godot_connect 的 project 参数 → 本会话默认目标 → shim 上报的 x-godot-cwd
+  // 下的 project.godot → 唯一活跃实例),插件只负责告诉服务器 cwd。
   const pathStore = new PathStore()
-  /** 按「会话 cwd」解析生效路径:serverDist 全局单值,projectPath 按 cwd 查表,
-   *  无匹配时若 paths.json 只有**唯一**项目条目则以其兜底(常见:会话 cwd 非 Godot
-   *  项目目录但全机只配了一个项目),否则回退全局设置。 */
-  function resolvePathsFor(cwd: string | undefined): { godotServerDist: string; godotProjectPath: string } {
-    const projects = pathStore.getConfig().projects
-    const sole = projects.length === 1 ? projects[0]!.projectPath : undefined
-    const projectPath = pathStore.getProjectPath(cwd)
-      ?? sole
-      ?? current.godotProjectPath
+  /**
+   * 解析生效的服务器安装路径(全局单值,与项目路径无关)。
+   *
+   * 参数 `cwd` 保留只为兼容既有调用点 —— 项目路径不再按 cwd 查表。
+   */
+  function resolvePathsFor(_cwd: string | undefined): { godotServerDist: string; godotProjectPath: string } {
     return {
       godotServerDist: pathStore.getServerDist() ?? current.godotServerDist,
-      // 设置卡/手填可能带 project.godot 文件后缀:统一归一化为项目目录(注册表键形状)。
-      godotProjectPath: projectPathToDir(projectPath),
+      // 保留字段以兼容既有调用点;恒为空串 —— 目标不再由插件决定。
+      godotProjectPath: '',
     }
   }
 
@@ -364,6 +376,8 @@ export function apply(ctx: HostContext, config: Record<string, unknown> = {}): v
           dist: paths.godotServerDist,
           projectPath: paths.godotProjectPath,
           cwd,
+          // 宿主层预算(240s):三层阶梯的最高层,必须大于 shim 的 210s。
+          toolCallTimeoutMs: current.toolCallTimeoutMs,
         })
       } catch (error) {
         warn(`[${PKG}] Godot MCP 配置组装失败,跳过挂载(错误类型: ${errorName(error)})`)
@@ -466,6 +480,7 @@ export function apply(ctx: HostContext, config: Record<string, unknown> = {}): v
         projectPath: paths.godotProjectPath,
         // 原版模式没有"当前会话":用宿主进程工作目录作子进程 cwd。
         cwd: process.cwd(),
+        toolCallTimeoutMs: current.toolCallTimeoutMs,
       })
     } catch (error) {
       disposeRootMount()
@@ -511,7 +526,9 @@ export function apply(ctx: HostContext, config: Record<string, unknown> = {}): v
     const mount = (mountCtx: HostContext): void => {
       const disposeRoute = mountPathSettingsRoute(mountCtx, {
         pathStore,
-        serverDistPath: current.godotServerDist,
+        // 传 **getter** 而不是值:按值传入会在挂载那一刻钉死 config 快照,
+        // `current` 之后被 volatile 更新重赋值也不会反映到这里。
+        serverDistPath: () => current.godotServerDist,
         projectPath: current.godotProjectPath,
         warn,
       })

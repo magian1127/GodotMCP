@@ -22,8 +22,16 @@ export interface GodotSettings {
   zhPrompt: boolean
   /** GodotMCP server 入口完整路径(空=未配置,Godot 会话不会挂载 MCP)。 */
   godotServerDist: string
-  /** Godot 项目路径(作为 GODOT_MCP_PROJECT_PATH 传给 server;会话 cwd 无匹配时兜底)。 */
+  /** Godot 项目路径。**已废弃**：目标改由 daemon 侧解析，插件不再注入 `GODOT_MCP_PROJECT_PATH`；保留字段只为不让旧配置报错。 */
   godotProjectPath: string
+  /**
+   * 单次工具调用超时（毫秒）。
+   *
+   * 这是三层预算阶梯里**宿主那一层**：daemon 长工具 180s < shim 210s < 宿主。
+   * 必须大于 shim 的预算，否则慢调用会先被宿主掐断、拿不到 daemon 给出的清晰超时说明。
+   * 改它会触发重挂（已纳入 mountConfigKey）。
+   */
+  toolCallTimeoutMs: number
 }
 
 export const SETTINGS_DEFAULTS: GodotSettings = {
@@ -32,6 +40,7 @@ export const SETTINGS_DEFAULTS: GodotSettings = {
   zhPrompt: false,
   godotServerDist: '',
   godotProjectPath: '',
+  toolCallTimeoutMs: 240_000,
 }
 
 /** 逐键校验;布尔回退默认,字符串保留(trim 由调用方处理),非法形状回退默认。 */
@@ -45,12 +54,22 @@ export function resolveSettings(raw: unknown): GodotSettings {
     const value = source[key]
     return typeof value === 'string' ? value : SETTINGS_DEFAULTS[key]
   }
+  // 超时接受 number 或数字字符串(配置表单的输入框给出的是字符串)。
+  // 非法/非正数回退默认;上限 900s —— 再长就失去了"及时失败"的意义。
+  const timeoutOrDefault = (): number => {
+    const raw = source.toolCallTimeoutMs
+    const parsed = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : Number.NaN
+    return Number.isFinite(parsed) && parsed > 0
+      ? Math.min(Math.round(parsed), 900_000)
+      : SETTINGS_DEFAULTS.toolCallTimeoutMs
+  }
   return {
     injectLegacyMode: booleanOr('injectLegacyMode'),
     promptGuidance: booleanOr('promptGuidance'),
     zhPrompt: booleanOr('zhPrompt'),
     godotServerDist: stringOr('godotServerDist'),
     godotProjectPath: stringOr('godotProjectPath'),
+    toolCallTimeoutMs: timeoutOrDefault(),
   }
 }
 
