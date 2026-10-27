@@ -82,6 +82,8 @@ interface CtxOptions {
   alwaysReject?: boolean
   noAgentsService?: boolean
   webServer?: unknown
+  /** 直连端点的测试注入(等价于宿主提供的 `godotDaemonEndpointProvider`)。 */
+  endpointProvider?: (serverDist: string) => Promise<{ baseUrl: string; token: string } | undefined>
 }
 
 function makeCtx(options: CtxOptions = {}) {
@@ -169,6 +171,8 @@ function makeCtx(options: CtxOptions = {}) {
         return { composedPreset: (agentCtx?: { presetId?: string }) => agentCtx?.presetId }
       }
       if (service === 'webServer') return options.webServer
+      // 直连端点注入点:真实运行没有这个服务(走 daemon-endpoint 的真实探测)。
+      if (service === 'godotDaemonEndpointProvider') return options.endpointProvider
       return undefined
     },
     plugin(plugin: unknown, config?: unknown): FakeFiber {
@@ -197,6 +201,9 @@ function makeCtx(options: CtxOptions = {}) {
 const MOUNTED_SETTINGS = {
   godotServerDist: 'D:/gmcp/godot-mcp-shim.exe',
   godotProjectPath: 'D:/game',
+  // 测试默认关掉直连:真实探测会碰本机 loopback 端口(token/daemon 状态随机器变化),
+  // 会让断言"挂不挂、挂什么"变得不确定。直连路径由专门的用例用注入 provider 覆盖。
+  transportMode: 'stdio',
 }
 
 test('模块导出形状', () => {
@@ -288,7 +295,7 @@ test('原版模式:host 作用域挂一个共享连接 + 全局 section,不再�
 })
 
 test('原版模式 + 未配置 server 入口:全局提示词是"未配置"而不是完整工作流', () => {
-  const ctx = makeCtx({ settings: { injectLegacyMode: true } })
+  const ctx = makeCtx({ settings: { injectLegacyMode: true, transportMode: 'stdio' } })
   apply(ctx as never, ctx.configRef)
   assert.equal(ctx.sections.length, 1)
   assert.ok(ctx.sections[0]!.text().includes('Godot MCP is not connected'), '没有工具时不得教模型调用工具')
@@ -432,4 +439,124 @@ test('apply:webServer 缺席时不挂路由(不报错)', () => {
   assert.deepEqual(ctx.state.injectDeps, ['webServer'])
   ctx.state.injectCb!()
   assert.equal(ctx.routes.length, 0)
+})
+
+// ---------------------------------------------------------------------------
+// 直连通路(streamable-http):每会话零子进程,工具面靠 daemon 会话键隔离。
+// 测试用 provider 注入端点,不碰真实 daemon / 真实 token。
+// ---------------------------------------------------------------------------
+
+const DAEMON_ENDPOINT = { baseUrl: 'http://127.0.0.1:6590/', token: 'tok-test' }
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
+/** 等端点就绪回调(一次微任务链 + 一次 resyncAll)跑完。 */
+async function settleEndpoint(): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, 20))
+}
+
+function httpConfigOf(ctx: ReturnType<typeof makeCtx>, index = 0): Record<string, any> {
+  return ctx.agentPlugins[index]!.config as Record<string, any>
+}
+
+test('直连:端点就绪后挂 streamable-http(会话键 + cwd 头 + 失败关闭)', async () => {
+  const ctx = makeCtx({
+    agents: [{ presetId: 'godot', id: 's1', cwd: 'D:/game' }],
+    settings: { ...MOUNTED_SETTINGS, transportMode: 'auto' },
+    endpointProvider: async () => DAEMON_ENDPOINT,
+  })
+  apply(ctx as never, ctx.configRef)
+  await settleEndpoint()
+  await ctx.emit('agent/created', { agent: ctx.agents[0] })
+
+  assert.equal(ctx.agentPlugins.length, 1)
+  const config = httpConfigOf(ctx)
+  assert.equal(config.transport, 'streamable-http')
+  assert.equal(config.url, 'http://127.0.0.1:6590/')
+  assert.equal(config.headers.authorization, 'Bearer tok-test')
+  // 默认 session 作用域:按会话 id 派生 UUID 形状键(与上游 shim 同形)。
+  assert.match(String(config.headers['x-godot-session']), UUID_PATTERN)
+  assert.equal(config.headers['x-godot-cwd'], 'uri:D%3A%2Fgame')
+  assert.equal(config.failOnStartupError, false)
+  assert.equal(config.toolCallTimeoutMs, 240_000)
+})
+
+test('直连:同一会话重复 agent/created 幂等(会话键稳定,不重挂)', async () => {
+  const ctx = makeCtx({
+    agents: [{ presetId: 'godot', id: 's1', cwd: 'D:/game' }],
+    settings: { ...MOUNTED_SETTINGS, transportMode: 'http' },
+    endpointProvider: async () => DAEMON_ENDPOINT,
+  })
+  apply(ctx as never, ctx.configRef)
+  await settleEndpoint()
+  await ctx.emit('agent/created', { agent: ctx.agents[0] })
+  const key = httpConfigOf(ctx).headers['x-godot-session']
+  await ctx.emit('agent/created', { agent: { ...ctx.agents[0] } })
+  assert.equal(ctx.agentPlugins.length, 1, '配置身份键一致 → 不重挂')
+  assert.equal(httpConfigOf(ctx).headers['x-godot-session'], key)
+})
+
+test('直连不可用(auto):回退 stdio 挂载', async () => {
+  const ctx = makeCtx({
+    agents: [{ presetId: 'godot', id: 's1', cwd: 'D:/game' }],
+    settings: { ...MOUNTED_SETTINGS, transportMode: 'auto' },
+    endpointProvider: async () => undefined,
+  })
+  apply(ctx as never, ctx.configRef)
+  await settleEndpoint()
+  await ctx.emit('agent/created', { agent: ctx.agents[0] })
+  assert.equal(ctx.agentPlugins.length, 1)
+  assert.equal((ctx.agentPlugins[0]!.config as Record<string, any>).transport, 'stdio')
+})
+
+test('会话键作用域 project:同项目(大小写/尾斜杠归一)共享一个键', async () => {
+  const ctx = makeCtx({
+    agents: [
+      { presetId: 'godot', id: 's1', cwd: 'D:/game/proj' },
+      { presetId: 'godot', id: 's2', cwd: 'D:\\Game\\Proj\\' },
+    ],
+    settings: { ...MOUNTED_SETTINGS, transportMode: 'http', sessionKeyScope: 'project' },
+    endpointProvider: async () => DAEMON_ENDPOINT,
+  })
+  apply(ctx as never, ctx.configRef)
+  await settleEndpoint()
+  await ctx.emit('agent/created', { agent: ctx.agents[0] })
+  await ctx.emit('agent/created', { agent: ctx.agents[1] })
+  const keys = ctx.agentPlugins.map(record => (record.config as Record<string, any>).headers['x-godot-session'])
+  assert.equal(keys.length, 2)
+  assert.equal(keys[0], keys[1], '同项目 → 同一个 daemon 会话键')
+})
+
+test('会话键作用域默认 session:同项目不同会话各一个键(新会话不继承工具面)', async () => {
+  const ctx = makeCtx({
+    agents: [
+      { presetId: 'godot', id: 's1', cwd: 'D:/game/proj' },
+      { presetId: 'godot', id: 's2', cwd: 'D:/game/proj' },
+    ],
+    settings: { ...MOUNTED_SETTINGS, transportMode: 'http' },
+    endpointProvider: async () => DAEMON_ENDPOINT,
+  })
+  apply(ctx as never, ctx.configRef)
+  await settleEndpoint()
+  await ctx.emit('agent/created', { agent: ctx.agents[0] })
+  await ctx.emit('agent/created', { agent: ctx.agents[1] })
+  const keys = ctx.agentPlugins.map(record => (record.config as Record<string, any>).headers['x-godot-session'])
+  assert.equal(keys.length, 2)
+  assert.notEqual(keys[0], keys[1], '不同会话 → 不同键 → 各自从 1 个工具起步')
+})
+
+test('transportMode=stdio:完全不探测 daemon 端点', async () => {
+  let calls = 0
+  const ctx = makeCtx({
+    agents: [{ presetId: 'godot', id: 's1', cwd: 'D:/game' }],
+    settings: { ...MOUNTED_SETTINGS, transportMode: 'stdio' },
+    endpointProvider: async () => {
+      calls += 1
+      return DAEMON_ENDPOINT
+    },
+  })
+  apply(ctx as never, ctx.configRef)
+  await settleEndpoint()
+  await ctx.emit('agent/created', { agent: ctx.agents[0] })
+  assert.equal(calls, 0)
+  assert.equal((ctx.agentPlugins[0]!.config as Record<string, any>).transport, 'stdio')
 })

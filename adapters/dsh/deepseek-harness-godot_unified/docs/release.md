@@ -3,14 +3,16 @@
 中文 | [English](release.en.md)
 
 
-## 当前未发布变更：会话工具面
+## 当前未发布变更：直连 daemon（0.6.0）
 
 本节覆盖下面版本历史中的旧行为，历史条目保留为迁移记录。
 
-- 所有宿主使用随包 stdio shim，升级后清理旧 HTTP 直连；新键先 godot_connect，再按 17 组扩面。
+- **新增直连传输**：`transportMode=auto`（默认）在 daemon 支持 2026-07-28 时直连 `streamable-http`，每会话不再 spawn shim（全机只剩 daemon，约 85MB；旧方案每会话多 12–13MB）；旧版 daemon、端口不通、无 token 时回退 stdio。`http` 强制直连（不可用仍回退并 warn），`stdio` 永远走 shim。
+- **新增会话键作用域**：`sessionKeyScope=session`（默认）每会话独立 —— 新会话首次 tools/list 只有 godot_connect（实测同键新连接会继承 11 个工具，这正是默认不用 project 的原因）；`project` 按项目共享默认目标与激活组。
+- **修掉超时不重挂缺口**：挂载身份键统一为 `mountConfigKey`（stdio/http 各自前缀），改超时、切换传输、token 轮换、键作用域变化都会重挂。
+- 直连时插件从机器级状态目录读 daemon token（Windows `%APPDATA%/godot-mcp-toolkit`，可用 `GODOT_MCP_DAEMON_STATE_DIR` 覆盖），只进内存 headers，不落配置/日志；端口 6590（`GODOT_MCP_DAEMON_PORT`）。daemon 未运行时从 serverDist 同目录 detach 自举。
 - 不再注入项目路径环境变量，paths.json 只使用 serverDist，projects 为空；CLI --project 仍用于校验。
-- toolCallTimeoutMs 默认 240000ms；当前超时单改不重挂既有按会话连接，新会话读取新值。
-- 当前通知恢复、组替换/重放、常驻 schema、debug/eager 与在途目标存在已复现限制。以 [daemon README](../../../../plugin/godot-mcp-unified/server-dotnet/README.md) 为准，不能仅凭现有单测全绿声明发布完成。
+- 直连依赖 daemon 的 2026 stateless 面 + `subscriptions/listen` 长流；旧版 daemon 只能走 stdio。当前通知恢复、组替换/重放、常驻 schema、debug/eager 与在途目标存在已复现限制。以 [daemon README](../../../../plugin/godot-mcp-unified/server-dotnet/README.md) 为准，不能仅凭现有单测全绿声明发布完成。
 - 发布前除 typecheck/build/test/verify，还需真实宿主验证初始入口、connect 后目录自动更新、组变更、重启恢复、截图附件；五宿主 × 版本与混跑矩阵尚未完成。
 
 
@@ -93,6 +95,17 @@ npx -y deepseek-harness-godot_unified ...                      # CLI(需要本�
   - `src/tests/preset-patch.test.mts` 新增两条守护（不得有 `{{cwd}}`/`suffix`/`backgroundMode`；`time-context`+`tool-schedule` 必须在场）。
 - 环境要求：DeepSeek Harness `>=0.2.0-rc.2 <0.3.0-0`；Node.js `^22.19.0 || >=24.0.0`。
 - 验证状态：`npm run typecheck` / `npm test`（90 例）/ `npm run verify` 全绿；`dsh --profile web --dump-config` 组合校验通过（`preset-godot` 含新增两行、subagent 行已无 `backgroundMode`）；`check-engines-dsh.mjs` 正向退出 0、负向（`0.1.7-alpha.2`/`0.2.0-rc.1`/`0.3.0`）退出 1。**未执行**：GUI 内 Godot preset 会话的实际工具调用验收（需用户环境，且本包运行于已启动的 `dsh web`）。
+
+### 0.6.0（2026-10）
+
+- **新增直连传输（默认）**：`transportMode=auto` 在 daemon 的 2026-07-28 面可用时用 `streamable-http` 直连（`http://127.0.0.1:6590/`），每会话不再 spawn shim 子进程；`http` 强制直连、`stdio` 回退 shim。旧版 daemon、端口不通、无 token 时自动回退 stdio。
+- **新增 `src/daemon-endpoint.ts`**：端口/状态目录/token 解析、detach 自举、`server/discover` 验 2026-07-28、会话键派生（UUID v5 形状）、`x-godot-cwd` 编码；全部可注入依赖，零真实 daemon 依赖的测试覆盖。
+- **新增会话键作用域**：`sessionKeyScope=session`（默认，按会话 id 派生，新会话 1 个工具起步，重连保留工具面）/ `project`（按 cwd 派生，同项目共享目标与组，新会话继承工具面）。
+- **并发与幂等**：`syncAgent` 按会话 id 串行化（`syncInFlight`）——等端点必须让出，否则并发调用会各挂一次；端点就绪只触发一次 `resyncAll` 重挂。
+- **修掉超时不重挂**：挂载身份键统一为 `mountConfigKey`（stdio/http 前缀区分），改超时/切传输/token 轮换/键作用域变化都重挂。
+- **凭据边界**：daemon token 只读入内存 headers；诊断只记固定文案与 `error.name`，不记 config/headers。
+- **测试**：新增 `daemon-endpoint.test.mts`（14 例）；`mcp-mount.test.mts` 增补 http 分支 4 例；`plugin-smoke.test.mts` 增补直连 6 例；共 93 例全绿。
+- 验证状态：`npm run typecheck` / `npm test`（93 例）/ `npm run verify` 全绿；另用构建产物 `lib/index.js` + 真实本机 daemon 做过一次直连挂载实测（`streamable-http`、UUID 会话键、中文 cwd 头、`tools/list` 返回 `godot_connect`）。**未执行**：GUI 内 Godot preset 会话的工具调用与截图附件验收（需在已启动的 `dsh web` 与运行中的 Godot 编辑器上确认）。
 
 ### 0.5.0（2026-10）
 

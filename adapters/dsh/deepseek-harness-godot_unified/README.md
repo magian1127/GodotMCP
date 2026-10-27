@@ -6,15 +6,16 @@
 
 ## 当前行为
 
-- 默认只有 Godot preset 会话挂载。每个 Agent 作用域持有一个 stdio shim，会话键、默认目标与激活组各自独立；子代理也各有连接。工具命名为 `mcp__<serverName>__<原生名>`，默认入口 `mcp__godot__godot_connect`。
+- 默认只有 Godot preset 会话挂载。默认 `transportMode=auto`：daemon 的 2026-07-28 面可用时**直连 `streamable-http`**，每会话不再起转发进程（全机只有 daemon 一个服务，约 85 MB；旧方案每会话多一个 12–13 MB 的 shim）；daemon 不可用或为旧版本时回退 stdio shim。会话键、默认目标与激活组仍各自独立；子代理也各有连接。工具命名为 `mcp__<serverName>__<原生名>`，默认入口 `mcp__godot__godot_connect`。
 - 首次只有 godot_connect；调用后提供 9 个核心工具和本会话激活的组。目录共 17 个内置组；工具/schema 来自 server，插件不缓存或硬编码工具表。
 - 插件只传会话 cwd，**不再注入项目路径环境变量**。目标由 godot_connect(project/instance) 选择，省略时 daemon 使用本键默认目标、cwd 本层 project.godot、唯一活跃实例。
 - paths.json 仅使用全局 serverDist。旧 projects 条目和 godotProjectPath 设置不参与路由；兼容的数据类与 API 结构仍保留。CLI install 仍要求 --project 作项目有效性校验，不会把它持久绑定给会话。
-- 挂载在会话创建时发生，不等于已连接到项目。空白会话可切预设；首轮之后 DSH 拒绝换预设。创建最多等 10 秒工具就绪，失败只 warn，failOnStartupError=false。
-- 原版模式 injectLegacyMode 使用 **host 上一个共享连接**：所有会话共享它的键、目标和组，不能解释成每会话隔离。
-- 宿主默认工具超时 **240000ms**，设置名 toolCallTimeoutMs；shim 默认 210 秒，daemon 长工具单次 wire 默认 180 秒。现有按会话挂载单改超时不会重挂，需新建会话读取新值；提示词开关只改文本。
+- 挂载在会话创建时发生，不等于已连接到项目。空白会话可切预设；首轮之后 DSH 拒绝换预设。创建最多等 10 秒工具就绪（端点准备最多占 1.2 秒），失败只 warn，failOnStartupError=false。
+- 原版模式 injectLegacyMode 使用 **host 上一个共享连接**：所有会话共享它的键、目标和组，不能解释成每会话隔离。直连时它就是 host 上的一条 HTTP 连接，零子进程。
+- **daemon 会话键作用域** `sessionKeyScope`：默认 `session`，键由 DSH 会话 id 派生 —— 新会话总是从 1 个工具（godot_connect）起步，会话之间互不影响，同一会话断线重连保留已激活的工具面；`project` 时键由 cwd 派生，同项目会话共享默认目标与激活组，**新会话会继承已展开的工具面**（实测同键新连接首次 listTools 就是 11 个）。
+- 宿主默认工具超时 **240000ms**，设置名 toolCallTimeoutMs；shim 默认 210 秒，daemon 长工具单次 wire 默认 180 秒。超时参与挂载身份键，改动会重挂；提示词开关只改文本。
 
-通知与完整恢复取决于双方协议实现。当前 shim 已支持 legacy 内部通知及重连；现代宿主 listen 的重放仍未完成；TTL=0 不能证明每轮自动重拉。详细行为、恢复和已知限制见 [behavior.md](docs/behavior.md) 与 [daemon README](../../../plugin/godot-mcp-unified/server-dotnet/README.md)。
+通知与完整恢复取决于双方协议实现。直连使用 daemon 的 2026-07-28 stateless 面与 `subscriptions/listen` 长流（不依赖 shim 的 legacy 通知适配）；回退 stdio 时沿用 shim 的 legacy 通知与重连。TTL=0 不能证明每轮自动重拉。详细行为、恢复和已知限制见 [behavior.md](docs/behavior.md) 与 [daemon README](../../../plugin/godot-mcp-unified/server-dotnet/README.md)。
 
 ## 安装与升级
 
@@ -50,12 +51,14 @@ node bin/dsh-godot.mjs install --profile web   --project "<Godot 项目>"   --se
 | injectLegacyMode | false | host 共享连接，关闭时按 Godot 会话挂载 |
 | promptGuidance | true | 是否注入工作流提示词 |
 | zhPrompt | false | 工作流提示词语言，不改变 server 描述 |
-| godotServerDist | 空 | paths.json 无有效 serverDist 时的入口兜底 |
+| transportMode | auto | auto = 能直连就直连、否则回退 shim；http = 强制直连（不可用仍回退并 warn）；stdio = 永远走 shim |
+| sessionKeyScope | session | session = 每会话独立（新会话 1 个工具）；project = 按项目共享目标与激活组（新会话继承工具面） |
+| godotServerDist | 空 | paths.json 无有效 serverDist 时的入口兜底；直连时用它的同目录推导 daemon 可执行文件 |
 | toolCallTimeoutMs | 240000 | 毫秒；正数/数字字符串，解析时上限 900000；无效值回默认 |
 
 路径设置 GET/POST /godot-config/api/path-settings 只持久化 serverDist；GET projects 恒为空，POST 忽略 projects。路由仅本机回环和同源可用，405/413/400 对应方法、大小与 JSON 失败。旧项目字段保留兼容形状，不代表仍有项目映射。
 
-CLI 与页面写入 `$DSH_HOME/godot/paths.json`，它是机器本地配置。host 按 mtime 重读；单改磁盘文件不意味着既有挂载已经重建。凭据由 daemon/shim 管理，本包不处理 token。
+CLI 与页面写入 `$DSH_HOME/godot/paths.json`，它是机器本地配置。host 按 mtime 重读；单改磁盘文件不意味着既有挂载已经重建。直连时插件从机器级状态目录（Windows `%APPDATA%/godot-mcp-toolkit`，可用 `GODOT_MCP_DAEMON_STATE_DIR` 覆盖）读取 daemon token，只存在于内存 headers，**不写入配置、日志或会话记录**；用户无需手工配置。端口默认 6590，`GODOT_MCP_DAEMON_PORT` 可覆盖。
 
 ## 验证与卸载
 

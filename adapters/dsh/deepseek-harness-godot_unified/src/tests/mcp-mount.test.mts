@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  buildHttpMountConfig,
   buildMountConfig,
   buildSpawnPlan,
   errorName,
@@ -97,4 +98,77 @@ test('errorName:只取类型名,不回显 message', () => {
   assert.equal(errorName({ name: 'ValidationError', message: 'x' }), 'ValidationError')
   assert.equal(errorName('boom'), 'Error')
   assert.equal(errorName(undefined), 'Error')
+})
+
+// ---------------------------------------------------------------------------
+// streamable-http 分支:直连 daemon,每会话零子进程;工具面靠 x-godot-session 隔离。
+// ---------------------------------------------------------------------------
+
+test('buildHttpMountConfig:直连 Config 形状(会话键 + cwd 头 + 失败关闭)', () => {
+  const config = buildHttpMountConfig({
+    serverName: 'godot',
+    baseUrl: 'http://127.0.0.1:6590/',
+    token: 'tok-abc',
+    sessionKey: 'aaaaaaaa-bbbb-5ccc-8ddd-eeeeeeeeeeee',
+    cwd: 'D:/game',
+  })
+  assert.deepEqual(config, {
+    transport: 'streamable-http',
+    serverName: 'godot',
+    url: 'http://127.0.0.1:6590/',
+    headers: {
+      authorization: 'Bearer tok-abc',
+      'x-godot-session': 'aaaaaaaa-bbbb-5ccc-8ddd-eeeeeeeeeeee',
+      'x-godot-shim-version': 'dsh-godot',
+      'x-godot-cwd': 'uri:D%3A%2Fgame',
+    },
+    toolCallTimeoutMs: DEFAULT_TOOL_CALL_TIMEOUT_MS,
+    failOnStartupError: false,
+  })
+})
+
+test('buildHttpMountConfig:cwd 空则不设 x-godot-cwd;超时可覆盖', () => {
+  const config = buildHttpMountConfig({
+    serverName: 'godot',
+    baseUrl: 'http://127.0.0.1:6590/',
+    token: 'tok',
+    sessionKey: 'k',
+    cwd: '   ',
+    toolCallTimeoutMs: 1000,
+  })
+  assert.equal('x-godot-cwd' in config.headers, false)
+  assert.equal(config.toolCallTimeoutMs, 1000)
+})
+
+test('buildHttpMountConfig:非法 serverName / 空端点 / 空 token / 空会话键直接抛错', () => {
+  const base = { serverName: 'godot', baseUrl: 'http://127.0.0.1:6590/', token: 't', sessionKey: 'k' }
+  assert.throws(() => buildHttpMountConfig({ ...base, serverName: 'bad name!' }), /serverName/)
+  assert.throws(() => buildHttpMountConfig({ ...base, baseUrl: '  ' }), /端点/)
+  assert.throws(() => buildHttpMountConfig({ ...base, token: '  ' }), /token/)
+  assert.throws(() => buildHttpMountConfig({ ...base, sessionKey: ' ' }), /会话键/)
+})
+
+test('mountConfigKey:stdio 与 http 前缀不同;端点/token/会话键变化即不同', () => {
+  const stdio = buildMountConfig({ serverName: 'godot', dist: 'D:/a.exe', projectPath: 'D:/game', cwd: 'D:/game' })
+  const http = buildHttpMountConfig({
+    serverName: 'godot', baseUrl: 'http://127.0.0.1:6590/', token: 't', sessionKey: 'k', cwd: 'D:/game',
+  })
+  assert.notEqual(mountConfigKey(stdio), mountConfigKey(http))
+
+  const again = buildHttpMountConfig({
+    serverName: 'godot', baseUrl: 'http://127.0.0.1:6590/', token: 't', sessionKey: 'k', cwd: 'D:/game',
+  })
+  assert.equal(mountConfigKey(http), mountConfigKey(again))
+
+  // token 轮换必须触发重挂(它写在已挂载连接的 headers 里)。
+  const rotated = buildHttpMountConfig({
+    serverName: 'godot', baseUrl: 'http://127.0.0.1:6590/', token: 't2', sessionKey: 'k', cwd: 'D:/game',
+  })
+  assert.notEqual(mountConfigKey(http), mountConfigKey(rotated))
+
+  // 会话键作用域变化(session ↔ project)同样重挂。
+  const otherKey = buildHttpMountConfig({
+    serverName: 'godot', baseUrl: 'http://127.0.0.1:6590/', token: 't', sessionKey: 'k2', cwd: 'D:/game',
+  })
+  assert.notEqual(mountConfigKey(http), mountConfigKey(otherKey))
 })

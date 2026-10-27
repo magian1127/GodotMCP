@@ -624,8 +624,9 @@ static func _read_marker_file(path: String) -> Dictionary:
 
 
 ## 尽力挂载探针:先用"根下恰一个 .csproj"做安静守卫(GDScript-only 项目
-## 从不进入加载分支);C# 脚本资源在宿主程序集未含该类时 new() 返回 null,
-## 同样安静跳过(首次安装探针后需一次编辑器重启 + 一次构建进入程序集)。
+## 从不进入加载分支);C# 脚本资源在宿主程序集未含该类时
+## get_instance_base_type() 为空,同样安静跳过(首次安装探针后需一次编辑器
+## 重启 + 一次构建进入程序集)。
 static func _mount_probe(host: Node) -> void:
 	if host == null or _probe != null:
 		return
@@ -637,7 +638,15 @@ static func _mount_probe(host: Node) -> void:
 	var script: Variant = load(probe_res)
 	if script == null or not script is Script:
 		return
-	var instance: Variant = (script as Script).new()
+	# A CSharpScript resource is also created when the source file is not part
+	# of the host .csproj. In that state it has no native base type and calling
+	# `new()` raises "Nonexistent function 'new' in base 'CSharpScript'".
+	# `get_instance_base_type()` is a side-effect-free readiness check; only
+	# call `can_instantiate()`/`new()` after the host assembly supplied the type.
+	var csharp_script := script as Script
+	if csharp_script.get_instance_base_type().is_empty() or not csharp_script.can_instantiate():
+		return
+	var instance: Variant = csharp_script.new()
 	if instance == null or not instance is Node:
 		return
 	_probe = instance

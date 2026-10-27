@@ -12,6 +12,27 @@
 
 import { GODOT_PRESET_ID } from './constants.js'
 
+/**
+ * MCP 传输模式。
+ *
+ * - `auto`(默认):daemon 的 2026-07-28 面可用就**直连 HTTP**(每会话零子进程),
+ *   否则回退 stdio(shim)。回退只发生在"旧版 daemon / daemon 起不来"时。
+ * - `http`:强制直连;端点不可用时仍回退 stdio 并记一条 warn(宁可多一个进程,
+ *   也不让会话完全没有工具)。
+ * - `stdio`:永远走 shim(保留给旧版本或需要 shim 协议适配的场景)。
+ */
+export type TransportMode = 'auto' | 'http' | 'stdio'
+
+/**
+ * daemon 会话键的作用域(决定"工具面是否跨会话共享")。
+ *
+ * - `session`(默认):由 DSH 会话 id 派生。每个会话从默认的 1 个工具
+ *   (`godot_connect`)起步,互不影响;同一会话断线重连保留已激活的工具面。
+ * - `project`:由会话 cwd 派生。同一项目的所有会话共享默认目标与激活组 ——
+ *   新会话会**继承**别的会话展开后的工具面(这是共享的代价)。
+ */
+export type SessionKeyScope = 'session' | 'project'
+
 /** 设置(插件行 config;host 与 client 共用默认值语义)。 */
 export interface GodotSettings {
   /** 原版模式:host 作用域挂一个共享连接,所有会话可见。 */
@@ -24,6 +45,10 @@ export interface GodotSettings {
   godotServerDist: string
   /** Godot 项目路径。**已废弃**：目标改由 daemon 侧解析，插件不再注入 `GODOT_MCP_PROJECT_PATH`；保留字段只为不让旧配置报错。 */
   godotProjectPath: string
+  /** 传输模式:直连 daemon / shim / 自动。 */
+  transportMode: TransportMode
+  /** daemon 会话键作用域:每会话隔离 或 按项目共享。 */
+  sessionKeyScope: SessionKeyScope
   /**
    * 单次工具调用超时（毫秒）。
    *
@@ -40,6 +65,8 @@ export const SETTINGS_DEFAULTS: GodotSettings = {
   zhPrompt: false,
   godotServerDist: '',
   godotProjectPath: '',
+  transportMode: 'auto',
+  sessionKeyScope: 'session',
   toolCallTimeoutMs: 240_000,
 }
 
@@ -53,6 +80,14 @@ export function resolveSettings(raw: unknown): GodotSettings {
   const stringOr = (key: 'godotServerDist' | 'godotProjectPath'): string => {
     const value = source[key]
     return typeof value === 'string' ? value : SETTINGS_DEFAULTS[key]
+  }
+  const transportOr = (): TransportMode => {
+    const value = source.transportMode
+    return value === 'http' || value === 'stdio' || value === 'auto' ? value : SETTINGS_DEFAULTS.transportMode
+  }
+  const scopeOr = (): SessionKeyScope => {
+    const value = source.sessionKeyScope
+    return value === 'project' || value === 'session' ? value : SETTINGS_DEFAULTS.sessionKeyScope
   }
   // 超时接受 number 或数字字符串(配置表单的输入框给出的是字符串)。
   // 非法/非正数回退默认;上限 900s —— 再长就失去了"及时失败"的意义。
@@ -69,6 +104,8 @@ export function resolveSettings(raw: unknown): GodotSettings {
     zhPrompt: booleanOr('zhPrompt'),
     godotServerDist: stringOr('godotServerDist'),
     godotProjectPath: stringOr('godotProjectPath'),
+    transportMode: transportOr(),
+    sessionKeyScope: scopeOr(),
     toolCallTimeoutMs: timeoutOrDefault(),
   }
 }

@@ -6,15 +6,16 @@ Connect Godot MCP Unified to DSH. This adapter selects which sessions mount whic
 
 ## Current behavior
 
-- By default only Godot-preset sessions mount a connection. Each Agent scope owns one stdio shim and its own key, target, and groups; subagents get separate connections. Names follow `mcp__<serverName>__<native name>`; the default entry is `mcp__godot__godot_connect`.
+- By default only Godot-preset sessions mount a connection. With `transportMode=auto` (default) the adapter connects **straight to `streamable-http`** when the daemon's 2026-07-28 face is available, so no per-session forwarder process exists (the machine runs only the singleton daemon, ~85 MB; the old path added one 12–13 MB shim per session). An unavailable or older daemon falls back to the stdio shim. Each Agent scope still owns its own key, target, and groups; subagents get separate connections. Names follow `mcp__<serverName>__<native name>`; the default entry is `mcp__godot__godot_connect`.
 - Only godot_connect appears initially; after calling it, nine core tools and this key’s active groups are visible. Seventeen built-in groups come from the server; no tool table is hardcoded or cached here.
 - The adapter passes session cwd, with no project-path environment injection. Connect selects project/instance; omission uses the key default, project.godot directly in cwd, then the only active instance.
 - paths.json supplies global serverDist only. Old projects entries and godotProjectPath do not route calls; compatibility classes/API shapes remain. CLI install still requires --project for validation, but does not bind it to a session.
-- Mounting starts during session creation, separately from selecting a Godot project. Blank sessions may switch presets; DSH locks them after the first turn. A session waits at most ten seconds for readiness; errors warn, with failOnStartupError=false.
-- injectLegacyMode mounts one host-level shared connection. All sessions share its key, target, and groups; this mode has no per-session isolation.
-- The host defaults to **240000ms**, configured by toolCallTimeoutMs; shim defaults to 210 seconds, daemon long single-wire operations to 180 seconds. Changing timeout alone does not remount existing per-session connections; create a new session. Prompt switches update text only.
+- Mounting starts during session creation, separately from selecting a Godot project. Blank sessions may switch presets; DSH locks them after the first turn. A session waits at most ten seconds for readiness (endpoint preparation claims at most 1.2 seconds); errors warn, with failOnStartupError=false.
+- injectLegacyMode mounts one host-level shared connection. All sessions share its key, target, and groups; this mode has no per-session isolation. On the direct path it is a single host HTTP connection with no child process.
+- **Session key scope** (`sessionKeyScope`): the default `session` derives the key from the DSH session id — a new session always starts with one tool (godot_connect), sessions stay independent, and reconnecting the same session keeps its activated tool face. `project` derives the key from cwd, so sessions of one project share the default target and groups and a **new session inherits an already-expanded tool face** (measured: a new connection on the same key listed 11 tools immediately).
+- The host defaults to **240000ms**, configured by toolCallTimeoutMs; shim defaults to 210 seconds, daemon long single-wire operations to 180 seconds. The timeout participates in the mount identity key, so changing it remounts; prompt switches update text only.
 
-Notification delivery and recovery depend on protocol support. The shim now maintains/reconnects a legacy stream; modern host-listen restoration after restart remains incomplete. TTL=0 does not prove automatic refresh. See [behavior](docs/behavior.en.md) and the [daemon README](../../../plugin/godot-mcp-unified/server-dotnet/README.en.md).
+Notification delivery and recovery depend on protocol support. The direct path uses the daemon's stateless 2026-07-28 face plus the `subscriptions/listen` stream (no shim legacy adaptation); the stdio fallback keeps the shim's legacy stream. Modern host-listen restoration after restart remains incomplete, and TTL=0 does not prove automatic refresh. See [behavior](docs/behavior.en.md) and the [daemon README](../../../plugin/godot-mcp-unified/server-dotnet/README.en.md).
 
 ## Install and upgrade
 
@@ -50,12 +51,14 @@ The preset’s dsh-skill-filesystem row loads six skills from package-local skil
 | injectLegacyMode | false | Shared host connection; otherwise per Godot session |
 | promptGuidance | true | Workflow prompt injection |
 | zhPrompt | false | Prompt language, not server descriptions |
-| godotServerDist | Empty | Fallback when paths.json has no serverDist |
+| transportMode | auto | auto = direct when possible, otherwise the shim; http = force direct (still falls back with a warning); stdio = always the shim |
+| sessionKeyScope | session | session = per-session isolation (new session starts with one tool); project = shared target and groups per project (new sessions inherit the tool face) |
+| godotServerDist | Empty | Fallback when paths.json has no serverDist; the direct path derives the daemon executable from its directory |
 | toolCallTimeoutMs | 240000 | Milliseconds; positive number/numeric string; capped at 900000 during resolution; invalid values use default |
 
 GET/POST /godot-config/api/path-settings persists serverDist only. GET returns empty projects; POST ignores projects. Access is loopback and same-origin, with 405/413/400 for method, size, JSON failures. Retained project fields are compatibility shapes, not active routing.
 
-CLI and UI write machine-local `$DSH_HOME/godot/paths.json`. The host rereads by mtime; a changed file is not proof of remounting. The daemon/shim owns credentials; the adapter does not handle tokens.
+CLI and UI write machine-local `$DSH_HOME/godot/paths.json`. The host rereads by mtime; a changed file is not proof of remounting. On the direct path the adapter reads the daemon token from the machine state directory (Windows `%APPDATA%/godot-mcp-toolkit`, overridable with `GODOT_MCP_DAEMON_STATE_DIR`) and keeps it in memory headers only — **never in config, logs, or session records**. No manual configuration is needed. The port defaults to 6590 and can be overridden with `GODOT_MCP_DAEMON_PORT`.
 
 ## Verify and uninstall
 

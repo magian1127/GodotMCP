@@ -11,7 +11,7 @@
 
 1. **入口配置 CLI**（dsh-godot）：校验 shim 与项目，保存全局 serverDist，清理历史受管块并提供 status；项目参数仅作校验，不绑定会话。
 2. **Godot 工作流提示词 section**（host 插件，行 id `dsh-godot`）：教模型按需扩面、理解编辑器 FIFO 串行语义与错误恢复。蒸馏自 GodotMCP 的 godot-control / godot-playtest 技能。
-3. **挂载策略与入口设置**：默认按 Godot Agent 会话挂载官方 mcp-client，传 cwd、不注入项目路径。目标与组由 godot_connect/discover_tools 按 shim 会话维护。路径 API 只保存 serverDist，旧 projects 形状保留兼容；原版模式共享同一连接和状态。
+3. **挂载策略、传输选择与入口设置**：默认按 Godot Agent 会话挂载官方 mcp-client，传 cwd、不注入项目路径。默认 `transportMode=auto`：daemon 的 2026-07-28 面可用时**直连 `streamable-http`**（每会话零 shim 子进程，全机只剩 daemon），否则回退 stdio shim；`sessionKeyScope` 默认 `session`（每会话 1 个工具起步，互不影响），可选 `project`（同项目共享目标/组，新会话继承工具面）。target 与组由 godot_connect/discover_tools 按会话键维护。原版模式共享同一连接和状态。
 4. **Godot agent preset 声明**（bundle patch 行 id `preset-godot`）：DSH 0.1.6+ 起 preset 只能由 bundle patch 的 `@deepseek-ai/dsh-agent-preset` 声明行注册（`$DSH_HOME/.agent-presets/<id>/` 目录已废弃）；该行 plugins 是 shipped `standard` 的完整副本 + 本包技能目录（`skills/` 为指向上游 GodotMCP 的 junction，`customSkillDirs` 从本包 realpath 解析）。
 
 上游事实（工具目录、分组、env 变量、注册表）以 GodotMCP 仓库 `plugin/godot-mcp-unified/server-dotnet/` 的源码与文档为准；本仓库文档只写接入语义，不复制上游目录。

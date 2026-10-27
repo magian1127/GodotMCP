@@ -4,7 +4,9 @@
 
 This directory is the DSH integration inside GodotMCP, not an independent Git repository. Only skills/ is a junction. Bridge/tool facts belong to plugin/godot-mcp-unified/server-dotnet; integration behavior belongs here.
 
-The adapter supplies an entry-configuration CLI, workflow prompt, official-client mount policy/config route, and Godot preset declaration. CLI project input validates a project without binding it. Runtime passes cwd, not a project environment variable; connect/discover manage target/groups per shim. Paths API persists serverDist only. Shared mode shares target/groups too.
+The adapter supplies an entry-configuration CLI, workflow prompt, official-client mount policy/transport selection/config route, and Godot preset declaration. CLI project input validates a project without binding it. Runtime passes cwd, not a project environment variable; connect/discover manage target/groups per session key. Paths API persists serverDist only. Shared mode shares target/groups too.
+
+With the default `transportMode=auto` the adapter connects straight to the daemon's 2026-07-28 `streamable-http` face when available (no per-session shim process) and falls back to stdio otherwise. `sessionKeyScope=session` (default) keeps each session at one initial tool; `project` shares target/groups per project and lets a new session inherit an expanded tool face.
 
 ## Documentation
 

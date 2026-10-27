@@ -6,16 +6,26 @@
 
 DSH 范围为 `>=0.2.0-rc.2 <0.3.0-0`，加载器用 engines.dsh 判定并包含预发布版本；0.2.0-rc.2 本身受支持。Node 要求见 package.json。
 
-默认按 Agent 作用域挂载官方 mcp-client：Godot preset 在 agent/created 或空白会话切预设时挂载；切走预设、销毁会话或卸载插件时回收。首轮之后 DSH 不允许换预设。其它会话没有连接和工具。子代理继承 preset，各有 shim。
+默认按 Agent 作用域挂载官方 mcp-client：Godot preset 在 agent/created 或空白会话切预设时挂载；切走预设、销毁会话或卸载插件时回收。首轮之后 DSH 不允许换预设。其它会话没有连接和工具。子代理继承 preset，各有连接。
 
-injectLegacyMode=true 在 host 上挂一条共享连接，所有会话共享键、组和默认目标；此时不再按会话挂载。这个设置叫原版模式，与 MCP 协议版本的 legacy 协商不是同一概念。
+**两条传输**（`transportMode`）：
+
+- `auto`（默认）/`http`：直连 `godot-mcp-daemon` 的 `streamable-http` 面（`http://127.0.0.1:6590/`）。每会话**不再 spawn shim 子进程**，全机只有 daemon 一个服务；子代理同样只是多一条 HTTP 连接。端点准备失败（端口不通、没有 token、daemon 为不支持 2026-07-28 的旧版本）时自动回退 stdio；`http` 强制模式回退时记一条 warn。
+- `stdio`：`宿主 → stdio → shim → HTTP → daemon`，每会话一个 12–13 MB 的 shim 进程。保留给旧版 daemon 或需要 shim 协议适配的场景。
+
+**daemon 会话键作用域**（`sessionKeyScope`）：
+
+- `session`（默认）：键由 DSH 会话 id 派生（UUID v5 形状，确定性）。每个会话首次 `tools/list` 都是 1 个工具；不同会话互不影响；同一会话断线重连拿到同一键，保留已激活的工具面与默认目标。
+- `project`：键由会话 cwd 派生。同项目会话共享默认目标与激活组，**新会话会继承别的会话已展开的工具面**（同键新连接首次 listTools 就返回全部已激活工具）。同一项目两个会话同时改默认目标会互相影响，需要并行时显式传 instance。
+
+injectLegacyMode=true 在 host 上挂一条共享连接，所有会话共享键、组和默认目标；此时不再按会话挂载。直连时它是 host 上的单条 HTTP 连接（零子进程）。这个设置叫原版模式，与 MCP 协议版本的 legacy 协商不是同一概念。
 
 failOnStartupError=false；会话创建只等待最多 10 秒就绪，失败只 warn。官方客户端从 500ms 起指数退避，上限 30 秒，连续 10 次失败后移除服务器工具；连接稳定超过退避上限后重置重试预算。恢复入口包括新建会话、改变实际 server 入口触发重挂、在空白会话切预设。改提示词开关不会重挂。
 
 ## 项目与工具面
 
 1. serverDist 优先取 `$DSH_HOME/godot/paths.json`，再回退 godotServerDist；为空不挂载，模型得到配置提示。
-2. shim cwd 是会话 cwd。适配器不再注入 GODOT_MCP_PROJECT_PATH，也不从旧 projects 映射选择目标。
+2. 直连时 shim 不存在，会话 cwd 经 `x-godot-cwd` 头（`uri:` + RFC3986 百分号编码）上报；stdio 时它就是 shim 子进程的工作目录。适配器不再注入 GODOT_MCP_PROJECT_PATH，也不从旧 projects 映射选择目标。
 3. 首次只有 `mcp__godot__godot_connect`。连接参数 project/instance 显式选目标；省略时用本键默认目标、cwd 本层 project.godot、唯一活跃实例。daemon 不启动编辑器。
 4. 连接后是 9 个核心工具 + 本键激活组。用 request 传组名或关键词，activate 是布尔，include_schemas 单独使用不会激活。工具名和参数由 server 的最新 tools/list 提供。
 5. 原始入口名为 godot_connect，其它如 scene_get_tree 不带统一 godot_ 前缀；宿主加 mcp__<serverName>__，serverName 默认 godot。
@@ -31,10 +41,12 @@ include_schemas=true 对部分常驻组工具只返回名称；读取激活后�
 | injectLegacyMode | false | host 共享连接 / 默认按 Godot 会话挂载 |
 | promptGuidance | true | 工作流 section 注入 |
 | zhPrompt | false | section 用中文；不翻译工具描述与错误 |
-| godotServerDist | 空 | 路径存储无 serverDist 时的兜底 |
+| transportMode | auto | auto = 能直连就直连、否则回退 shim；http = 强制直连（不可用仍回退并 warn）；stdio = 永远走 shim |
+| sessionKeyScope | session | session = 每会话独立（新会话 1 个工具）；project = 按项目共享目标与激活组（新会话继承工具面） |
+| godotServerDist | 空 | 路径存储无 serverDist 时的兜底；直连时用同目录推导 daemon |
 | toolCallTimeoutMs | 240000ms | 正数或数字字符串；取整，上限 900000，无效回默认 |
 
-当前按会话 configKey 仅比较入口、兼容空项目字段、cwd；**单改超时不会重挂旧连接**，新会话才读取新值。host 共享模式使用包含 timeout 的 mountConfigKey，会重挂。页面能保存某值不等于既有连接已经应用它。
+挂载身份键统一由 `mountConfigKey` 生成：stdio 分支含入口/参数/env/cwd/超时，http 分支含 url/headers/超时；两条传输前缀不同，**切换传输、token 轮换、会话键作用域变化、改超时都会重挂**。页面能保存某值不等于既有连接已经应用它。
 
 默认预算：宿主 240 秒 > shim tools/call 210 秒 > daemon 长工具单次 wire 180 秒；普通 daemon 工具 30 秒。组合工具按段预算，不保证整体 180 秒完成。超时/传输不确定时先查询状态，不直接重提变更。
 
@@ -58,17 +70,19 @@ CLI install 仍需 --project 校验存在 project.godot；只持久化 serverDis
 | --- | --- |
 | 没有任何 Godot 工具且提示未配置 | 填写可执行 shim 入口，确认 Godot preset 挂载，必要时新建会话 |
 | 只有 godot_connect | 正常的未连接面，调用入口并核对返回目标 |
+| 进程列表里每会话都有 `godot-mcp-shim` | 说明走了 stdio 回退：端口 6590 是否在听、状态目录里有无 `daemon-token`、daemon 是否为支持 2026-07-28 的版本；`transportMode=stdio` 则是显式选择 |
 | 连接/激活后仍只有旧工具列表 | 检查宿主通知与目录更新，使用其实际重连动作；不要把 TTL 当自动重拉证明 |
 | TARGET_NOT_RUNNING / NO_INSTANCE | 打开所报项目的 Godot 编辑器，重试只读查询 |
 | SESSION_HEADER_MISSING 等头错误 | 核对 stdio shim 和旧 HTTP 配置；重复 connect 无法修复传输头 |
 | 长期断线后工具移除 | 修正入口/连接原因后重建会话；提示词开关不会重启连接 |
-| 超时设置保存但旧值仍生效 | 当前按会话重挂缺口；新建会话 |
+| 超时设置保存但旧值仍生效 | 确认已重挂（改超时在身份键里）；仍不生效时新建会话 |
+| 新会话继承了上一个会话展开的工具面 | `sessionKeyScope=project` 的预期行为；改回 `session` 改为每会话独立 |
 | 目录里无场景写工具 | 检查 scene_edit 是否激活，再看版本/只读限制 |
 | 模式选择器没有 Godot | 核对 bundle patch 的 preset-godot 声明；旧 .agent-presets 目录不再读取 |
 | 同名 serverName 冲突/无法加载官方 client | 核对当前 profile 官方模块和挂载作用域；只记录错误类型，不回显配置 |
 
 ## 数据边界
 
-本包写 DSH home 的 paths.json，并通过 CLI 清理历史 patch 受管块；不读写 Godot 场景源码，也不处理凭据。官方客户端清洗父进程凭据样式变量和 DSH_*；本插件的显式 env 当前为空。编辑器 token 由 daemon 读注册表，shim 读 daemon token。
+本包写 DSH home 的 paths.json，并通过 CLI 清理历史 patch 受管块；不读写 Godot 场景源码。直连时它从机器级状态目录读取 daemon token（Windows `%APPDATA%/godot-mcp-toolkit`，可用 `GODOT_MCP_DAEMON_STATE_DIR` 覆盖；端口用 `GODOT_MCP_DAEMON_PORT`），token 只进入内存请求头，**不写配置、日志、会话记录或快照**，诊断只记固定文案与错误类型名。stdio 时编辑器 token 由 daemon 读注册表，shim 读 daemon token。官方客户端清洗父进程凭据样式变量和 DSH_*；本插件的显式 env 当前为空。
 
 旧 tools-cache.json 不再读取；通用工具调试界面已迁到 deepseek-harness-project-mcp，本包没有 conversation.view 或 /godot-workbench API。资源来自宿主 dsh-mcp-resources，工具注解不映射成 DSH 权限。

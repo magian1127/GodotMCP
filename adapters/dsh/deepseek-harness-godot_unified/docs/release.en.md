@@ -2,13 +2,19 @@
 
 [中文](release.md) | English
 
-## Current unreleased session tool surface
+## Current unreleased: direct daemon connection (0.6.0)
 
 This section supersedes old behavior in historical records.
 
-- Hosts use the bundled stdio shim; remove direct-HTTP entries. New keys connect through godot_connect before expanding into 17 groups.
+- **New direct transport (default)**: `transportMode=auto` connects over `streamable-http` when the daemon's 2026-07-28 face is available, so no per-session shim process is spawned; `http` forces it, `stdio` keeps the shim. Older daemons, closed ports, or a missing token fall back to stdio automatically.
+- **New `src/daemon-endpoint.ts`**: port/state-dir/token resolution, detached bootstrap, `server/discover` 2026-07-28 proof, UUID-v5-shaped session keys, `x-godot-cwd` encoding; every dependency is injectable and tested without a real daemon.
+- **New session key scope**: `sessionKeyScope=session` (default, derived from the DSH session id — new sessions start at one tool, reconnects keep the activated face) or `project` (derived from cwd — sessions share target/groups and a new session inherits an expanded face).
+- **Concurrency**: `syncAgent` serializes per session id (`syncInFlight`) because endpoint waiting yields; endpoint readiness triggers one `resyncAll`.
+- **Timeout remount gap fixed**: identity comes from `mountConfigKey` (stdio/http prefixes differ), so transport switches, token rotation, key-scope changes, and timeout edits all remount.
+- **Credential boundary**: the daemon token lives in in-memory headers only; diagnostics log fixed prose and `error.name`, never config or headers.
+- **Tests**: new `daemon-endpoint.test.mts` (14 cases), four http cases in `mcp-mount.test.mts`, six direct-path cases in `plugin-smoke.test.mts`; 93 total green.
+- Validation: typecheck/test/verify green, plus one live direct mount using the built `lib/index.js` against the local daemon (streamable-http, UUID key, Chinese cwd header, `tools/list` returning `godot_connect`). **Not executed**: GUI Godot-preset tool calls and image attachments inside a running `dsh web`.
 - No project environment injection remains in mounts. paths.json uses serverDist with empty projects; CLI --project still validates a project.
-- toolCallTimeoutMs defaults to 240000ms; existing per-session connections do not remount for timeout-only edits.
 - Reproduced gaps in notification recovery, group replacement/replay, resident schemas, debug/eager switches, and in-flight targets remain. The [daemon README](../../../../plugin/godot-mcp-unified/server-dotnet/README.en.md) owns their status. Green existing tests are not complete release acceptance.
 - Beyond typecheck/build/test/verify, validate initial entry, automatic list expansion after connect, group changes, restart recovery, and image attachments in real hosts. The five-host/version and mixed-version matrices remain incomplete.
 

@@ -10,14 +10,23 @@ test('resolveSettings:缺失/非法形状逐键回退默认(默认不注入)', (
 })
 
 test('resolveSettings:合法值逐键采纳,字符串/布尔分型', () => {
-  assert.deepEqual(resolveSettings({ injectLegacyMode: true }), { injectLegacyMode: true, promptGuidance: true, zhPrompt: false, godotServerDist: '', godotProjectPath: '', toolCallTimeoutMs: 240_000 })
-  assert.deepEqual(resolveSettings({ zhPrompt: true, promptGuidance: false }), { injectLegacyMode: false, promptGuidance: false, zhPrompt: true, godotServerDist: '', godotProjectPath: '', toolCallTimeoutMs: 240_000 })
+  assert.deepEqual(resolveSettings({ injectLegacyMode: true }), { injectLegacyMode: true, promptGuidance: true, zhPrompt: false, godotServerDist: '', godotProjectPath: '', transportMode: 'auto', sessionKeyScope: 'session', toolCallTimeoutMs: 240_000 })
+  assert.deepEqual(resolveSettings({ zhPrompt: true, promptGuidance: false }), { injectLegacyMode: false, promptGuidance: false, zhPrompt: true, godotServerDist: '', godotProjectPath: '', transportMode: 'auto', sessionKeyScope: 'session', toolCallTimeoutMs: 240_000 })
   assert.deepEqual(
     resolveSettings({ godotServerDist: 'D:/x/godot-mcp-shim.exe', godotProjectPath: 'D:/game' }),
-    { injectLegacyMode: false, promptGuidance: true, zhPrompt: false, godotServerDist: 'D:/x/godot-mcp-shim.exe', godotProjectPath: 'D:/game', toolCallTimeoutMs: 240_000 },
+    { injectLegacyMode: false, promptGuidance: true, zhPrompt: false, godotServerDist: 'D:/x/godot-mcp-shim.exe', godotProjectPath: 'D:/game', transportMode: 'auto', sessionKeyScope: 'session', toolCallTimeoutMs: 240_000 },
   )
   // 非字符串的路径字段回退默认。
   assert.equal(resolveSettings({ godotServerDist: 42 }).godotServerDist, '')
+
+  // 传输模式与键作用域:只接受枚举值,其余回退默认。
+  assert.equal(resolveSettings({}).transportMode, 'auto')
+  assert.equal(resolveSettings({ transportMode: 'http' }).transportMode, 'http')
+  assert.equal(resolveSettings({ transportMode: 'stdio' }).transportMode, 'stdio')
+  assert.equal(resolveSettings({ transportMode: 'bogus' }).transportMode, 'auto')
+  assert.equal(resolveSettings({}).sessionKeyScope, 'session')
+  assert.equal(resolveSettings({ sessionKeyScope: 'project' }).sessionKeyScope, 'project')
+  assert.equal(resolveSettings({ sessionKeyScope: 'global' }).sessionKeyScope, 'session')
 
   // 超时:接受数字与数字字符串(表单输入框给的是字符串),非法回退默认,上限 900s。
   assert.equal(resolveSettings({ toolCallTimeoutMs: 300_000 }).toolCallTimeoutMs, 300_000)

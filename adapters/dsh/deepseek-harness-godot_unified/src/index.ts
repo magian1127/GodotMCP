@@ -1,5 +1,5 @@
 /**
- * deepseek-harness-godot_unified —— host 半边入口(v0.5:官方 MCP)。
+ * deepseek-harness-godot_unified —— host 半边入口(v0.6:官方 MCP + 直连 daemon)。
  *
  * 本包**不实现 MCP 客户端**:连接、握手、工具发现、`tools/list_changed`、断线重连、
  * 图片投影全部交给宿主自带的 `@deepseek-ai/dsh-mcp-client`(运行时从 profile 解析,
@@ -9,24 +9,43 @@
  *    mcp-client 挂进该 agent 的作用域。其他会话里**根本没有**这些工具——不是
  *    "注册后 deny",因此不再需要 restrict / tools/change 合并窗口 / 工具清单缓存。
  *    工具名由官方约定给出:`mcp__<serverName>__<rawName>`。
- * 2. **按会话传项目路径**:挂载时按**该会话的 cwd** 解析 Godot 项目路径,作为
- *    `GODOT_MCP_PROJECT_PATH` 传给 server;会话 cwd 同时作为子进程工作目录
- *    (shim 未拿到显式 env 时会按 cwd 查机器级注册表兜底)。同一台机器上不同会话
- *    可以是不同 Godot 项目。
- * 3. **原版模式**(`injectLegacyMode`):在 host 作用域挂一个**共享**连接,所有会话
- *    可见;项目路径取全局设置(不再按会话切换)。该模式下不再按会话挂载,避免
- *    同一份工具挂两遍、多起一个进程。
- * 4. **不阻塞会话创建**:挂载本身不 await 连接(官方客户端自带重连),只给 Godot
- *    会话一个上限为 `READY_GRACE_MS` 的宽限,让首条消息通常就能看到工具;
- *    失败一律降级为日志,绝不向会话创建路径抛错。
- * 5. **路径设置 HTTP 路由**(`/godot-config/api/path-settings`)不变。
+ * 2. **两条传输**(`transportMode`):
+ *    - `auto`(默认)/`http`:直连 `godot-mcp-daemon` 的 2026-07-28 streamable-http 面。
+ *      **每会话不再 spawn 一个 shim 子进程**,全机只剩全机单例 daemon(85MB);
+ *      会话之间靠 `x-godot-session` 键隔离工具面。端点不可用(旧版 daemon / 端口不通 /
+ *      没有 token)时自动回退 stdio。
+ *    - `stdio`:走 shim(`host → stdio → shim → HTTP → daemon`),保留给旧版本或需要
+ *      shim 协议适配的场景。
+ * 3. **会话键作用域**(`sessionKeyScope`):
+ *    - `session`(默认):键由 DSH 会话 id 派生 → 每个会话从默认的 1 个工具
+ *      (`godot_connect`)起步,互不影响;同一会话重连保留已激活的工具面。
+ *    - `project`:键由会话 cwd 派生 → 同一项目的会话共享默认目标与激活组,
+ *      新会话会**继承**别的会话展开后的工具面(共享的代价)。
+ * 4. **原版模式**(`injectLegacyMode`):在 host 作用域挂一个**共享**连接,所有会话
+ *    可见(直连时是 host 上的一条 HTTP 连接,零子进程);该模式下不再按会话挂载。
+ * 5. **不阻塞会话创建**:挂载最多等端点 1.2s,不 await 连接(官方客户端自带重连);
+ *    只给 Godot 会话一个上限为 `READY_GRACE_MS` 的宽限。失败一律降级为日志,
+ *    绝不向会话创建路径抛错。
+ * 6. **路径设置 HTTP 路由**(`/godot-config/api/path-settings`)不变。
  *
- * 配置走插件行(`dsh-godot` 行 config):注入两开关 + 提示词中文化 + server dist/
- * 项目路径参考值;per-cwd 路径经 `$DSH_HOME/godot/paths.json`(插件页配置表单可维护)。
+ * 配置走插件行(`dsh-godot` 行 config):注入开关 + 提示词中文化 + 传输/键作用域 +
+ * server dist;per-cwd 路径经 `$DSH_HOME/godot/paths.json`(插件页配置表单可维护)。
  */
 import { PKG, SECTION_NAME, SECTION_ORDER } from './constants.js'
+import {
+  deriveSessionKey,
+  normalizeCwd,
+  prepareDaemonEndpoint,
+  type DaemonEndpoint,
+} from './daemon-endpoint.js'
 import { resolveSettings, isGodotPreset, shouldInjectPrompt, type GodotSettings } from './injection.js'
-import { buildMountConfig, errorName, mountConfigKey, type GodotMcpConfig } from './mcp-mount.js'
+import {
+  buildHttpMountConfig,
+  buildMountConfig,
+  errorName,
+  mountConfigKey,
+  type GodotMcpConfig,
+} from './mcp-mount.js'
 import { mountPathSettingsRoute } from './path-settings-route.js'
 import { PathStore } from './path-store.js'
 import { loadMcpClient, loadSchemastery } from './profile-modules.js'
@@ -102,6 +121,12 @@ export const Config =
         zhPrompt: markVolatile(configSchemaFactory.boolean().default(false)),
         godotServerDist: markVolatile(configSchemaFactory.string().default('')),
         godotProjectPath: markVolatile(configSchemaFactory.string().default('')),
+        // 传输模式:auto(默认,能直连就直连)/ http(强制直连)/ stdio(永远走 shim)。
+        // 直连 = 每会话零子进程;改它会重挂(mountConfigKey 前缀不同)。
+        transportMode: markVolatile(configSchemaFactory.string().default('auto')),
+        // daemon 会话键作用域:session(默认,每会话 1 个工具起步)/ project(按项目共享状态,
+        // 新会话会继承已展开的工具面)。改它同样重挂。
+        sessionKeyScope: markVolatile(configSchemaFactory.string().default('session')),
         // 宿主层预算(毫秒)。必须 > shim 的 210s:否则慢调用会先被宿主掐断,
         // 拿不到 daemon 给出的清晰超时说明。改它会触发重挂(mountConfigKey 含它)。
         // 旧版 schemastery 没有 number():退化成字符串字段,resolveSettings 两者都接受。
@@ -202,6 +227,113 @@ export function apply(ctx: HostContext, config: Record<string, unknown> = {}): v
   // 会话要连别的项目还得先去配置页改表。现在目标由 daemon 侧解析
   // (godot_connect 的 project 参数 → 本会话默认目标 → shim 上报的 x-godot-cwd
   // 下的 project.godot → 唯一活跃实例),插件只负责告诉服务器 cwd。
+  // ---- daemon 端点(直连通路) ----
+  //
+  // 直连 daemon 的 2026-07-28 streamable-http 面后,每个会话不再 spawn 一个 shim
+  // 子进程,全机只剩全机单例 daemon。端点准备是异步的(可能要拉起 daemon),因此
+  // **挂载点只读缓存**:未就绪的会话本次走 stdio;就绪后 resyncAll 把已挂载会话切过去。
+  //
+  // 测试可注入 `godotDaemonEndpointProvider` 服务替换真实探测(provider 返回
+  // `undefined` 表示不可用,自动回退 stdio)。
+  type EndpointProvider = (serverDist: string) => Promise<DaemonEndpoint | undefined>
+  const endpointProvider = (() => {
+    try {
+      const candidate = ctx.get('godotDaemonEndpointProvider')
+      return typeof candidate === 'function' ? candidate as EndpointProvider : undefined
+    } catch {
+      return undefined
+    }
+  })()
+
+  interface EndpointCache {
+    serverDist: string
+    promise: Promise<DaemonEndpoint | undefined>
+    settled?: DaemonEndpoint | undefined
+    /** 上次尝试结束的时刻;失败后隔一段时间才重试。 */
+    settledAt: number
+  }
+  let endpointCache: EndpointCache | undefined
+  /** 探测失败后的重试间隔:daemon 是常驻进程,秒级重试足够。 */
+  const ENDPOINT_RETRY_MS = 30_000
+  /** 已通知过"端点就绪"的 serverDist:避免重复 resyncAll 造成挂载抖动。 */
+  let endpointNotifiedFor: string | undefined
+
+  function endpointFor(serverDist: string): Promise<DaemonEndpoint | undefined> {
+    const now = Date.now()
+    const entry = endpointCache
+    if (entry !== undefined && entry.serverDist === serverDist) {
+      if (entry.settled !== undefined) return Promise.resolve(entry.settled)
+      if (now - entry.settledAt < ENDPOINT_RETRY_MS) return entry.promise
+    }
+    const next: EndpointCache = { serverDist, promise: Promise.resolve(undefined), settledAt: now }
+    const work = typeof endpointProvider === 'function'
+      ? Promise.resolve().then(() => endpointProvider(serverDist))
+      : prepareDaemonEndpoint({ serverDist })
+    next.promise = work.then(
+      (value) => {
+        next.settled = value
+        next.settledAt = Date.now()
+        return value
+      },
+      () => {
+        // 端点准备本身不抛(内部兜底);这里只防御注入 provider 的异常。
+        next.settledAt = Date.now()
+        return undefined
+      },
+    )
+    endpointCache = next
+    return next.promise
+  }
+
+  /** 同步读端点缓存;挂载点用它,保证会话创建不被网络探测拖住。 */
+  function cachedEndpoint(serverDist: string): DaemonEndpoint | undefined {
+    const entry = endpointCache
+    return entry !== undefined && entry.serverDist === serverDist ? entry.settled : undefined
+  }
+
+  /**
+   * 首个会话的短等待:auto/http 模式下给端点一次就绪机会,避免"先 spawn 一个 shim
+   * 再切掉"的浪费。热 daemon 通常 <300ms;上限 1.2s 比会话创建的 10s 宽限小得多。
+   * 超时或不可用 → 本次回退 stdio。
+   */
+  const TRANSPORT_WAIT_MS = 1_200
+  async function waitEndpointFor(serverDist: string): Promise<DaemonEndpoint | undefined> {
+    let timer: NodeJS.Timeout | undefined
+    const timeout = new Promise<undefined>((resolve) => {
+      timer = setTimeout(() => resolve(undefined), TRANSPORT_WAIT_MS)
+      timer.unref?.()
+    })
+    try {
+      return await Promise.race([endpointFor(serverDist), timeout])
+    } catch {
+      return undefined
+    } finally {
+      if (timer !== undefined) clearTimeout(timer)
+    }
+  }
+
+  /** 后台准备端点;就绪后把已挂载的会话重挂到直连。 */
+  function ensureEndpoint(serverDist: string): void {
+    if (stopped || current.transportMode === 'stdio' || serverDist === '') return
+    void endpointFor(serverDist).then((value) => {
+      if (stopped || value === undefined) return
+      if (endpointNotifiedFor === serverDist) return
+      endpointNotifiedFor = serverDist
+      resyncAll()
+    }).catch(() => { /* endpointFor 自身不会 reject */ })
+  }
+
+  /**
+   * daemon 会话键:session 模式按会话 id、project 模式按 cwd 派生。
+   *
+   * 两种模式都**确定性派生**而不是随机 UUID:同一会话断线重连拿到同一键,
+   * 已激活的工具面与默认目标得以保留(随机键做不到这一点)。
+   */
+  function sessionKeyFor(sessionId: string, cwd: string | undefined): string {
+    const projectScoped = current.sessionKeyScope === 'project' && cwd !== undefined && cwd.trim() !== ''
+    return deriveSessionKey(projectScoped ? `project:${normalizeCwd(cwd)}` : `session:${sessionId}`)
+  }
+
   const pathStore = new PathStore()
   /**
    * 解析生效的服务器安装路径(全局单值,与项目路径无关)。
@@ -312,12 +444,49 @@ export function apply(ctx: HostContext, config: Record<string, unknown> = {}): v
   }
 
   /**
+   * 同一会话的 syncAgent 串行化。
+   *
+   * 并发来源是真实的:agent/created 与"端点就绪后 resyncAll"会同时触发同一个会话的
+   * 对齐;而 syncAgent 在等端点时必须让出(await),两个调用都读到"还没挂"就会各挂
+   * 一次(多起一个 shim / 多建一条 HTTP 连接)。这里按会话 id 排队,后到者在前者完成
+   * 后重新读挂载记账,自然走幂等分支。
+   */
+  const syncInFlight = new Map<string, Promise<void>>()
+
+  /**
    * 让某个 agent 的 Godot MCP 状态与当前设置/preset 对齐(幂等)。
    *
    * 三条退出路径:不需要(非 Godot preset / 原版模式 / mcp-client 不可用)→ 拆;
    * 已挂且配置键一致 → 只同步提示词;否则重挂。
    */
-  async function syncAgent(agent: AgentShape, options: { grace?: boolean } = {}): Promise<void> {
+  function syncAgent(agent: AgentShape, options: { grace?: boolean } = {}): Promise<void> {
+    const key = agentKeyOf(agent)
+    if (key === undefined) return syncAgentInner(agent, options)
+    const previous = syncInFlight.get(key)
+    // 没有在途同步时**直接调用**,保持"同步执行到第一个 await"的语义
+    // (设置变更/首次挂载的可见行为不因串行化而延后一个微任务)。
+    if (previous === undefined) {
+      const run = syncAgentInner(agent, options)
+      syncInFlight.set(key, run)
+      const clear = (): void => {
+        if (syncInFlight.get(key) === run) syncInFlight.delete(key)
+      }
+      void run.then(clear, clear)
+      return run
+    }
+    const run = previous.then(
+      () => syncAgentInner(agent, options),
+      () => syncAgentInner(agent, options),
+    )
+    syncInFlight.set(key, run)
+    const clear = (): void => {
+      if (syncInFlight.get(key) === run) syncInFlight.delete(key)
+    }
+    void run.then(clear, clear)
+    return run
+  }
+
+  async function syncAgentInner(agent: AgentShape, options: { grace?: boolean } = {}): Promise<void> {
     try {
       if (stopped) return
       const key = agentKeyOf(agent)
@@ -342,8 +511,64 @@ export function apply(ctx: HostContext, config: Record<string, unknown> = {}): v
       }
 
       const cwd = agent.session?.header?.cwd
-      const paths = resolvePathsFor(cwd)
-      const configKey = [paths.godotServerDist, paths.godotProjectPath, cwd ?? ''].join('\u0000')
+      const dist = resolvePathsFor(cwd).godotServerDist
+
+      // server 入口未配置:不挂载,但给 Godot 会话一段"如何配置"的提示词——
+      // 否则模型会凭空调用不存在的工具。配置保存后经 loader/volatile-update 重挂。
+      if (dist === '') {
+        const unconfiguredKey = `unconfigured\u0000${cwd ?? ''}`
+        const sameUnconfigured = existing !== undefined && existing.configKey === unconfiguredKey
+        const aliveUnconfigured = existing !== undefined && (existing.unconfigured || existing.fiber !== undefined)
+        if (sameUnconfigured && aliveUnconfigured) {
+          syncPrompt(agent, existing!, presetId)
+          return
+        }
+        if (existing !== undefined) {
+          mounts.delete(key)
+          disposeMount(existing)
+        }
+        const entry: AgentMount = { key, configKey: unconfiguredKey, unconfigured: true }
+        mounts.set(key, entry)
+        syncPrompt(agent, entry, presetId)
+        warn(`[${PKG}] Godot MCP 未挂载:server 入口路径为空(在插件页 → 本包页面 → 「Godot 路径」填写)`)
+        return
+      }
+
+      // 端点已就绪 → 直连 streamable-http(每会话零子进程);否则本次走 stdio。
+      // ensureEndpoint 在后台准备,就绪后会 resyncAll 把本会话切到直连。
+      const endpoint = current.transportMode === 'stdio'
+        ? undefined
+        : (cachedEndpoint(dist) ?? await waitEndpointFor(dist))
+
+      const agentCtx = agent.ctx
+      if (agentCtx === undefined || typeof agentCtx.plugin !== 'function') return
+
+      let mountConfig: GodotMcpConfig
+      try {
+        mountConfig = endpoint === undefined
+          ? buildMountConfig({
+              serverName,
+              dist,
+              projectPath: '',
+              cwd,
+              // 宿主层预算(240s):三层阶梯的最高层,必须大于 shim 的 210s。
+              toolCallTimeoutMs: current.toolCallTimeoutMs,
+            })
+          : buildHttpMountConfig({
+              serverName,
+              baseUrl: endpoint.baseUrl,
+              token: endpoint.token,
+              // 会话键决定"新会话看到 1 个工具还是继承已展开的面";
+              // 默认 session 模式 = 每会话隔离(与 shim 时代行为一致)。
+              sessionKey: sessionKeyFor(key, cwd),
+              cwd,
+              toolCallTimeoutMs: current.toolCallTimeoutMs,
+            })
+      } catch (error) {
+        warn(`[${PKG}] Godot MCP 配置组装失败,跳过挂载(错误类型: ${errorName(error)})`)
+        return
+      }
+      const configKey = mountConfigKey(mountConfig)
 
       const sameConfig = existing !== undefined && existing.configKey === configKey
       const alive = existing !== undefined && (existing.unconfigured || existing.fiber !== undefined)
@@ -354,34 +579,6 @@ export function apply(ctx: HostContext, config: Record<string, unknown> = {}): v
       if (existing !== undefined) {
         mounts.delete(key)
         disposeMount(existing)
-      }
-
-      // server 入口未配置:不挂载,但给 Godot 会话一段"如何配置"的提示词——
-      // 否则模型会凭空调用不存在的工具。配置保存后经 loader/volatile-update 重挂。
-      if (paths.godotServerDist === '') {
-        const entry: AgentMount = { key, configKey, unconfigured: true }
-        mounts.set(key, entry)
-        syncPrompt(agent, entry, presetId)
-        warn(`[${PKG}] Godot MCP 未挂载:server 入口路径为空(在插件页 → 本包页面 → 「Godot 路径」填写)`)
-        return
-      }
-
-      const agentCtx = agent.ctx
-      if (agentCtx === undefined || typeof agentCtx.plugin !== 'function') return
-
-      let mountConfig: GodotMcpConfig
-      try {
-        mountConfig = buildMountConfig({
-          serverName,
-          dist: paths.godotServerDist,
-          projectPath: paths.godotProjectPath,
-          cwd,
-          // 宿主层预算(240s):三层阶梯的最高层,必须大于 shim 的 210s。
-          toolCallTimeoutMs: current.toolCallTimeoutMs,
-        })
-      } catch (error) {
-        warn(`[${PKG}] Godot MCP 配置组装失败,跳过挂载(错误类型: ${errorName(error)})`)
-        return
       }
       if (!validateMountConfig(mountConfig)) return
 
@@ -459,29 +656,42 @@ export function apply(ctx: HostContext, config: Record<string, unknown> = {}): v
     disposeFiber('原版模式的 Godot MCP', fiber)
   }
 
-  /** 原版模式的共享连接(一个进程/一条连接服务所有会话)。 */
+  /** 原版模式的共享连接(全机一条连接/零子进程,服务所有会话)。 */
   function syncRoot(): void {
     syncGlobalSection()
     if (!current.injectLegacyMode || mcpClient === null || mcpClient === undefined) {
       disposeRootMount()
       return
     }
-    const paths = resolvePathsFor(undefined)
-    if (paths.godotServerDist === '') {
+    const dist = resolvePathsFor(undefined).godotServerDist
+    if (dist === '') {
       disposeRootMount()
       warn(`[${PKG}] 原版模式已开启,但 server 入口路径为空:Godot MCP 不会挂载`)
       return
     }
+    // 原版模式没有"当前会话":端点就绪时直连(host 作用域、单条连接),
+    // 否则用宿主进程工作目录作子进程 cwd 走 stdio。会话键固定为 host 级。
+    const endpoint = current.transportMode === 'stdio' ? undefined : cachedEndpoint(dist)
     let mountConfig: GodotMcpConfig
     try {
-      mountConfig = buildMountConfig({
-        serverName,
-        dist: paths.godotServerDist,
-        projectPath: paths.godotProjectPath,
-        // 原版模式没有"当前会话":用宿主进程工作目录作子进程 cwd。
-        cwd: process.cwd(),
-        toolCallTimeoutMs: current.toolCallTimeoutMs,
-      })
+      mountConfig = endpoint === undefined
+        ? buildMountConfig({
+            serverName,
+            dist,
+            projectPath: '',
+            // 原版模式没有"当前会话":用宿主进程工作目录作子进程 cwd。
+            cwd: process.cwd(),
+            toolCallTimeoutMs: current.toolCallTimeoutMs,
+          })
+        : buildHttpMountConfig({
+            serverName,
+            baseUrl: endpoint.baseUrl,
+            token: endpoint.token,
+            // 共享连接 = 一份工具面,键固定即可(不需要按会话/项目区分)。
+            sessionKey: deriveSessionKey('legacy:host'),
+            cwd: process.cwd(),
+            toolCallTimeoutMs: current.toolCallTimeoutMs,
+          })
     } catch (error) {
       disposeRootMount()
       warn(`[${PKG}] 原版模式 Godot MCP 配置组装失败(错误类型: ${errorName(error)})`)
@@ -515,6 +725,9 @@ export function apply(ctx: HostContext, config: Record<string, unknown> = {}): v
   /** 设置或预设变化后的全量对齐(同步部分;每个 agent 的挂载各自异步进行)。 */
   function resyncAll(): void {
     if (stopped) return
+    // 端点准备放后台:它可能要拉起 daemon,绝不能挡住会话创建/设置变更。
+    // 就绪后 endpointFor 的回调会再走一次 resyncAll,把挂载切到直连。
+    ensureEndpoint(resolvePathsFor(undefined).godotServerDist)
     syncRoot()
     for (const agent of listAgents()) {
       try { void syncAgent(agent) } catch { /* syncAgent 内部已兜底 */ }

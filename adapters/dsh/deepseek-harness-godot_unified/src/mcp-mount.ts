@@ -18,6 +18,8 @@
  * 纯函数让"配置形状"与"何时挂载"两件事可以分别单测。
  */
 
+import { encodeCwdHeader } from './daemon-endpoint.js'
+
 /** 启动方案:可执行文件 + 参数(参数不经 shell 解释)。 */
 export interface SpawnPlan {
   command: string
@@ -64,7 +66,7 @@ export const DEFAULT_TOOL_CALL_TIMEOUT_MS = 240_000
  * 刻意**不**声明 `@deepseek-ai/dsh-mcp-client` 的类型:本包不把 DSH 运行时模块写进
  * dependencies(工作区硬约定),挂载目标是运行时从 profile 解析出来的模块对象。
  */
-export interface GodotMcpConfig {
+export interface GodotStdioMcpConfig {
   transport: 'stdio'
   serverName: string
   command: string
@@ -74,6 +76,27 @@ export interface GodotMcpConfig {
   toolCallTimeoutMs: number
   failOnStartupError: boolean
 }
+
+/**
+ * 直连 daemon 的 Config(streamable-http 分支)。
+ *
+ * 这条通路**不起子进程**:每个会话一条 loopback HTTP 连接,daemon 仍是全机单例
+ * (上游 `MachineSingleton`)。工具面仍按 `x-godot-session` 键隔离 —— 键由本插件
+ * 派生,决定"新会话看到 1 个工具还是继承别人展开的 11 个"。
+ *
+ * `headers` 里的 `authorization` 是机器级凭据:只活在内存里,**不落盘、不写日志**。
+ */
+export interface GodotHttpMcpConfig {
+  transport: 'streamable-http'
+  serverName: string
+  url: string
+  headers: Record<string, string>
+  toolCallTimeoutMs: number
+  failOnStartupError: boolean
+}
+
+/** 两种传输的合集(挂载身份键与校验共用)。 */
+export type GodotMcpConfig = GodotStdioMcpConfig | GodotHttpMcpConfig
 
 /** Config 组装输入(路径均为已归一化的绝对路径;空串表示未配置)。 */
 export interface MountConfigInput {
@@ -91,6 +114,22 @@ export interface MountConfigInput {
   toolCallTimeoutMs?: number
 }
 
+/** streamable-http Config 组装输入(端点由 `daemon-endpoint` 准备)。 */
+export interface HttpMountConfigInput {
+  /** MCP 命名空间(`mcp__<serverName>__<tool>`);非法形状直接抛错,不产生配置。 */
+  serverName: string
+  /** daemon 端点,形如 `http://127.0.0.1:6590/`。 */
+  baseUrl: string
+  /** 机器级 Bearer token(只进内存 headers)。 */
+  token: string
+  /** 该会话/项目派生的 daemon 会话键(决定工具面是否跨会话共享)。 */
+  sessionKey: string
+  /** 会话工作目录;编码进 `x-godot-cwd`,供 daemon 按项目解析目标。 */
+  cwd?: string | undefined
+  /** 覆盖单次调用超时(测试用;默认 240s)。 */
+  toolCallTimeoutMs?: number
+}
+
 /** serverName 的官方约束(`mcp-client` 的 Config schema 同款)。 */
 const SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/
 
@@ -101,7 +140,7 @@ const SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/
  * 写错都不该让宿主或会话启动失败——官方客户端会把错误记日志并进入重连循环,
  * 工具就位后自然可用。会话创建路径也绝不因它抛错(见 index.ts 的挂载点)。
  */
-export function buildMountConfig(input: MountConfigInput): GodotMcpConfig {
+export function buildMountConfig(input: MountConfigInput): GodotStdioMcpConfig {
   const serverName = input.serverName.trim()
   if (!SERVER_NAME_PATTERN.test(serverName)) {
     throw new Error(`invalid MCP serverName: ${JSON.stringify(input.serverName)}`)
@@ -133,11 +172,64 @@ export function buildMountConfig(input: MountConfigInput): GodotMcpConfig {
 }
 
 /**
+ * 组装一个 streamable-http MCP Config(直连 daemon)。
+ *
+ * 与 stdio 分支同一套失败关闭语义:`failOnStartupError: false`。daemon 没起、
+ * 端口暂时不通都不该让会话创建失败 —— 官方客户端会重连,daemon 起来后工具自然就位。
+ *
+ * `x-godot-cwd` 只上报**会话工作目录**,不替用户决定"连哪个 Godot 项目":
+ * 目标解析仍是 `godot_connect(project)` → 本键上次目标 → cwd 下的 project.godot
+ * → 唯一活跃实例(上游 ADR-0008)。
+ */
+export function buildHttpMountConfig(input: HttpMountConfigInput): GodotHttpMcpConfig {
+  const serverName = input.serverName.trim()
+  if (!SERVER_NAME_PATTERN.test(serverName)) {
+    throw new Error(`invalid MCP serverName: ${JSON.stringify(input.serverName)}`)
+  }
+  const baseUrl = input.baseUrl.trim()
+  if (baseUrl === '') throw new Error('godot daemon 端点未配置')
+  const token = input.token.trim()
+  if (token === '') throw new Error('godot daemon token 为空')
+  const sessionKey = input.sessionKey.trim()
+  if (sessionKey === '') throw new Error('godot daemon 会话键为空')
+
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${token}`,
+    'x-godot-session': sessionKey,
+    'x-godot-shim-version': 'dsh-godot',
+  }
+  const cwd = (input.cwd ?? '').trim()
+  if (cwd !== '') headers['x-godot-cwd'] = encodeCwdHeader(cwd)
+
+  return {
+    transport: 'streamable-http',
+    serverName,
+    url: baseUrl,
+    headers,
+    toolCallTimeoutMs: input.toolCallTimeoutMs ?? DEFAULT_TOOL_CALL_TIMEOUT_MS,
+    failOnStartupError: false,
+  }
+}
+
+/**
  * 挂载身份键:用于判断"已经挂着的那个连接"与"现在应当挂的连接"是不是同一份配置
  * (设置/路径/会话 cwd 变化 → 键变 → 需要重挂)。
+ *
+ * 两条传输用不同前缀,避免 stdio → http 切换时被误判成"同一份配置"而不重挂。
+ * http 分支把 headers 纳入键:token 轮换、会话键作用域变化都必须触发重挂。
  */
 export function mountConfigKey(config: GodotMcpConfig): string {
+  if (config.transport === 'streamable-http') {
+    return [
+      'streamable-http',
+      config.serverName,
+      config.url,
+      Object.entries(config.headers).map(([key, value]) => `${key}=${value}`).sort().join('\u0002'),
+      String(config.toolCallTimeoutMs ?? ''),
+    ].join('\u0000')
+  }
   return [
+    'stdio',
     config.serverName,
     config.command,
     config.args.join('\u0001'),

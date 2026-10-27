@@ -21,12 +21,15 @@ const LOCALE_NAMESPACE = 'settings.godot'
 /** plugins.bundle.config 槽位的键:profile 中本包的 npm 包名(非 settings 命名空间)。 */
 export const BUNDLE_PACKAGE_NAME = 'deepseek-harness-godot_unified'
 
-const FIELDS = ['injectLegacyMode', 'promptGuidance', 'zhPrompt', 'toolCallTimeoutMs']
+const FIELDS = ['injectLegacyMode', 'promptGuidance', 'zhPrompt', 'transportMode', 'sessionKeyScope', 'toolCallTimeoutMs']
 
 const DEFAULTS = {
   injectLegacyMode: false,
   promptGuidance: true,
   zhPrompt: false,
+  /** 与 injection.ts 的 SETTINGS_DEFAULTS 同值。 */
+  transportMode: 'auto',
+  sessionKeyScope: 'session',
   /** 与 injection.ts 的 SETTINGS_DEFAULTS 同值（三层阶梯的最高层）。 */
   toolCallTimeoutMs: 240_000,
 }
@@ -44,6 +47,15 @@ const zh = {
   toolCallTimeoutDesc: '默认 240000。必须大于服务器的 210000：否则慢调用会先被宿主掐断，看不到服务器给出的清晰超时说明。改动会重新建立连接。',
   zhPrompt: '提示词中文化',
   zhPromptDesc: '开启后注入的工作流提示词使用中文（默认英文）。工具描述与错误消息由 GodotMCP server 提供，保持上游原文。',
+  transportMode: '连接方式',
+  transportModeDesc: '默认「自动」：daemon 的 2026 协议面可用时直连（每个会话不再起转发进程，全机只剩 daemon 一个服务），否则回退 shim。「经 shim」总是走 stdio。改动会重新建立连接。',
+  transportModeAuto: '自动（优先直连）',
+  transportModeHttp: '直连 daemon',
+  transportModeStdio: '经 shim（stdio）',
+  sessionKeyScope: '会话键作用域',
+  sessionKeyScopeDesc: '「每个会话」：新会话默认只看到 godot_connect（1 个工具），会话之间互不影响；同一会话重连保留已激活的工具面。「按项目」：同一项目的会话共享默认目标与激活组，新会话会继承别人已展开的工具面。',
+  sessionKeyScopeSession: '每个会话（默认）',
+  sessionKeyScopeProject: '按项目共享',
   inherited: '继承默认值',
   overridden: '用户覆盖',
   save: '保存',
@@ -78,6 +90,15 @@ const en = {
   toolCallTimeoutDesc: 'Default 240000. Must exceed the server budget (210000), otherwise slow calls are cut off by the host before the server can explain the timeout. Changing it re-establishes the connection.',
   zhPrompt: 'Localize prompt',
   zhPromptDesc: 'When on, the injected workflow prompt uses Chinese (English by default). Tool descriptions and error messages come from the GodotMCP server and stay as provided.',
+  transportMode: 'Connection',
+  transportModeDesc: 'Default "Auto": connect straight to the daemon when its 2026 protocol face is available (no per-session forwarder process; only the daemon runs on the machine), otherwise fall back to the shim. "Via shim" always uses stdio. Changing it re-establishes the connection.',
+  transportModeAuto: 'Auto (prefer direct)',
+  transportModeHttp: 'Direct to daemon',
+  transportModeStdio: 'Via shim (stdio)',
+  sessionKeyScope: 'Session key scope',
+  sessionKeyScopeDesc: '"Per session": a new session starts with only godot_connect (1 tool) and sessions stay independent; reconnecting the same session keeps its activated tool face. "Per project": sessions of one project share the default target and activated groups, so a new session inherits an already-expanded tool face.',
+  sessionKeyScopeSession: 'Per session (default)',
+  sessionKeyScopeProject: 'Shared per project',
   inherited: 'Inherited',
   overridden: 'Overridden',
   save: 'Save',
@@ -254,14 +275,23 @@ interface SettingsValue {
   injectLegacyMode: boolean
   promptGuidance: boolean
   zhPrompt: boolean
+  /** 'auto' | 'http' | 'stdio'。 */
+  transportMode: string
+  /** 'session' | 'project'。 */
+  sessionKeyScope: string
   /** 单次工具调用超时（毫秒）。数值字段，与其他开关一起参与 diff 与保存。 */
   toolCallTimeoutMs: number
 }
 
 function normalized(value: unknown): SettingsValue {
   const source = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {}
-  const booleanOr = (key: keyof SettingsValue): boolean =>
+  const booleanOr = (key: 'injectLegacyMode' | 'promptGuidance' | 'zhPrompt'): boolean =>
     typeof source[key] === 'boolean' ? source[key] as boolean : DEFAULTS[key]
+  // 枚举字段:只接受白名单值(与 injection.ts 的 resolveSettings 同一套判据)。
+  const enumOr = (key: 'transportMode' | 'sessionKeyScope', allowed: readonly string[]): string => {
+    const raw = source[key]
+    return typeof raw === 'string' && allowed.includes(raw) ? raw : DEFAULTS[key]
+  }
   // 超时接受数字或数字字符串（表单输入框给字符串），非法/非正数回退默认 ——
   // 与 injection.ts 的 resolveSettings 保持同一套判据。
   const timeoutOr = (): number => {
@@ -273,6 +303,8 @@ function normalized(value: unknown): SettingsValue {
     injectLegacyMode: booleanOr('injectLegacyMode'),
     promptGuidance: booleanOr('promptGuidance'),
     zhPrompt: booleanOr('zhPrompt'),
+    transportMode: enumOr('transportMode', ['auto', 'http', 'stdio']),
+    sessionKeyScope: enumOr('sessionKeyScope', ['session', 'project']),
     toolCallTimeoutMs: timeoutOr(),
   }
 }
@@ -306,6 +338,29 @@ function createForm(scope: any, t: (key: string) => string): (props: { view?: st
         style: Object.assign({}, uiStyles.checkbox, controlDisabledStyle(props.disabled)),
         onChange: function (event: { target: { checked: boolean } }) { props.onChange(event.target.checked) },
       }))
+  }
+
+  function SelectRow(props: {
+    field: string
+    value: string
+    options: Array<{ value: string; labelKey: string }>
+    disabled: boolean
+    overridden: boolean
+    onChange: (next: string) => void
+  }) {
+    return h('label', { style: uiStyles.row, 'data-godot-row': '' },
+      h('span', { style: uiStyles.rowText },
+        h('span', { style: uiStyles.labelLine, 'data-godot-label-line': '' },
+          h('span', { style: uiStyles.label }, t(props.field)),
+          h(FieldIdentity, { overridden: props.overridden })),
+        h('span', { style: uiStyles.hint, 'data-godot-hint': '' }, t(props.field + 'Desc'))),
+      h('select', {
+        value: props.value,
+        disabled: props.disabled,
+        'aria-label': t(props.field),
+        style: Object.assign({}, uiStyles.input, { width: 190, marginTop: 0 }, controlDisabledStyle(props.disabled)),
+        onChange: function (event: { target: { value: string } }) { props.onChange(event.target.value) },
+      }, props.options.map(option => h('option', { key: option.value, value: option.value }, t(option.labelKey)))))
   }
 
   return function GodotConfigPage(props: { view?: string }) {
@@ -440,6 +495,27 @@ function createForm(scope: any, t: (key: string) => string): (props: { view?: st
                 field: 'zhPrompt', value: draft.zhPrompt, disabled: !editable,
                 overridden: hasOwn(snapshot.user, 'zhPrompt'),
                 onChange: function (next: boolean) { change('zhPrompt', next) },
+              }),
+              // 连接方式与 daemon 会话键作用域:决定"每会话是否再起一个转发进程"
+              // 以及"新会话看到 1 个工具还是继承已展开的工具面"。
+              h(SelectRow, {
+                field: 'transportMode', value: draft.transportMode, disabled: !editable,
+                overridden: hasOwn(snapshot.user, 'transportMode'),
+                options: [
+                  { value: 'auto', labelKey: 'transportModeAuto' },
+                  { value: 'http', labelKey: 'transportModeHttp' },
+                  { value: 'stdio', labelKey: 'transportModeStdio' },
+                ],
+                onChange: function (next: string) { change('transportMode', next) },
+              }),
+              h(SelectRow, {
+                field: 'sessionKeyScope', value: draft.sessionKeyScope, disabled: !editable,
+                overridden: hasOwn(snapshot.user, 'sessionKeyScope'),
+                options: [
+                  { value: 'session', labelKey: 'sessionKeyScopeSession' },
+                  { value: 'project', labelKey: 'sessionKeyScopeProject' },
+                ],
+                onChange: function (next: string) { change('sessionKeyScope', next) },
               }),
               // 单次工具调用超时(毫秒)。三层预算阶梯里宿主那一层:
               // daemon 长工具 180s < shim 210s < 宿主。改它会触发重挂。
