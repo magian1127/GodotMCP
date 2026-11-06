@@ -78,7 +78,7 @@ Install still requires --project to validate project.godot, but persists serverD
 | Saved timeout not applied | Confirm the remount happened (timeout is in the identity key); otherwise create a new session |
 | A new session inherits the previous tool face | Expected with `sessionKeyScope=project`; switch back to `session` for isolation |
 | No scene mutation tools | Check scene_edit, then version/read-only gates |
-| Godot preset missing | Check preset-godot bundle declaration; legacy .agent-presets is ignored |
+| Godot preset missing | Check the preset-godot bundle declaration; the legacy .agent-presets directory is no longer read. If the row exists and is active, verify that every preset row `name` resolves in the current runtime — one broken row (such as the `dsh-tool-subagent-control/list-agents` subpath removed in 0.2.2-rc.1) marks the whole preset broken and clients list healthy presets only. Restart the application or reload that bundle after editing the patch |
 | Duplicate serverName or missing official client | Check profile modules and mount scope; log error type without configuration |
 
 ## Data boundary

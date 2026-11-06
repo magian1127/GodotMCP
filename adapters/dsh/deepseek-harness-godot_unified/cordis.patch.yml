@@ -13,6 +13,10 @@
 # (仅 Godot preset 会话;原版模式在 host 上挂一个共享连接)与路径设置路由(host 侧插件)。
 # 行二 `preset-godot`:Godot agent preset 声明(0.1.6+ DSH 已不读
 # $DSH_HOME/.agent-presets/<id>/ 目录,preset 只能经 bundle patch 声明行注册)。
+# 0.2.2-rc.1 适配:`@deepseek-ai/dsh-tool-subagent-control` 的 `./list-agents`
+# 子路径导出被移除,preset 里对应的行已删除(list_agents 工具由主入口提供)。
+# 判定标准不变——preset 的每一行 name 必须是当前 runtime 里可解析的模块,
+# 任一行解析失败都会让整个 preset 变 broken 并从模式选择器消失(不是少一个工具)。
 # 迁移自 legacy 目录:config.name/description 取自原 preset.yml,plugins 逐字
 # 迁自原 agent.cordis.yml;唯一改动是 customSkillDirs 改为从本包 resolve——
 # 本包 skills/ 目录是指向上游 GodotMCP plugin/godot-mcp-unified/skills 的
@@ -121,8 +125,12 @@
             config:
               - id: tool-subagent-control
                 name: '@deepseek-ai/dsh-tool-subagent-control'
-              - id: tool-subagent-list-agents
-                name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
+              # 0.2.2-rc.1 移除了 @deepseek-ai/dsh-tool-subagent-control 的
+              # `./list-agents` 子路径导出（list_agents 工具已并入主入口；该包
+              # exports 现在只剩 "."、"./src/*"、"./package.json"、"./locale/*.json"）。
+              # 残留这一行会让 preset 的子行解析失败，整个 preset 变为 broken，
+              # 客户端 presetOptions 只列健康 preset，于是"模式选择器里没有 Godot"。
+              # 不要在 preset 里再单列 list-agents。
               - id: tool-subagent
                 name: '@deepseek-ai/dsh-tool-subagent'
                 config:

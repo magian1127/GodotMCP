@@ -81,6 +81,23 @@ test('subagent 行不携带已移除的 backgroundMode/enableRunInBackground(DSH
   assert.ok(!row.includes('enableRunInBackground:'), 'subagent 行不得再声明 enableRunInBackground')
 })
 
+test('不再声明 DSH 0.2.2 已移除的 list-agents 子路径导出', () => {
+  // 0.2.2-rc.1 的 @deepseek-ai/dsh-tool-subagent-control 只导出 "."、"./src/*"、
+  // "./package.json"、"./locale/*.json";list_agents 工具已并入主入口。残留
+  // '@deepseek-ai/dsh-tool-subagent-control/list-agents' 行会让 preset 的子行解析
+  // 失败 → 整个 preset 变 broken → 客户端 presetOptions 只列健康 preset,于是把它
+  // 过滤掉;用户看到的现象是"模式选择器里没有 Godot",而不是少一个工具。
+  const row = presetRowText().split('\n').filter(line => !/^\s*#/.test(line)).join('\n')
+  assert.ok(
+    !row.includes('dsh-tool-subagent-control/list-agents'),
+    '不得再挂已移除的 ./list-agents 子路径',
+  )
+  assert.ok(
+    row.includes("name: '@deepseek-ai/dsh-tool-subagent-control'"),
+    'list_agents 工具由主入口行提供',
+  )
+})
+
 test('preset 跟随 shipped standard 的 0.2.1 能力行(time-context / tool-schedule)', () => {
   // 本 preset 是 shipped `standard` 的副本 + 本包技能目录,standard 增行后
   // 不跟就会让 Godot 会话少能力(时间上下文、提醒工具)。0.2.1 的 standard

@@ -16,6 +16,15 @@
 - 发布前除 typecheck/build/test/verify，还需真实宿主验证初始入口、connect 后目录自动更新、组变更、重启恢复、截图附件；五宿主 × 版本与混跑矩阵尚未完成。
 
 
+## 兼容修复：DSH 0.2.2-rc.1（Godot preset 从模式选择器消失）
+
+- **现象**：升级到 0.2.2-rc.1 后，新建会话的模式选择器里没有 Godot（Host 侧 `preset-godot` 行仍处 active，所以不是声明行丢了）。
+- **根因**：preset 的 `plugins` 里还留着 `@deepseek-ai/dsh-tool-subagent-control/list-agents` 行。0.2.2-rc.1 把该包的 `exports` 收缩为 `.`、`./src/*`、`./package.json`、`./locale/*.json`，`list_agents` 工具并入主入口，`./list-agents` 子路径已不存在。preset 里任一子行模块解析失败会让整个 preset 变 broken；客户端 `presetOptions` 只列健康 preset（`broken` 行只在设置的 Agent presets 管理页可见），于是 Godot 直接从选择器消失——不是少一个工具。
+- **变更**：删除该行（`list_agents` 由 `@deepseek-ai/dsh-tool-subagent-control` 主入口提供）；`src/tests/preset-patch.test.mts` 新增守护，禁止再挂该子路径并断言主入口在场。
+- **验证状态**：`npm run typecheck` / `npm test`（94 例）/ `npm run verify` 全绿；`dsh --profile web --dump-config` 里 `list-agents` 已无、`preset-godot` 仍在组合树。**未执行**：运行态 GUI 验收——bundle patch 在 Host 启动时读入，需重启应用（或重载该 bundle）后才重读，之后模式选择器应恢复 Godot。
+- **判定标准**：preset 每一行的 `name` 必须是当前 runtime 可解析的模块。`--dump-config` 只验组合、**不激活插件**，所以它查不出这类 broken；升级 DSH 后必须对新的 `exports` 逐一核对 preset 里的子路径。
+
+
 ## 发布前验证
 
 1. `npm run typecheck && npm run build && npm test && npm run verify` 全绿。

@@ -18,6 +18,14 @@ This section supersedes old behavior in historical records.
 - Reproduced gaps in notification recovery, group replacement/replay, resident schemas, debug/eager switches, and in-flight targets remain. The [daemon README](../../../../plugin/godot-mcp-unified/server-dotnet/README.en.md) owns their status. Green existing tests are not complete release acceptance.
 - Beyond typecheck/build/test/verify, validate initial entry, automatic list expansion after connect, group changes, restart recovery, and image attachments in real hosts. The five-host/version and mixed-version matrices remain incomplete.
 
+## Compatibility fix: DSH 0.2.2-rc.1 (Godot preset vanished from the mode picker)
+
+- **Symptom**: after upgrading to 0.2.2-rc.1 the mode picker offers no Godot for a new session, while the Host still reports the `preset-godot` row as active — so the declaration itself was not lost.
+- **Cause**: the preset's `plugins` still listed `@deepseek-ai/dsh-tool-subagent-control/list-agents`. In 0.2.2-rc.1 that package's `exports` shrank to `.`, `./src/*`, `./package.json`, `./locale/*.json`; the `list_agents` tool moved into the main entry and `./list-agents` no longer exists. One unresolvable child row marks the whole preset broken, and the client `presetOptions` lists healthy presets only (a `broken` row shows only on the Agent presets management page), so Godot disappears from the picker rather than one tool disappearing.
+- **Change**: the row is removed (`list_agents` comes from the `@deepseek-ai/dsh-tool-subagent-control` main entry); `src/tests/preset-patch.test.mts` now guards against reintroducing the subpath and asserts the main entry stays.
+- **Validation**: `npm run typecheck` / `npm test` (94 cases) / `npm run verify` green; `dsh --profile web --dump-config` no longer contains `list-agents` and still contains `preset-godot`. **Not executed**: live GUI acceptance — bundle patches are read at Host startup, so the application must restart (or the bundle reload) before the picker reflects this.
+- **Rule**: every preset row `name` must resolve in the current runtime. `--dump-config` only validates composition and never activates plugins, so it cannot catch this class of breakage; after a DSH upgrade, re-check each subpath in the preset against the new `exports`.
+
 ## Release procedure
 
 Run the package’s typecheck, build, test, and verify scripts. Inspect npm pack contents: skills/ is a development junction and must be materialized/snapshotted for distribution, while lib/, bin/, client bundle and declared patch must exist. Keep official DSH runtime modules external and honor engines.dsh.

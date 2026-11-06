@@ -78,7 +78,7 @@ CLI install 仍需 --project 校验存在 project.godot；只持久化 serverDis
 | 超时设置保存但旧值仍生效 | 确认已重挂（改超时在身份键里）；仍不生效时新建会话 |
 | 新会话继承了上一个会话展开的工具面 | `sessionKeyScope=project` 的预期行为；改回 `session` 改为每会话独立 |
 | 目录里无场景写工具 | 检查 scene_edit 是否激活，再看版本/只读限制 |
-| 模式选择器没有 Godot | 核对 bundle patch 的 preset-godot 声明；旧 .agent-presets 目录不再读取 |
+| 模式选择器没有 Godot | 核对 bundle patch 的 preset-godot 声明；旧 .agent-presets 目录不再读取。声明行仍在且 active 时，查 preset 内每一行 name 能否在当前 runtime 解析——任一行失效（如 0.2.2-rc.1 移除的 `dsh-tool-subagent-control/list-agents` 子路径）会让整个 preset broken，客户端只列健康 preset。改完 patch 需重启应用或重载该 bundle |
 | 同名 serverName 冲突/无法加载官方 client | 核对当前 profile 官方模块和挂载作用域；只记录错误类型，不回显配置 |
 
 ## 数据边界
